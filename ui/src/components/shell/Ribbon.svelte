@@ -16,6 +16,7 @@
     { id: "home", label: "Home" },
     { id: "insert", label: "Invoegen" },
     { id: "ifc", label: "IFC / Export" },
+    { id: "production", label: "Productie" },
     { id: "view", label: "Beeld" },
   ];
 
@@ -114,6 +115,25 @@
     }
   }
 
+  async function handleExportGltf() {
+    if (!$currentKozijn) return;
+    const { save } = isTauri
+      ? await import("@tauri-apps/plugin-dialog")
+      : { save: async () => prompt("Bestandspad:", `${$currentKozijn.mark}.glb`) };
+    const path = await save({
+      filters: [{ name: "glTF Binary", extensions: ["glb"] }],
+      defaultPath: `${$currentKozijn.mark}.glb`,
+    });
+    if (path) {
+      try {
+        await invoke("export_gltf", { id: $currentKozijn.id, outputPath: path });
+        alert("glTF export succesvol: " + path);
+      } catch (e) {
+        alert("Export fout: " + e);
+      }
+    }
+  }
+
   async function handleSendToBlender() {
     if (!$currentKozijn) return;
     try {
@@ -134,6 +154,27 @@
     if (!$currentKozijn) return;
     const innerW = $currentKozijn.frame.outerWidth - 2 * $currentKozijn.frame.frameWidth;
     addColumn(innerW / 2);
+  }
+
+  async function handleExportProduction(format) {
+    const extMap = { pdf: "pdf", xlsx: "xlsx", csv: "csv" };
+    const ext = extMap[format] || "pdf";
+    const defaultName = format === "csv" ? "productiestaten" : `productiestaten.${ext}`;
+    const { save } = isTauri
+      ? await import("@tauri-apps/plugin-dialog")
+      : { save: async () => prompt("Bestandspad:", defaultName) };
+    const path = await save({
+      filters: [{ name: format.toUpperCase(), extensions: [ext] }],
+      defaultPath: defaultName,
+    });
+    if (path) {
+      try {
+        await invoke("export_production_lists", { outputPath: path, format });
+        alert("Productiestaten export succesvol: " + path);
+      } catch (e) {
+        alert("Export fout: " + e);
+      }
+    }
   }
 
   function handleAddRow() {
@@ -364,6 +405,22 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
+        <span class="group-label">3D Export</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" on:click={handleExportGltf} disabled={!$currentKozijn}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+            <span>glTF/GLB</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
         <span class="group-label">Blender / Bonsai</span>
         <div class="group-buttons">
           <button class="ribbon-btn" on:click={handleSendToBlender} disabled={!$currentKozijn}>
@@ -372,6 +429,39 @@
               <path d="M8 12l3 3 5-5"/>
             </svg>
             <span>Naar Blender</span>
+          </button>
+        </div>
+      </div>
+
+    {:else if $activeRibbonTab === "production"}
+      <div class="ribbon-group">
+        <span class="group-label">Productiestaten exporteren</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" on:click={() => handleExportProduction("pdf")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>PDF</span>
+          </button>
+          <button class="ribbon-btn" on:click={() => handleExportProduction("xlsx")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="1"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="3" y1="15" x2="21" y2="15"/>
+              <line x1="9" y1="3" x2="9" y2="21"/>
+              <line x1="15" y1="3" x2="15" y2="21"/>
+            </svg>
+            <span>Excel</span>
+          </button>
+          <button class="ribbon-btn" on:click={() => handleExportProduction("csv")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="8" y1="13" x2="16" y2="13"/>
+              <line x1="8" y1="17" x2="16" y2="17"/>
+            </svg>
+            <span>CSV</span>
           </button>
         </div>
       </div>

@@ -29,11 +29,23 @@ fn main() {
             commands::kozijn::add_row,
             commands::kozijn::remove_kozijn,
             commands::kozijn::get_kozijn_geometry,
+            commands::kozijn::update_cell_hardware,
+            commands::kozijn::auto_select_hardware,
+            commands::kozijn::update_security_class,
             // Export commands
             commands::export_ifc::export_ifc,
             commands::export_dxf::export_dxf,
             commands::export_pdf::export_kozijnstaat,
             commands::export_workshop::export_workshop_drawing,
+            commands::export_gltf::export_gltf,
+            // Production commands
+            commands::production::get_production_data,
+            commands::production::get_production_data_project,
+            // Calculation commands
+            commands::calculation::get_cost_estimate,
+            commands::calculation::get_cost_estimate_project,
+            // Production export commands
+            commands::export_production::export_production_lists,
             // Blender commands
             commands::blender::send_to_blender,
             commands::blender::check_blender_connection,

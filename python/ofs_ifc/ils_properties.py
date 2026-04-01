@@ -174,29 +174,69 @@ def add_ils_property_sets(model, element, kozijn_data):
     # --- ILS_KozijnHangSluitwerk ---
     hardware_props = {}
     for i, cell in enumerate(cells):
-        hw_list = cell.get("hardware", [])
         panel_type = cell.get("panelType", "fixed_glass")
+        hw_set = cell.get("hardwareSet")
 
-        if panel_type in ("turn_tilt", "turn", "tilt"):
-            hardware_props[f"Cel_{i+1}_Beslag"] = "draai-kiep beslag"
-            hardware_props[f"Cel_{i+1}_Scharnieren"] = "verborgen"
-            hardware_props[f"Cel_{i+1}_GreepType"] = "kruk"
-            hardware_props[f"Cel_{i+1}_Sluitpunten"] = _calc_locking_points(cell, kozijn_data, i)
-        elif panel_type == "door":
-            hardware_props[f"Cel_{i+1}_Beslag"] = "deurbeslag"
-            hardware_props[f"Cel_{i+1}_Scharnieren"] = "opleg 3-delig"
-            hardware_props[f"Cel_{i+1}_GreepType"] = "kruk-kruk"
-            hardware_props[f"Cel_{i+1}_Sluitpunten"] = 3
-            hardware_props[f"Cel_{i+1}_SlotType"] = "meerpuntssluiting"
-        elif panel_type == "sliding":
-            hardware_props[f"Cel_{i+1}_Beslag"] = "schuifbeslag"
-            hardware_props[f"Cel_{i+1}_GreepType"] = "inlaat greep"
+        if hw_set:
+            # Read from structured HardwareSet (format_version 1.1+)
+            security = hw_set.get("securityClass", "none")
+            hardware_props[f"Cel_{i+1}_Beveiligingsklasse"] = security
 
-        # Ventilation
-        for hw in hw_list:
-            if hw.get("type") == "ventilation":
-                hardware_props[f"Cel_{i+1}_VentilatieType"] = hw.get("subtype", "rooster")
-                hardware_props[f"Cel_{i+1}_VentilatieKleur"] = hw.get("color", "RAL9010")
+            hinges = hw_set.get("hinges")
+            if hinges:
+                hardware_props[f"Cel_{i+1}_ScharnierType"] = hinges.get("hingeType", "")
+                hardware_props[f"Cel_{i+1}_ScharnierAantal"] = hinges.get("count", 0)
+                hardware_props[f"Cel_{i+1}_ScharnierZijde"] = hinges.get("side", "")
+                hardware_props[f"Cel_{i+1}_ScharnierDraagkracht_kg"] = round(hinges.get("loadCapacityKg", 0), 1)
+
+            handle = hw_set.get("handle")
+            if handle:
+                hardware_props[f"Cel_{i+1}_GreepType"] = handle.get("handleType", "")
+                hardware_props[f"Cel_{i+1}_GreepZijde"] = handle.get("side", "")
+                hardware_props[f"Cel_{i+1}_GreepHoogte_mm"] = handle.get("heightMm", 1050)
+                hardware_props[f"Cel_{i+1}_GreepAfsluitbaar"] = handle.get("lockable", False)
+
+            locking = hw_set.get("locking")
+            if locking:
+                hardware_props[f"Cel_{i+1}_SlotType"] = locking.get("lockType", "")
+                hardware_props[f"Cel_{i+1}_Sluitpunten"] = locking.get("lockingPoints", 0)
+                hardware_props[f"Cel_{i+1}_NokType"] = locking.get("camType", "")
+                cylinder = locking.get("cylinder", "none")
+                if cylinder != "none":
+                    hardware_props[f"Cel_{i+1}_CilinderType"] = cylinder
+
+            vent = hw_set.get("ventilation")
+            if vent:
+                hardware_props[f"Cel_{i+1}_VentilatieType"] = vent.get("ventType", "")
+                hardware_props[f"Cel_{i+1}_VentilatieCapaciteit_dm3s"] = vent.get("capacityDm3s", 0)
+
+            closer = hw_set.get("closer")
+            if closer:
+                hardware_props[f"Cel_{i+1}_DrangType"] = closer.get("closerType", "")
+                hardware_props[f"Cel_{i+1}_DrangKlasse"] = closer.get("forceClass", 3)
+        else:
+            # Fallback: infer from panel type (format_version 1.0 backward compat)
+            hw_list = cell.get("hardware", [])
+
+            if panel_type in ("turn_tilt", "turn", "tilt"):
+                hardware_props[f"Cel_{i+1}_Beslag"] = "draai-kiep beslag"
+                hardware_props[f"Cel_{i+1}_Scharnieren"] = "verborgen"
+                hardware_props[f"Cel_{i+1}_GreepType"] = "kruk"
+                hardware_props[f"Cel_{i+1}_Sluitpunten"] = _calc_locking_points(cell, kozijn_data, i)
+            elif panel_type == "door":
+                hardware_props[f"Cel_{i+1}_Beslag"] = "deurbeslag"
+                hardware_props[f"Cel_{i+1}_Scharnieren"] = "opleg 3-delig"
+                hardware_props[f"Cel_{i+1}_GreepType"] = "kruk-kruk"
+                hardware_props[f"Cel_{i+1}_Sluitpunten"] = 3
+                hardware_props[f"Cel_{i+1}_SlotType"] = "meerpuntssluiting"
+            elif panel_type == "sliding":
+                hardware_props[f"Cel_{i+1}_Beslag"] = "schuifbeslag"
+                hardware_props[f"Cel_{i+1}_GreepType"] = "inlaat greep"
+
+            for hw in hw_list:
+                if hw.get("type") == "ventilation":
+                    hardware_props[f"Cel_{i+1}_VentilatieType"] = hw.get("subtype", "rooster")
+                    hardware_props[f"Cel_{i+1}_VentilatieKleur"] = hw.get("color", "RAL9010")
 
     if hardware_props:
         _add_pset(model, element, "ILS_KozijnHangSluitwerk", hardware_props)

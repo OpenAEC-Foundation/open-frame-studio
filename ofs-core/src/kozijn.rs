@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::hardware::HardwareSet;
 use crate::profile::ProfileRef;
 
 /// Complete kozijn (window frame) definition
@@ -176,7 +177,12 @@ pub struct Cell {
     pub panel_type: PanelType,
     pub opening_direction: Option<OpeningDirection>,
     pub glazing: Glazing,
+    /// Legacy hardware list — kept for backward compatibility with format_version "1.0"
+    #[serde(default)]
     pub hardware: Vec<Hardware>,
+    /// Structured hardware set (format_version "1.1"+)
+    #[serde(default)]
+    pub hardware_set: Option<HardwareSet>,
 }
 
 impl Default for Cell {
@@ -186,6 +192,7 @@ impl Default for Cell {
             opening_direction: None,
             glazing: Glazing::default(),
             hardware: vec![],
+            hardware_set: None,
         }
     }
 }
@@ -311,7 +318,7 @@ pub struct Project {
 impl Project {
     pub fn new(name: &str, number: &str) -> Self {
         Self {
-            format_version: "1.0".into(),
+            format_version: "1.1".into(),
             project_info: ProjectInfo {
                 name: name.to_string(),
                 number: number.to_string(),

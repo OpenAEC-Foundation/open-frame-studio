@@ -15,6 +15,10 @@ pub enum ValidationError {
     CellTooSmall(usize, f64, f64, f64),
     #[error("Aantal cellen ({0}) komt niet overeen met grid ({1} kolommen x {2} rijen = {3})")]
     CellCountMismatch(usize, usize, usize, usize),
+    #[error("Cel {0}: beweegbaar vak zonder hang- en sluitwerk")]
+    MissingHardware(usize),
+    #[error("Cel {0}: {1} scharnieren, minimaal {2} vereist voor dit gewicht/hoogte")]
+    InsufficientHinges(usize, u8, u8),
 }
 
 const MIN_WIDTH: f64 = 200.0;
@@ -60,6 +64,13 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
     for (i, row) in kozijn.grid.rows.iter().enumerate() {
         if row.size < MIN_CELL_SIZE {
             errors.push(ValidationError::CellTooSmall(i, 0.0, row.size, MIN_CELL_SIZE));
+        }
+    }
+
+    // HSW validation: operable cells should have hardware
+    for (i, cell) in kozijn.cells.iter().enumerate() {
+        if cell.panel_type.is_operable() && cell.hardware_set.is_none() {
+            errors.push(ValidationError::MissingHardware(i));
         }
     }
 

@@ -1,5 +1,6 @@
 use crate::state::AppState;
 use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
+use ofs_core::hardware::{self, HardwareSet, SecurityClass};
 use ofs_core::kozijn::{Kozijn, PanelType, OpeningDirection};
 use ofs_core::grid;
 use tauri::State;
@@ -115,6 +116,22 @@ pub fn update_cell_type(
         .ok_or("Cel niet gevonden")?;
     cell.panel_type = panel_type;
     cell.opening_direction = opening_direction;
+
+    // Auto-generate hardware set when changing to an operable type
+    let cell_width = kozijn.grid.columns.get(cell_index % kozijn.grid.columns.len())
+        .map(|c| c.size).unwrap_or(600.0);
+    let cell_height = kozijn.grid.rows.get(cell_index / kozijn.grid.columns.len())
+        .map(|r| r.size).unwrap_or(1200.0);
+    cell.hardware_set = hardware::default_hardware_set(
+        panel_type,
+        opening_direction,
+        cell_width,
+        cell_height,
+        cell.glazing.thickness_mm,
+        &kozijn.frame.material,
+        SecurityClass::None,
+    );
+
     Ok(kozijn.clone())
 }
 
@@ -173,4 +190,106 @@ pub fn get_kozijn_geometry(
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
     Ok(compute_2d_geometry(kozijn))
+}
+
+#[tauri::command]
+pub fn update_cell_hardware(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+    hardware_set_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+    let mut hw: HardwareSet = serde_json::from_str(&hardware_set_json)
+        .map_err(|e| format!("Ongeldige hardware data: {}", e))?;
+    hw.auto_selected = false;
+    cell.hardware_set = Some(hw);
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn auto_select_hardware(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+
+    let cell_width = kozijn.grid.columns.get(cell_index % kozijn.grid.columns.len())
+        .map(|c| c.size).unwrap_or(600.0);
+    let cell_height = kozijn.grid.rows.get(cell_index / kozijn.grid.columns.len())
+        .map(|r| r.size).unwrap_or(1200.0);
+    let security = cell.hardware_set.as_ref()
+        .map(|h| h.security_class)
+        .unwrap_or(SecurityClass::None);
+
+    cell.hardware_set = hardware::default_hardware_set(
+        cell.panel_type,
+        cell.opening_direction,
+        cell_width,
+        cell_height,
+        cell.glazing.thickness_mm,
+        &kozijn.frame.material,
+        security,
+    );
+
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_security_class(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+    security_class: SecurityClass,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+
+    // Re-run auto-selection with new security class
+    let cell_width = kozijn.grid.columns.get(cell_index % kozijn.grid.columns.len())
+        .map(|c| c.size).unwrap_or(600.0);
+    let cell_height = kozijn.grid.rows.get(cell_index / kozijn.grid.columns.len())
+        .map(|r| r.size).unwrap_or(1200.0);
+
+    cell.hardware_set = hardware::default_hardware_set(
+        cell.panel_type,
+        cell.opening_direction,
+        cell_width,
+        cell_height,
+        cell.glazing.thickness_mm,
+        &kozijn.frame.material,
+        security_class,
+    );
+
+    Ok(kozijn.clone())
 }

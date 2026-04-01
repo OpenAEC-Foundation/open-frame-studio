@@ -87,6 +87,44 @@ export async function addRow(position) {
   await refreshGeometry(updated.id);
 }
 
+export async function updateCellHardware(cellIndex, hardwareSet) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_cell_hardware", {
+    id: k.id,
+    cellIndex,
+    hardwareSetJson: JSON.stringify(hardwareSet),
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function autoSelectHardware(cellIndex) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("auto_select_hardware", {
+    id: k.id,
+    cellIndex,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function updateSecurityClass(cellIndex, securityClass) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_security_class", {
+    id: k.id,
+    cellIndex,
+    securityClass,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
 export async function removeKozijn(id) {
   await invoke("remove_kozijn", { id });
   await refreshProject();
