@@ -313,12 +313,14 @@ pub struct Project {
     pub format_version: String,
     pub project_info: ProjectInfo,
     pub kozijnen: Vec<Kozijn>,
+    #[serde(default)]
+    pub vliesgevels: Vec<crate::vliesgevel::Vliesgevel>,
 }
 
 impl Project {
     pub fn new(name: &str, number: &str) -> Self {
         Self {
-            format_version: "1.1".into(),
+            format_version: "1.3".into(),
             project_info: ProjectInfo {
                 name: name.to_string(),
                 number: number.to_string(),
@@ -326,6 +328,7 @@ impl Project {
                 address: String::new(),
             },
             kozijnen: vec![],
+            vliesgevels: vec![],
         }
     }
 }

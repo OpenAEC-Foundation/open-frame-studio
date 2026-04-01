@@ -46,6 +46,19 @@ fn main() {
             commands::calculation::get_cost_estimate_project,
             // Production export commands
             commands::export_production::export_production_lists,
+            // Vliesgevel commands
+            commands::vliesgevel::create_vliesgevel,
+            commands::vliesgevel::create_vliesgevel_from_template,
+            commands::vliesgevel::get_vliesgevel,
+            commands::vliesgevel::get_all_vliesgevels,
+            commands::vliesgevel::vliesgevel_add_mullion,
+            commands::vliesgevel::vliesgevel_add_transom,
+            commands::vliesgevel::vliesgevel_remove_mullion,
+            commands::vliesgevel::vliesgevel_remove_transom,
+            commands::vliesgevel::vliesgevel_update_panel,
+            commands::vliesgevel::get_vliesgevel_geometry,
+            commands::vliesgevel::get_vliesgevel_production,
+            commands::vliesgevel::remove_vliesgevel,
             // Blender commands
             commands::blender::send_to_blender,
             commands::blender::check_blender_connection,

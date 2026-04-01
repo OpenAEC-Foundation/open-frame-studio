@@ -5,6 +5,8 @@
   import StatusBar from "./components/shell/StatusBar.svelte";
   import Backstage from "./components/shell/Backstage.svelte";
   import KozijnEditor from "./components/editor/KozijnEditor.svelte";
+  import VliesgevalEditor from "./components/editor/VliesgevalEditor.svelte";
+  import { currentVliesgevel } from "./stores/vliesgevel.js";
   import PropertiesPanel from "./components/panels/PropertiesPanel.svelte";
   import ProjectOverview from "./components/project/ProjectOverview.svelte";
   import KozijnstaatView from "./components/project/KozijnstaatView.svelte";
@@ -104,7 +106,11 @@
 <div class="workspace">
   {#if workspaceView === "editor"}
     <ProjectOverview />
-    <KozijnEditor />
+    {#if $currentVliesgevel}
+      <VliesgevalEditor />
+    {:else}
+      <KozijnEditor />
+    {/if}
     <PropertiesPanel />
   {:else if workspaceView === "viewer3d"}
     <ProjectOverview />

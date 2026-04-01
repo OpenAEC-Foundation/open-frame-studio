@@ -10,6 +10,7 @@
     addRow,
     updateCellType,
   } from "../../stores/kozijn.js";
+  import { createVgFromTemplate } from "../../stores/vliesgevel.js";
   import { invoke, isTauri } from "../../lib/tauri.js";
 
   const tabs = [
@@ -333,6 +334,42 @@
           <button class="ribbon-btn" on:click={() => quickSetPanel("panel")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1" fill="#E7E5E4"/></svg>
             <span>Paneel</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <span class="group-label">Vliesgevel</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" on:click={() => createVgFromTemplate("stick_system", 9000, 3600)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="0"/>
+              <line x1="7" y1="2" x2="7" y2="22"/>
+              <line x1="12" y1="2" x2="12" y2="22"/>
+              <line x1="17" y1="2" x2="17" y2="22"/>
+              <line x1="2" y1="11" x2="22" y2="11"/>
+            </svg>
+            <span>Stijl-regel</span>
+          </button>
+          <button class="ribbon-btn" on:click={() => createVgFromTemplate("unitized", 6000, 3600)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="0"/>
+              <line x1="7" y1="2" x2="7" y2="22"/>
+              <line x1="12" y1="2" x2="12" y2="22"/>
+              <line x1="17" y1="2" x2="17" y2="22"/>
+            </svg>
+            <span>Element</span>
+          </button>
+          <button class="ribbon-btn" on:click={() => createVgFromTemplate("shopfront", 6000, 3000)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="0"/>
+              <line x1="8" y1="2" x2="8" y2="22"/>
+              <line x1="2" y1="14" x2="22" y2="14"/>
+              <circle cx="6" cy="18" r="1"/>
+            </svg>
+            <span>Winkelpui</span>
           </button>
         </div>
       </div>
