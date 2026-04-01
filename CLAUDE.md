@@ -60,3 +60,4 @@ cargo tauri build
 ## Workspace
 
 Rust workspace with two members: `src-tauri` and `ofs-core`. Shared dependencies in root `Cargo.toml`.
+
