@@ -121,11 +121,14 @@ jobs:
           $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
 
       - name: Clear beforeBuildCommand (frontend already built)
-        shell: bash
+        shell: node {0}
         run: |
-          cd src-tauri
-          sed -i 's/"beforeBuildCommand".*/"beforeBuildCommand": "",/' tauri.conf.json
-          sed -i 's/"beforeDevCommand".*/"beforeDevCommand": "",/' tauri.conf.json
+          const fs = require('fs');
+          const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          conf.build.beforeBuildCommand = '';
+          conf.build.beforeDevCommand = '';
+          fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2));
+          console.log('Cleared beforeBuildCommand and beforeDevCommand');
 
       - name: Build Tauri app
         if: matrix.target != 'windows-user'
