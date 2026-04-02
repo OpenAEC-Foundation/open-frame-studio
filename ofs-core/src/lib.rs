@@ -6,6 +6,7 @@ pub mod validation;
 pub mod hardware;
 pub mod production;
 pub mod calculation;
+pub mod sill;
 pub mod vliesgevel;
 pub mod vliesgevel_grid;
 pub mod vliesgevel_geometry;

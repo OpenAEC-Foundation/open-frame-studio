@@ -1,6 +1,5 @@
 use crate::state::AppState;
 use tauri::State;
-use tokio::process::Command;
 
 #[tauri::command]
 pub async fn export_gltf(
@@ -19,7 +18,7 @@ pub async fn export_gltf(
         serde_json::to_string(kozijn).map_err(|e| e.to_string())?
     };
 
-    let output = Command::new("python")
+    let output = crate::state::python_command()
         .current_dir("../python")
         .arg("main.py")
         .arg("generate-gltf")

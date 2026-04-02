@@ -35,6 +35,8 @@ impl Kozijn {
                 color_outside: "RAL9010".into(),
                 frame_width: 67.0,
                 frame_depth: 114.0,
+                sill: None,
+                shape: FrameShape::default(),
             },
             grid: Grid {
                 columns: vec![GridDivision {
@@ -151,6 +153,35 @@ pub struct Frame {
     pub frame_width: f64,
     /// Frame member depth in mm
     pub frame_depth: f64,
+    /// Structured sill configuration (v1.3+)
+    #[serde(default)]
+    pub sill: Option<crate::sill::Sill>,
+    /// Frame shape (rectangular, arched, round)
+    #[serde(default)]
+    pub shape: FrameShape,
+}
+
+/// Frame shape definition for arched/round kozijnen
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameShape {
+    pub shape_type: ShapeType,
+    /// Arch radius in mm (for arched shape)
+    #[serde(default)]
+    pub arch_radius: Option<f64>,
+    /// Arch rise height above the rectangular top in mm
+    #[serde(default)]
+    pub arch_height: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ShapeType {
+    #[default]
+    Rectangular,
+    Arched,    // getoogde bovendorpel (segmentboog)
+    Round,     // volledig rond (cirkel)
+    Elliptical,
 }
 
 /// Grid subdivision — columns (vertical) and rows (horizontal)
@@ -315,6 +346,8 @@ pub struct Project {
     pub kozijnen: Vec<Kozijn>,
     #[serde(default)]
     pub vliesgevels: Vec<crate::vliesgevel::Vliesgevel>,
+    #[serde(default)]
+    pub custom_profiles: Vec<crate::profile::ProfileDefinition>,
 }
 
 impl Project {
@@ -329,6 +362,7 @@ impl Project {
             },
             kozijnen: vec![],
             vliesgevels: vec![],
+            custom_profiles: vec![],
         }
     }
 }

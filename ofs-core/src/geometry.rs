@@ -1,4 +1,4 @@
-use crate::kozijn::Kozijn;
+use crate::kozijn::{Kozijn, ShapeType};
 use serde::{Deserialize, Serialize};
 
 /// 2D rectangle for SVG rendering
@@ -9,6 +9,24 @@ pub struct Rect2D {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+/// 2D arc for SVG rendering (arched/round kozijnen)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Arc2D {
+    /// Center X
+    pub cx: f64,
+    /// Center Y
+    pub cy: f64,
+    /// Radius
+    pub radius: f64,
+    /// Start angle in degrees (0 = right, 90 = top)
+    pub start_angle: f64,
+    /// End angle in degrees
+    pub end_angle: f64,
+    /// Stroke width (frame width)
+    pub stroke_width: f64,
 }
 
 /// Complete 2D geometry for rendering a kozijn as SVG
@@ -29,6 +47,9 @@ pub struct KozijnGeometry2D {
     pub cell_rects: Vec<CellRect>,
     /// Dimension lines
     pub dimensions: Vec<DimensionLine>,
+    /// Arcs (for arched/round frame shapes)
+    #[serde(default)]
+    pub arcs: Vec<Arc2D>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,6 +241,52 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         });
     }
 
+    // Arched frame geometry
+    let mut arcs = Vec::new();
+    if kozijn.frame.shape.shape_type == ShapeType::Arched {
+        let arch_height = kozijn.frame.shape.arch_height.unwrap_or(ow / 4.0);
+        // Segmental arch: center is below the arch line
+        // For a segmental arch of width W and rise H:
+        // radius = (W/2)^2 / (2*H) + H/2
+        let half_w = ow / 2.0;
+        let radius = (half_w * half_w) / (2.0 * arch_height) + arch_height / 2.0;
+        let center_y = oh - arch_height + radius; // center below the peak
+
+        // Outer arc
+        let start_angle = ((half_w / radius).asin()).to_degrees();
+        arcs.push(Arc2D {
+            cx: half_w,
+            cy: center_y,
+            radius,
+            start_angle: 180.0 - start_angle,
+            end_angle: start_angle,
+            stroke_width: fw,
+        });
+
+        // Inner arc (smaller radius)
+        let inner_radius = radius - fw;
+        if inner_radius > 0.0 {
+            arcs.push(Arc2D {
+                cx: half_w,
+                cy: center_y,
+                radius: inner_radius,
+                start_angle: 180.0 - start_angle,
+                end_angle: start_angle,
+                stroke_width: 1.0, // thin line for inner edge
+            });
+        }
+    } else if kozijn.frame.shape.shape_type == ShapeType::Round {
+        let radius = ow.min(oh) / 2.0;
+        arcs.push(Arc2D {
+            cx: ow / 2.0,
+            cy: oh / 2.0,
+            radius,
+            start_angle: 0.0,
+            end_angle: 360.0,
+            stroke_width: fw,
+        });
+    }
+
     KozijnGeometry2D {
         outer_rect,
         inner_rect,
@@ -228,5 +295,6 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         v_dividers,
         cell_rects,
         dimensions,
+        arcs,
     }
 }

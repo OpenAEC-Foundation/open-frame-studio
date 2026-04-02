@@ -1,7 +1,6 @@
 use crate::state::AppState;
 use ofs_core::production::compute_production_data;
 use tauri::State;
-use tokio::process::Command;
 
 #[tauri::command]
 pub async fn export_production_lists(
@@ -21,7 +20,7 @@ pub async fn export_production_lists(
         serde_json::to_string(&production_data).map_err(|e| e.to_string())?
     }; // MutexGuard dropped here
 
-    let output = Command::new("python")
+    let output = crate::state::python_command()
         .current_dir("../python")
         .arg("main.py")
         .arg("generate-production-lists")

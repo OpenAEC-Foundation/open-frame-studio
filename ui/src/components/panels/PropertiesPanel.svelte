@@ -4,8 +4,12 @@
     selectedCellIndex,
     updateDimensions,
     updateCellType,
+    updateFrameProfile,
+    updateSillProfile,
+    updateFrameShape,
   } from "../../stores/kozijn.js";
   import HardwarePanel from "./HardwarePanel.svelte";
+  import ProfileSelector from "./ProfileSelector.svelte";
 
   let editWidth = 0;
   let editHeight = 0;
@@ -83,6 +87,50 @@
         <label>Materiaal</label>
         <div class="value">{$currentKozijn.frame.material?.wood || "Hout"}</div>
       </div>
+    </div>
+
+    <div class="section">
+      <h3>Profielen</h3>
+      <ProfileSelector
+        label="Kozijnprofiel"
+        filter="frame"
+        value={$currentKozijn.frame.profile}
+        on:change={(e) => updateFrameProfile(e.detail.id, e.detail.name)}
+      />
+      <ProfileSelector
+        label="Dorpelprofiel"
+        filter="sill"
+        value={$currentKozijn.frame.sillProfile}
+        on:change={(e) => updateSillProfile(e.detail.id, e.detail.name)}
+      />
+    </div>
+
+    <div class="section">
+      <h3>Vorm</h3>
+      <div class="field">
+        <label>Kozijnvorm</label>
+        <select
+          value={$currentKozijn.frame.shape?.shapeType || "rectangular"}
+          on:change={(e) => updateFrameShape(e.target.value, e.target.value === "arched" ? $currentKozijn.frame.outerWidth / 6 : null)}
+        >
+          <option value="rectangular">Rechthoekig</option>
+          <option value="arched">Getoogd (segmentboog)</option>
+          <option value="round">Rond</option>
+        </select>
+      </div>
+      {#if $currentKozijn.frame.shape?.shapeType === "arched"}
+        <div class="field">
+          <label>Booghoogte (mm)</label>
+          <input
+            type="number"
+            value={$currentKozijn.frame.shape.archHeight || Math.round($currentKozijn.frame.outerWidth / 6)}
+            on:change={(e) => updateFrameShape("arched", parseFloat(e.target.value))}
+            min="50"
+            max={Math.round($currentKozijn.frame.outerHeight / 2)}
+            step="10"
+          />
+        </div>
+      {/if}
     </div>
 
     {#if selectedCell}

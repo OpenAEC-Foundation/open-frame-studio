@@ -76,6 +76,24 @@
     />
   {/each}
 
+  <!-- Arcs for arched/round kozijnen -->
+  {#each (geometry.arcs || []) as arc}
+    {@const r = arc.radius}
+    {@const startRad = arc.startAngle * Math.PI / 180}
+    {@const endRad = arc.endAngle * Math.PI / 180}
+    {@const x1 = arc.cx + r * Math.cos(startRad)}
+    {@const y1 = arc.cy - r * Math.sin(startRad)}
+    {@const x2 = arc.cx + r * Math.cos(endRad)}
+    {@const y2 = arc.cy - r * Math.sin(endRad)}
+    {@const largeArc = (arc.endAngle - arc.startAngle) > 180 ? 1 : 0}
+    <path
+      d="M {x1} {y1} A {r} {r} 0 {largeArc} 0 {x2} {y2}"
+      fill="none"
+      stroke="var(--editor-frame)"
+      stroke-width={arc.strokeWidth}
+    />
+  {/each}
+
   <!-- Cell fills (glazing/panel areas) -->
   {#each geometry.cellRects as cellRect}
     {@const colors = cellColor(cellRect.cellIndex)}

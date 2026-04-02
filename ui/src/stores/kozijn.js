@@ -112,6 +112,66 @@ export async function autoSelectHardware(cellIndex) {
   await refreshProject();
 }
 
+export async function updateFrameProfile(profileId, profileName) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_frame_profile", { id: k.id, profileId, profileName });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function updateSillProfile(profileId, profileName) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_sill_profile", { id: k.id, profileId, profileName });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function updateDividerProfile(dividerIndex, isColumn, profileId, profileName) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_divider_profile", {
+    id: k.id, dividerIndex, isColumn, profileId, profileName,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function updateFrameShape(shapeType, archHeight) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_frame_shape", {
+    id: k.id, shapeType, archHeight: archHeight || null,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
+export async function addCustomProfile(profileJson) {
+  await invoke("add_custom_profile", { profileJson: JSON.stringify(profileJson) });
+  await refreshProject();
+}
+
+export async function updateGridSizes(columnSizes, rowSizes) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_grid_sizes", {
+    id: k.id,
+    columnSizes,
+    rowSizes,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
 export async function updateSecurityClass(cellIndex, securityClass) {
   const k = get(currentKozijn);
   if (!k) return;

@@ -1,7 +1,8 @@
 use crate::state::AppState;
 use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
 use ofs_core::hardware::{self, HardwareSet, SecurityClass};
-use ofs_core::kozijn::{Kozijn, PanelType, OpeningDirection};
+use ofs_core::kozijn::{FrameShape, Kozijn, PanelType, OpeningDirection, ShapeType};
+use ofs_core::profile::ProfileRef;
 use ofs_core::grid;
 use tauri::State;
 
@@ -31,8 +32,6 @@ pub fn create_kozijn_from_template(
         "double_turn_tilt" => grid::template_double_turn_tilt(width, height),
         "sliding_door" => grid::template_sliding_door(width, height),
         "front_door" => grid::template_front_door(width, height),
-        "melkmeisje" => grid::template_melkmeisje(width, height),
-        "melkmeisje_bovenlicht" => grid::template_melkmeisje_met_bovenlicht(width, height),
         _ => Kozijn::new("Kozijn", "K01", width, height),
     };
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
@@ -92,6 +91,92 @@ pub fn update_kozijn_dimensions(
     kozijn.frame.outer_width = width;
     kozijn.frame.outer_height = height;
 
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_grid_sizes(
+    state: State<'_, AppState>,
+    id: String,
+    column_sizes: Vec<f64>,
+    row_sizes: Vec<f64>,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    for (i, col) in kozijn.grid.columns.iter_mut().enumerate() {
+        if let Some(&new_size) = column_sizes.get(i) {
+            col.size = new_size.max(100.0); // minimum 100mm
+        }
+    }
+    for (i, row) in kozijn.grid.rows.iter_mut().enumerate() {
+        if let Some(&new_size) = row_sizes.get(i) {
+            row.size = new_size.max(100.0);
+        }
+    }
+
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_frame_profile(
+    state: State<'_, AppState>,
+    id: String,
+    profile_id: String,
+    profile_name: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    kozijn.frame.profile = ProfileRef { id: profile_id, name: profile_name };
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_sill_profile(
+    state: State<'_, AppState>,
+    id: String,
+    profile_id: String,
+    profile_name: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    kozijn.frame.sill_profile = Some(ProfileRef { id: profile_id, name: profile_name });
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_divider_profile(
+    state: State<'_, AppState>,
+    id: String,
+    divider_index: usize,
+    is_column: bool,
+    profile_id: String,
+    profile_name: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    let profile = ProfileRef { id: profile_id, name: profile_name };
+    if is_column {
+        let col = kozijn.grid.columns.get_mut(divider_index)
+            .ok_or("Kolom niet gevonden")?;
+        col.divider_profile = Some(profile);
+    } else {
+        let row = kozijn.grid.rows.get_mut(divider_index)
+            .ok_or("Rij niet gevonden")?;
+        row.divider_profile = Some(profile);
+    }
     Ok(kozijn.clone())
 }
 
@@ -190,6 +275,39 @@ pub fn get_kozijn_geometry(
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
     Ok(compute_2d_geometry(kozijn))
+}
+
+#[tauri::command]
+pub fn update_frame_shape(
+    state: State<'_, AppState>,
+    id: String,
+    shape_type: ShapeType,
+    arch_height: Option<f64>,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    kozijn.frame.shape = FrameShape {
+        shape_type,
+        arch_radius: None, // computed from arch_height in geometry
+        arch_height,
+    };
+
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn add_custom_profile(
+    state: State<'_, AppState>,
+    profile_json: String,
+) -> Result<(), String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let profile: ofs_core::profile::ProfileDefinition =
+        serde_json::from_str(&profile_json).map_err(|e| format!("Ongeldig profiel: {}", e))?;
+    project.custom_profiles.push(profile);
+    Ok(())
 }
 
 #[tauri::command]

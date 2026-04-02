@@ -30,7 +30,7 @@ pub async fn export_dxf(
         std::path::PathBuf::from("python")
     };
 
-    let output = tokio::process::Command::new("python")
+    let output = crate::state::python_command()
         .arg(python_dir.join("main.py"))
         .arg("generate-dxf")
         .arg("--output")

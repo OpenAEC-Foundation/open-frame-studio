@@ -32,7 +32,7 @@ pub async fn export_workshop_drawing(
         std::path::PathBuf::from("python")
     };
 
-    let output = tokio::process::Command::new("python")
+    let output = crate::state::python_command()
         .arg(python_dir.join("main.py"))
         .arg("generate-werkplaats-tekening")
         .arg("--output")

@@ -27,8 +27,6 @@
     double_turn_tilt: [1800, 1500],
     sliding_door: [3000, 2400],
     front_door: [1000, 2400],
-    melkmeisje: [1800, 2400],
-    melkmeisje_bovenlicht: [1800, 2600],
   };
 
   async function handleNewKozijn() {
@@ -240,29 +238,6 @@
               <circle cx="16" cy="14" r="1.5"/>
             </svg>
             <span>Voordeur</span>
-          </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("melkmeisje")}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="1"/>
-              <line x1="9" y1="3" x2="9" y2="21"/>
-              <line x1="15" y1="3" x2="15" y2="21"/>
-              <line x1="3" y1="10" x2="9" y2="10"/>
-              <line x1="15" y1="10" x2="21" y2="10"/>
-              <circle cx="13" cy="14" r="1"/>
-            </svg>
-            <span>Melkmeisje</span>
-          </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("melkmeisje_bovenlicht")}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="1"/>
-              <line x1="3" y1="7" x2="21" y2="7"/>
-              <line x1="9" y1="7" x2="9" y2="21"/>
-              <line x1="15" y1="7" x2="15" y2="21"/>
-              <line x1="3" y1="13" x2="9" y2="13"/>
-              <line x1="15" y1="13" x2="21" y2="13"/>
-              <circle cx="13" cy="16" r="1"/>
-            </svg>
-            <span>Melkmeisje+</span>
           </button>
         </div>
       </div>

@@ -1,9 +1,6 @@
 <script>
-  import { currentKozijn, currentGeometry, selectedCellIndex } from "../../stores/kozijn.js";
+  import { currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes } from "../../stores/kozijn.js";
   import { zoom, editorPan } from "../../stores/ui.js";
-  import { pushSnapshot } from "../../stores/history.js";
-  import { invoke } from "../../lib/tauri.js";
-  import { refreshProject } from "../../stores/project.js";
   import KozijnCanvas from "./KozijnCanvas.svelte";
   import GridHandles from "./GridHandles.svelte";
 
@@ -71,26 +68,8 @@
   }
 
   async function handleGridResize(e) {
-    const k = $currentKozijn;
-    if (!k) return;
-    pushSnapshot();
     const { columnSizes, rowSizes } = e.detail;
-    // Update de mock/backend direct met de nieuwe maten
-    k.grid.columns.forEach((col, i) => {
-      if (i < columnSizes.length) col.size = columnSizes[i];
-    });
-    k.grid.rows.forEach((row, i) => {
-      if (i < rowSizes.length) row.size = rowSizes[i];
-    });
-    currentKozijn.set({ ...k });
-    // Herbereken geometrie
-    try {
-      const geom = await invoke("get_kozijn_geometry", { id: k.id });
-      currentGeometry.set(geom);
-    } catch (err) {
-      console.error("Geometrie herberekenen mislukt:", err);
-    }
-    await refreshProject();
+    await updateGridSizes(columnSizes, rowSizes);
   }
 
   // Export for use in Beeld tab
