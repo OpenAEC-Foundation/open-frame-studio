@@ -185,6 +185,20 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      - name: Re-upload signed system installer
+        if: matrix.target == 'windows-system'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $VERSION = "${{ needs.create-release.outputs.version }}"
+          $NSIS_DIR = "target/release/bundle/nsis"
+          $EXE = Get-ChildItem "$NSIS_DIR/*-setup.exe" | Select-Object -First 1
+          if ($EXE) {
+            Write-Host "Re-uploading signed installer: $($EXE.Name)"
+            gh release upload $VERSION "$($EXE.FullName)" --clobber --repo "${{ github.repository }}"
+          }
+
       - name: Upload user installer to release
         if: matrix.target == 'windows-user'
         shell: pwsh
