@@ -129,12 +129,38 @@ pub fn update_frame_profile(
     id: String,
     profile_id: String,
     profile_name: String,
+    profile_width: Option<f64>,
+    profile_depth: Option<f64>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
     kozijn.frame.profile = ProfileRef { id: profile_id, name: profile_name };
+    if let Some(w) = profile_width {
+        let old_fw = kozijn.frame.frame_width;
+        kozijn.frame.frame_width = w;
+        // Rescale grid to fit new frame width
+        let old_inner = kozijn.frame.outer_width - 2.0 * old_fw;
+        let new_inner = kozijn.frame.outer_width - 2.0 * w;
+        if old_inner > 0.0 && new_inner > 0.0 {
+            let scale = new_inner / old_inner;
+            for col in &mut kozijn.grid.columns {
+                col.size *= scale;
+            }
+        }
+        let old_inner_h = kozijn.frame.outer_height - 2.0 * old_fw;
+        let new_inner_h = kozijn.frame.outer_height - 2.0 * w;
+        if old_inner_h > 0.0 && new_inner_h > 0.0 {
+            let scale_h = new_inner_h / old_inner_h;
+            for row in &mut kozijn.grid.rows {
+                row.size *= scale_h;
+            }
+        }
+    }
+    if let Some(d) = profile_depth {
+        kozijn.frame.frame_depth = d;
+    }
     Ok(kozijn.clone())
 }
 
@@ -177,6 +203,59 @@ pub fn update_divider_profile(
             .ok_or("Rij niet gevonden")?;
         row.divider_profile = Some(profile);
     }
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn update_member_profile(
+    state: State<'_, AppState>,
+    id: String,
+    member_type: String,
+    member_index: Option<usize>,
+    profile_id: String,
+    profile_name: String,
+    profile_width: Option<f64>,
+    profile_depth: Option<f64>,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    let profile = ProfileRef { id: profile_id, name: profile_name };
+    match member_type.as_str() {
+        "frame_top" => kozijn.frame.top_profile = Some(profile),
+        "frame_bottom" => kozijn.frame.bottom_profile = Some(profile),
+        "frame_left" => kozijn.frame.left_profile = Some(profile),
+        "frame_right" => kozijn.frame.right_profile = Some(profile),
+        "divider_v" => {
+            if let Some(idx) = member_index {
+                // Divider indices: column index + 1 (first column has no divider)
+                let col_idx = idx + 1;
+                if let Some(col) = kozijn.grid.columns.get_mut(col_idx) {
+                    col.divider_profile = Some(profile);
+                }
+            }
+        }
+        "divider_h" => {
+            if let Some(idx) = member_index {
+                let row_idx = idx + 1;
+                if let Some(row) = kozijn.grid.rows.get_mut(row_idx) {
+                    row.divider_profile = Some(profile);
+                }
+            }
+        }
+        _ => return Err(format!("Onbekend member type: {}", member_type)),
+    }
+
+    // Update frame dimensions if width/depth provided (for frame members only)
+    if member_type.starts_with("frame") {
+        if let Some(w) = profile_width {
+            // Don't change frame_width globally — that affects all members
+            // Per-member width would need geometry changes (future)
+        }
+    }
+
     Ok(kozijn.clone())
 }
 

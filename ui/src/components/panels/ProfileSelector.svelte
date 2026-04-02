@@ -17,7 +17,12 @@
     const selectedId = e.target.value;
     const profile = filteredProfiles.find(p => p.id === selectedId);
     if (profile) {
-      dispatch("change", { id: profile.id, name: profile.name });
+      dispatch("change", {
+        id: profile.id,
+        name: profile.name,
+        width: profile.width,
+        depth: profile.depth,
+      });
     }
   }
 </script>

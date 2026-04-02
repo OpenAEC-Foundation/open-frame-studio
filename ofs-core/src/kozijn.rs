@@ -36,6 +36,10 @@ impl Kozijn {
                 frame_width: 67.0,
                 frame_depth: 114.0,
                 sill: None,
+                top_profile: None,
+                bottom_profile: None,
+                left_profile: None,
+                right_profile: None,
                 shape: FrameShape::default(),
             },
             grid: Grid {
@@ -156,6 +160,15 @@ pub struct Frame {
     /// Structured sill configuration (v1.3+)
     #[serde(default)]
     pub sill: Option<crate::sill::Sill>,
+    /// Per-member profile overrides (None = use default frame profile)
+    #[serde(default)]
+    pub top_profile: Option<ProfileRef>,
+    #[serde(default)]
+    pub bottom_profile: Option<ProfileRef>,
+    #[serde(default)]
+    pub left_profile: Option<ProfileRef>,
+    #[serde(default)]
+    pub right_profile: Option<ProfileRef>,
     /// Frame shape (rectangular, arched, round)
     #[serde(default)]
     pub shape: FrameShape,

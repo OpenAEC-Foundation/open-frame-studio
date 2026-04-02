@@ -1,8 +1,16 @@
 <script>
-  import { selectedCellIndex, updateCellType } from "../../stores/kozijn.js";
+  import { selectedCellIndex, selectedMember, updateCellType } from "../../stores/kozijn.js";
 
   export let geometry;
   export let kozijn;
+
+  const FRAME_MEMBER_NAMES = ["frame_top", "frame_bottom", "frame_left", "frame_right"];
+
+  function handleMemberClick(memberType, index, e) {
+    e.stopPropagation();
+    selectedCellIndex.set(null);
+    selectedMember.set({ type: memberType, index });
+  }
 
   const PANEL_COLORS = {
     fixed_glass: { fill: "var(--editor-glass)", stroke: "var(--editor-glass-stroke)" },
@@ -62,6 +70,7 @@
 
   function handleCellClick(cellIndex, e) {
     e.stopPropagation();
+    selectedMember.set(null);
     selectedCellIndex.set(cellIndex);
   }
 </script>
@@ -165,15 +174,15 @@
       x1={dim.x1} y1={dim.y1}
       x2={dim.x2} y2={dim.y2}
       stroke="var(--editor-dimension)"
-      stroke-width="1"
+      stroke-width="0.5"
     />
     <!-- Tick marks -->
     {#if dim.side === "bottom" || dim.side === "top"}
-      <line x1={dim.x1} y1={dim.y1 - 4} x2={dim.x1} y2={dim.y1 + 4} stroke="var(--editor-dimension)" stroke-width="1"/>
-      <line x1={dim.x2} y1={dim.y2 - 4} x2={dim.x2} y2={dim.y2 + 4} stroke="var(--editor-dimension)" stroke-width="1"/>
+      <line x1={dim.x1} y1={dim.y1 - 3} x2={dim.x1} y2={dim.y1 + 3} stroke="var(--editor-dimension)" stroke-width="0.5"/>
+      <line x1={dim.x2} y1={dim.y2 - 3} x2={dim.x2} y2={dim.y2 + 3} stroke="var(--editor-dimension)" stroke-width="0.5"/>
     {:else}
-      <line x1={dim.x1 - 4} y1={dim.y1} x2={dim.x1 + 4} y2={dim.y1} stroke="var(--editor-dimension)" stroke-width="1"/>
-      <line x1={dim.x2 - 4} y1={dim.y2} x2={dim.x2 + 4} y2={dim.y2} stroke="var(--editor-dimension)" stroke-width="1"/>
+      <line x1={dim.x1 - 3} y1={dim.y1} x2={dim.x1 + 3} y2={dim.y1} stroke="var(--editor-dimension)" stroke-width="0.5"/>
+      <line x1={dim.x2 - 3} y1={dim.y2} x2={dim.x2 + 3} y2={dim.y2} stroke="var(--editor-dimension)" stroke-width="0.5"/>
     {/if}
     <!-- Label -->
     <text
@@ -182,7 +191,7 @@
       text-anchor="middle"
       dominant-baseline="central"
       fill="var(--editor-dimension)"
-      font-size="14"
+      font-size="9"
       font-family="var(--font-body)"
     >
       {dim.label}

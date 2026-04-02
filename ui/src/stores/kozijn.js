@@ -5,6 +5,8 @@ import { pushSnapshot, clearHistory } from "./history.js";
 
 export const currentKozijn = writable(null);
 export const selectedCellIndex = writable(null);
+// Selected member: { type: "frame_top"|"frame_bottom"|"frame_left"|"frame_right"|"divider_v"|"divider_h", index: number }
+export const selectedMember = writable(null);
 
 export const currentGeometry = writable(null);
 
@@ -112,13 +114,18 @@ export async function autoSelectHardware(cellIndex) {
   await refreshProject();
 }
 
-export async function updateFrameProfile(profileId, profileName) {
+export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  const updated = await invoke("update_frame_profile", { id: k.id, profileId, profileName });
+  const updated = await invoke("update_frame_profile", {
+    id: k.id, profileId, profileName,
+    profileWidth: profileWidth || null,
+    profileDepth: profileDepth || null,
+  });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
 export async function updateSillProfile(profileId, profileName) {

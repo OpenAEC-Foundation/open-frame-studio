@@ -18,7 +18,21 @@
   }
 
   function minimize() { appWindow?.minimize(); }
-  function close() { appWindow?.close(); }
+  async function close() {
+    if (isTauri) {
+      try {
+        const { exit } = await import("@tauri-apps/plugin-process");
+        await exit(0);
+      } catch {
+        // Fallback: try window close, then force via API
+        try {
+          await appWindow?.close();
+        } catch {
+          window.close();
+        }
+      }
+    }
+  }
 </script>
 
 <div class="titlebar" data-tauri-drag-region>

@@ -86,7 +86,8 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let fw = kozijn.frame.frame_width;
     let ow = kozijn.frame.outer_width;
     let oh = kozijn.frame.outer_height;
-    let divider_width = fw; // dividers use same width as frame
+    // Divider width defaults to frame width (same profile family)
+    let divider_width = fw;
 
     // Outer rect
     let outer_rect = Rect2D {
@@ -192,7 +193,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     }
 
     // Dimension lines
-    let dim_offset = 30.0;
+    let dim_offset = 15.0;
     let mut dimensions = Vec::new();
 
     // Overall width (bottom)

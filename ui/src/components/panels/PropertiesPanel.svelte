@@ -7,6 +7,7 @@
     updateFrameProfile,
     updateSillProfile,
     updateFrameShape,
+    updateGridSizes,
   } from "../../stores/kozijn.js";
   import HardwarePanel from "./HardwarePanel.svelte";
   import ProfileSelector from "./ProfileSelector.svelte";
@@ -95,7 +96,7 @@
         label="Kozijnprofiel"
         filter="frame"
         value={$currentKozijn.frame.profile}
-        on:change={(e) => updateFrameProfile(e.detail.id, e.detail.name)}
+        on:change={(e) => updateFrameProfile(e.detail.id, e.detail.name, e.detail.width, e.detail.depth)}
       />
       <ProfileSelector
         label="Dorpelprofiel"
@@ -131,6 +132,48 @@
           />
         </div>
       {/if}
+    </div>
+
+    <div class="section">
+      <h3>Vakmaten</h3>
+      <div class="field">
+        <label>Kolommen (mm)</label>
+        {#each $currentKozijn.grid.columns as col, i}
+          <div class="field-row" style="margin-bottom: 4px;">
+            <span class="col-label">{i + 1}</span>
+            <input
+              type="number"
+              value={Math.round(col.size)}
+              on:change={(e) => {
+                const sizes = $currentKozijn.grid.columns.map(c => c.size);
+                sizes[i] = parseFloat(e.target.value) || sizes[i];
+                updateGridSizes(sizes, $currentKozijn.grid.rows.map(r => r.size));
+              }}
+              min="100"
+              step="10"
+            />
+          </div>
+        {/each}
+      </div>
+      <div class="field">
+        <label>Rijen (mm)</label>
+        {#each $currentKozijn.grid.rows as row, i}
+          <div class="field-row" style="margin-bottom: 4px;">
+            <span class="col-label">{i + 1}</span>
+            <input
+              type="number"
+              value={Math.round(row.size)}
+              on:change={(e) => {
+                const sizes = $currentKozijn.grid.rows.map(r => r.size);
+                sizes[i] = parseFloat(e.target.value) || sizes[i];
+                updateGridSizes($currentKozijn.grid.columns.map(c => c.size), sizes);
+              }}
+              min="100"
+              step="10"
+            />
+          </div>
+        {/each}
+      </div>
     </div>
 
     {#if selectedCell}
@@ -237,10 +280,18 @@
   .field-row {
     display: flex;
     gap: var(--sp-2);
+    align-items: center;
   }
 
   .field-row .field {
     flex: 1;
+  }
+
+  .col-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 16px;
   }
 
   .value {

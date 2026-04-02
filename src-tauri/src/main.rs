@@ -11,6 +11,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             // Project commands
@@ -28,6 +29,7 @@ fn main() {
             commands::kozijn::update_frame_profile,
             commands::kozijn::update_sill_profile,
             commands::kozijn::update_divider_profile,
+            commands::kozijn::update_member_profile,
             commands::kozijn::update_frame_shape,
             commands::kozijn::add_custom_profile,
             commands::kozijn::update_cell_type,
