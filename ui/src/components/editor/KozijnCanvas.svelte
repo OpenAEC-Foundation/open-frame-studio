@@ -1,9 +1,7 @@
 <script>
   import { selectedCellIndex, selectedMember, updateCellType } from "../../stores/kozijn.js";
 
-  export let geometry;
-  export let kozijn;
-  export let zoom = 0.35;
+  let { geometry, kozijn, zoom = 0.35 } = $props();
 
   const FRAME_MEMBER_NAMES = ["frame_top", "frame_bottom", "frame_left", "frame_right"];
 
@@ -81,7 +79,6 @@
   {#each geometry.frameRects as rect, i}
     {@const memberType = FRAME_MEMBER_NAMES[i]}
     {@const isSelected = $selectedMember?.type === memberType}
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <rect
       x={rect.x} y={rect.y}
       width={rect.width} height={rect.height}
@@ -89,7 +86,7 @@
       stroke={isSelected ? "var(--editor-selected)" : "none"}
       stroke-width={isSelected ? 3 : 0}
       class="member"
-      on:click={(e) => handleMemberClick(memberType, i, e)}
+      onclick={(e) => handleMemberClick(memberType, i, e)}
       role="button"
       tabindex="0"
     />
@@ -117,7 +114,6 @@
   {#each geometry.cellRects as cellRect}
     {@const colors = cellColor(cellRect.cellIndex)}
     {@const isSelected = $selectedCellIndex === cellRect.cellIndex}
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <rect
       x={cellRect.rect.x} y={cellRect.rect.y}
       width={cellRect.rect.width} height={cellRect.rect.height}
@@ -125,7 +121,7 @@
       stroke={isSelected ? "var(--editor-selected)" : colors.stroke}
       stroke-width={isSelected ? 3 : 1}
       class="cell"
-      on:click={(e) => handleCellClick(cellRect.cellIndex, e)}
+      onclick={(e) => handleCellClick(cellRect.cellIndex, e)}
       role="button"
       tabindex="0"
     />
@@ -163,7 +159,6 @@
   <!-- Vertical dividers -->
   {#each geometry.vDividers as rect, i}
     {@const isSelected = $selectedMember?.type === "divider_v" && $selectedMember?.index === i}
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <rect
       x={rect.x} y={rect.y}
       width={rect.width} height={rect.height}
@@ -171,7 +166,7 @@
       stroke={isSelected ? "var(--editor-selected)" : "none"}
       stroke-width={isSelected ? 3 : 0}
       class="member"
-      on:click={(e) => handleMemberClick("divider_v", i, e)}
+      onclick={(e) => handleMemberClick("divider_v", i, e)}
       role="button"
       tabindex="0"
     />
@@ -180,7 +175,6 @@
   <!-- Horizontal dividers -->
   {#each geometry.hDividers as rect, i}
     {@const isSelected = $selectedMember?.type === "divider_h" && $selectedMember?.index === i}
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <rect
       x={rect.x} y={rect.y}
       width={rect.width} height={rect.height}
@@ -188,7 +182,7 @@
       stroke={isSelected ? "var(--editor-selected)" : "none"}
       stroke-width={isSelected ? 3 : 0}
       class="member"
-      on:click={(e) => handleMemberClick("divider_h", i, e)}
+      onclick={(e) => handleMemberClick("divider_h", i, e)}
       role="button"
       tabindex="0"
     />
@@ -252,7 +246,7 @@
 
 <style>
   .cell {
-    cursor: pointer;
+    cursor: default;
     transition: stroke 0.15s, stroke-width 0.15s;
   }
 
@@ -262,7 +256,7 @@
   }
 
   .member {
-    cursor: pointer;
+    cursor: default;
     transition: stroke 0.15s, stroke-width 0.15s;
   }
 

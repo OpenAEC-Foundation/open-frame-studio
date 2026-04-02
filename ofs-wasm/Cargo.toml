@@ -1,0 +1,14 @@
+[package]
+name = "ofs-wasm"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ofs-core = { path = "../ofs-core", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+wasm-bindgen = "0.2"

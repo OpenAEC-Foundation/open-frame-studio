@@ -1,6 +1,7 @@
 <script>
   import { currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes } from "../../stores/kozijn.js";
   import { zoom, editorPan } from "../../stores/ui.js";
+  import { _ } from "svelte-i18n";
   import KozijnCanvas from "./KozijnCanvas.svelte";
   import GridHandles from "./GridHandles.svelte";
 
@@ -41,8 +42,22 @@
 
   function handleWheel(e) {
     e.preventDefault();
+    const rect = containerEl.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const oldZoom = $zoom;
     const delta = e.deltaY > 0 ? -0.03 : 0.03;
-    zoom.update((z) => Math.max(0.05, Math.min(2.0, z + delta)));
+    const newZoom = Math.max(0.05, Math.min(2.0, oldZoom + delta));
+
+    // Adjust pan so the point under the cursor stays fixed
+    const scale = newZoom / oldZoom;
+    editorPan.update((pan) => ({
+      x: mouseX - (mouseX - pan.x) * scale,
+      y: mouseY - (mouseY - pan.y) * scale,
+    }));
+
+    zoom.set(newZoom);
   }
 
   function handleMouseDown(e) {
@@ -67,8 +82,7 @@
     isPanning = false;
   }
 
-  async function handleGridResize(e) {
-    const { columnSizes, rowSizes } = e.detail;
+  async function handleGridResize({ columnSizes, rowSizes }) {
     await updateGridSizes(columnSizes, rowSizes);
   }
 
@@ -76,22 +90,21 @@
   export { zoomToFit };
 </script>
 
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="editor"
   bind:this={containerEl}
-  on:wheel={handleWheel}
-  on:mousedown={handleMouseDown}
-  on:mousemove={handleMouseMove}
-  on:mouseup={handleMouseUp}
-  on:mouseleave={handleMouseUp}
+  onwheel={handleWheel}
+  onmousedown={handleMouseDown}
+  onmousemove={handleMouseMove}
+  onmouseup={handleMouseUp}
+  onmouseleave={handleMouseUp}
   role="application"
 >
   {#if $currentKozijn && $currentGeometry}
     <svg class="canvas" xmlns="http://www.w3.org/2000/svg">
       <g transform="translate({$editorPan.x}, {$editorPan.y}) scale({$zoom})">
         <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} />
-        <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} on:resize={handleGridResize} />
+        <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
       </g>
     </svg>
   {:else}
@@ -103,8 +116,8 @@
           <line x1="8" y1="32" x2="56" y2="32"/>
         </svg>
       </div>
-      <p>Maak een nieuw kozijn via de ribbon toolbar</p>
-      <p class="hint">of druk op Ctrl+N</p>
+      <p>{$_('editor.newKozijnHint')}</p>
+      <p class="hint">{$_('editor.shortcutHint')}</p>
     </div>
   {/if}
 </div>

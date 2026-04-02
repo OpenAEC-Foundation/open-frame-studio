@@ -196,7 +196,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevalProductionDat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vliesgevel_grid::create_regular_grid;
+    use crate::vliesgevel::grid::create_regular_grid;
 
     #[test]
     fn test_production_regular_grid() {

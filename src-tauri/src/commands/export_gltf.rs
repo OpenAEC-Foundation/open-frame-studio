@@ -7,33 +7,18 @@ pub async fn export_gltf(
     id: String,
     output_path: String,
 ) -> Result<String, String> {
-    let kozijn_json = {
+    let kozijn = {
         let project = state.project.lock().map_err(|e| e.to_string())?;
         let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-        let kozijn = project
+        project
             .kozijnen
             .iter()
             .find(|k| k.id == id)
-            .ok_or("Kozijn niet gevonden")?;
-        serde_json::to_string(kozijn).map_err(|e| e.to_string())?
+            .ok_or("Kozijn niet gevonden")?
+            .clone()
     };
 
-    let output = crate::state::python_command()
-        .current_dir("../python")
-        .arg("main.py")
-        .arg("generate-gltf")
-        .arg("--output")
-        .arg(&output_path)
-        .arg("--kozijn-json")
-        .arg(&kozijn_json)
-        .output()
-        .await
-        .map_err(|e| format!("Python sidecar fout: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("glTF export mislukt: {}", stderr));
-    }
+    ofs_core::export::gltf::generate_glb(&kozijn, &output_path)?;
 
     Ok(output_path)
 }

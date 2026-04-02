@@ -40,7 +40,7 @@
         stroke={$selectedPanelIndex === idx ? "var(--amber, #D97706)" : colors.stroke}
         stroke-width={$selectedPanelIndex === idx ? 2 : 0.5}
         class="panel"
-        on:click={() => handlePanelClick(panel.col, panel.row)}
+        onclick={() => handlePanelClick(panel.col, panel.row)}
       />
       <!-- Glass cross pattern for glass panels -->
       {#if panel.panelType === "Glass" || panel.panelType === "OpenableWindow"}
@@ -123,7 +123,7 @@
 
 <style>
   .panel {
-    cursor: pointer;
+    cursor: default;
   }
   .panel:hover {
     filter: brightness(1.1);

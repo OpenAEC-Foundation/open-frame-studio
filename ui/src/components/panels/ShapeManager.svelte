@@ -1,16 +1,13 @@
 <script>
-  import { createEventDispatcher } from "svelte";
+  import { _ } from "svelte-i18n";
   import { invoke } from "../../lib/tauri.js";
   import { refreshProject } from "../../stores/project.js";
   import { loadProfiles } from "../../stores/profiles.js";
 
-  const dispatch = createEventDispatcher();
-
-  export let visible = false;
-  export let editProfile = null;
+  let { visible = $bindable(false), editProfile = null, onsaved = null, onclose = null } = $props();
 
   // === Profile Parameters ===
-  let name = "Stijl 67x114";
+  let name = $_('shapeManager.defaultName');
   let material = "wood";
   let materialSubtype = "meranti";
   let kvtType = "A";
@@ -52,16 +49,16 @@
   let selectedPointIdx = -1;
 
   // === KVT Defaults per Type ===
-  const KVT_DEFAULTS = {
-    A:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: "Stijl" },
-    A1: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: "Stijl (waterhol)" },
-    B:  { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: "Tussenstijl" },
-    B1: { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: "Tussenstijl (waterhol)" },
-    C:  { width: 90, depth: 150, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: "Onderdorpel", slope: 9 },
-    D:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: "Tussendorpel" },
-    R:  { width: 54, depth: 67, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 15, name: "Raamhout" },
-    Custom: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: "Vrij profiel" },
-  };
+  let KVT_DEFAULTS = $derived({
+    A:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.stijl') },
+    A1: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.stijlWaterhol') },
+    B:  { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijl') },
+    B1: { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijlWaterhol') },
+    C:  { width: 90, depth: 150, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.onderdorpel'), slope: 9 },
+    D:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussendorpel') },
+    R:  { width: 54, depth: 67, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 15, name: $_('shapeManager.kvt.raamhout') },
+    Custom: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.vrijProfiel') },
+  });
 
   const SERIES_DEFAULTS = {
     "54": { width: 54, uf: 2.2 },
@@ -71,18 +68,20 @@
   };
 
   // Initialize from editProfile
-  $: if (editProfile && visible) {
-    name = editProfile.name || "Profiel bewerken";
-    material = editProfile.material || "wood";
-    width = editProfile.width || 67;
-    depth = editProfile.depth || 114;
-    ufValue = editProfile.ufValue || 1.8;
-    if (editProfile.sponning) {
-      sponningWidth = editProfile.sponning.width || 12;
-      sponningDepth = editProfile.sponning.depth || 17;
-      sponningType = editProfile.sponning.sponningType || "binnensponning";
+  $effect(() => {
+    if (editProfile && visible) {
+      name = editProfile.name || $_('profileEditor.editProfile');
+      material = editProfile.material || "wood";
+      width = editProfile.width || 67;
+      depth = editProfile.depth || 114;
+      ufValue = editProfile.ufValue || 1.8;
+      if (editProfile.sponning) {
+        sponningWidth = editProfile.sponning.width || 12;
+        sponningDepth = editProfile.sponning.depth || 17;
+        sponningType = editProfile.sponning.sponningType || "binnensponning";
+      }
     }
-  }
+  });
 
   // Apply KVT defaults when type changes
   function applyKvtDefaults() {
@@ -105,17 +104,18 @@
       ufValue = s.uf;
       // Force min 90mm for dubbele sponning
       if (sponningType === "dubbele_sponning" && width < 90) width = 90;
-      name = `${KVT_DEFAULTS[kvtType]?.name || "Profiel"} ${width}x${depth}`;
+      name = `${KVT_DEFAULTS[kvtType]?.name || $_('shapeManager.profile')} ${width}x${depth}`;
     }
   }
 
   // === Cross-section Generation ===
-  $: crossSection = generateCrossSection();
-  $: pathD = crossSection.length > 2
+  let crossSection = $derived(generateCrossSection());
+  let pathD = $derived(crossSection.length > 2
     ? `M ${crossSection.map(p => `${p[0]} ${p[1]}`).join(" L ")} Z`
-    : "";
-  $: achterhoutCalc = width - sponningWidth - (hasRandsponning ? randWidth : 0);
-  $: sightline = width - sponningWidth;
+    : ""
+  );
+  let achterhoutCalc = $derived(width - sponningWidth - (hasRandsponning ? randWidth : 0));
+  let sightline = $derived(width - sponningWidth);
 
   function generateCrossSection() {
     const w = width, d = depth, sw = sponningWidth, sd = sponningDepth;
@@ -185,40 +185,40 @@
   }
 
   // === KVT Validation ===
-  $: validations = computeValidations();
+  let validations = $derived(computeValidations());
 
   function computeValidations() {
     const results = [];
     // Sponninghoogte
     const minSH = kvtType === "D" ? 14 : 17;
     results.push({
-      label: `Sponninghoogte >= ${minSH}mm`,
+      label: `${$_('shapeManager.validation.sponningHeight')} >= ${minSH}mm`,
       ok: sponningDepth >= minSH,
       value: sponningDepth,
     });
     // Achterhout
     const minAH = sponningDepth >= 20 ? 15 : 13;
     results.push({
-      label: `Achterhout >= ${minAH}mm`,
+      label: `${$_('shapeManager.validation.achterhout')} >= ${minAH}mm`,
       ok: achterhoutCalc >= minAH,
       value: Math.round(achterhoutCalc),
     });
     // Glaslat
     results.push({
-      label: `Glaslat >= 13mm`,
+      label: `${$_('shapeManager.validation.glazingBead')} >= 13mm`,
       ok: glaslatWidth >= 13,
       value: glaslatWidth,
     });
     // Dubbele sponning breedte
     if (sponningType === "dubbele_sponning") {
       results.push({
-        label: `Breedte >= 90mm (dubbel)`,
+        label: `${$_('shapeManager.validation.widthDouble')} >= 90mm`,
         ok: width >= 90,
         value: width,
       });
       const kern = width - sponningWidth - secondWidth;
       results.push({
-        label: `Kernhout >= 20mm`,
+        label: `${$_('shapeManager.validation.kernhout')} >= 20mm`,
         ok: kern >= 20,
         value: Math.round(kern),
       });
@@ -226,7 +226,7 @@
     // Onderdorpel helling
     if (kvtType === "C") {
       results.push({
-        label: `Helling >= 9°`,
+        label: `${$_('shapeManager.validation.slope')} >= 9°`,
         ok: slopeDegrees >= 9,
         value: slopeDegrees,
       });
@@ -234,7 +234,7 @@
     return results;
   }
 
-  $: allValid = validations.every(v => v.ok);
+  let allValid = $derived(validations.every(v => v.ok));
 
   // === Save ===
   async function handleSave() {
@@ -283,21 +283,21 @@
       await invoke("add_custom_profile", { profileJson: JSON.stringify(profile) });
       await refreshProject();
       await loadProfiles();
-      dispatch("saved", profile);
+      onsaved?.(profile);
       visible = false;
     } catch (e) {
-      alert("Profiel opslaan mislukt: " + e);
+      alert($_('profileEditor.saveFailed') + ": " + e);
     }
   }
 
   function handleClose() {
     visible = false;
-    dispatch("close");
+    onclose?.();
   }
 
   // SVG preview settings
   const PAD = 25;
-  $: viewBox = `${-PAD} ${-PAD} ${width + 2 * PAD + 50} ${depth + 2 * PAD + 20}`;
+  let viewBox = $derived(`${-PAD} ${-PAD} ${width + 2 * PAD + 50} ${depth + 2 * PAD + 20}`);
 
   // Point interaction
   function handlePointClick(idx) {
@@ -306,13 +306,11 @@
 </script>
 
 {#if visible}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="overlay" on:click={handleClose}>
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <div class="modal" on:click|stopPropagation>
+  <div class="overlay" onclick={handleClose}>
+    <div class="modal" onclick={(e) => { e.stopPropagation(); }}>
       <div class="header">
-        <h2>Profieleditor — Shape Manager</h2>
-        <button class="close-btn" on:click={handleClose}>
+        <h2>{$_('shapeManager.title')}</h2>
+        <button class="close-btn" onclick={handleClose}>
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -320,7 +318,7 @@
       <div class="body">
         <!-- LEFT: Interactive SVG Preview -->
         <div class="preview-col">
-          <div class="preview-label">Dwarsdoorsnede (buiten links, binnen rechts)</div>
+          <div class="preview-label">{$_('shapeManager.crossSectionLabel')}</div>
           <svg width="300" height="380" viewBox={viewBox} preserveAspectRatio="xMidYMid meet" class="profile-svg">
             <!-- Profile shape -->
             <path d={pathD} fill="var(--bg-surface-alt, #E7E5E4)" stroke="var(--amber, #D97706)" stroke-width="1.5" />
@@ -341,13 +339,12 @@
 
             <!-- Clickable contour points -->
             {#each crossSection as pt, i}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
               <circle cx={pt[0]} cy={pt[1]} r={selectedPointIdx === i ? 3 : 2}
                 fill={selectedPointIdx === i ? "var(--amber)" : "#fff"}
                 stroke={selectedPointIdx === i ? "var(--amber)" : "#888"}
                 stroke-width="0.8"
                 class="point"
-                on:click={() => handlePointClick(i)}
+                onclick={() => handlePointClick(i)}
               />
             {/each}
 
@@ -366,7 +363,7 @@
             <!-- Dimension: sponning -->
             {#if sponningType !== "geen"}
               <text x={width / 2} y={depth + 12} text-anchor="middle" font-size="6" fill="rgba(59,130,246,0.8)">
-                SP {sponningWidth}x{sponningDepth}
+                {$_('shapeManager.spAbbrev')} {sponningWidth}x{sponningDepth}
               </text>
             {/if}
 
@@ -378,13 +375,13 @@
           <!-- Point coordinates -->
           {#if selectedPointIdx >= 0 && selectedPointIdx < crossSection.length}
             <div class="point-info">
-              Punt {selectedPointIdx + 1}: X={crossSection[selectedPointIdx][0]}  Y={crossSection[selectedPointIdx][1]}
+              {$_('shapeManager.point')} {selectedPointIdx + 1}: X={crossSection[selectedPointIdx][0]}  Y={crossSection[selectedPointIdx][1]}
             </div>
           {/if}
 
           <div class="computed-row">
-            <span>Zichtlijn: {sightline}mm</span>
-            <span>Achterhout: {Math.round(achterhoutCalc)}mm</span>
+            <span>{$_('profileEditor.sightline')}: {sightline}mm</span>
+            <span>{$_('shapeManager.achterhout')}: {Math.round(achterhoutCalc)}mm</span>
           </div>
         </div>
 
@@ -392,25 +389,25 @@
         <div class="params-col">
           <div class="psection">
             <div class="field">
-              <label>Naam</label>
+              <label>{$_('props.name')}</label>
               <input type="text" bind:value={name} />
             </div>
             <div class="field-row">
               <div class="field">
-                <label>KVT Type</label>
-                <select bind:value={kvtType} on:change={applyKvtDefaults}>
-                  <option value="A">A — Stijl</option>
-                  <option value="A1">A1 — Stijl (waterhol)</option>
-                  <option value="B">B — Tussenstijl</option>
-                  <option value="C">C — Onderdorpel</option>
-                  <option value="D">D — Tussendorpel</option>
-                  <option value="R">R — Raamhout</option>
-                  <option value="Custom">Vrij</option>
+                <label>{$_('shapeManager.kvtType')}</label>
+                <select bind:value={kvtType} onchange={applyKvtDefaults}>
+                  <option value="A">A — {$_('shapeManager.kvt.stijl')}</option>
+                  <option value="A1">A1 — {$_('shapeManager.kvt.stijlWaterhol')}</option>
+                  <option value="B">B — {$_('shapeManager.kvt.tussenstijl')}</option>
+                  <option value="C">C — {$_('shapeManager.kvt.onderdorpel')}</option>
+                  <option value="D">D — {$_('shapeManager.kvt.tussendorpel')}</option>
+                  <option value="R">R — {$_('shapeManager.kvt.raamhout')}</option>
+                  <option value="Custom">{$_('shapeManager.kvt.vrij')}</option>
                 </select>
               </div>
               <div class="field">
-                <label>Serie</label>
-                <select bind:value={profileSeries} on:change={applySeriesDefaults}>
+                <label>{$_('shapeManager.series')}</label>
+                <select bind:value={profileSeries} onchange={applySeriesDefaults}>
                   <option value="54">54mm</option>
                   <option value="67">67mm</option>
                   <option value="78">78mm</option>
@@ -419,50 +416,50 @@
               </div>
             </div>
             <div class="field">
-              <label>Materiaal</label>
+              <label>{$_('props.material')}</label>
               <select bind:value={materialSubtype}>
-                <option value="meranti">Meranti</option>
-                <option value="accoya">Accoya</option>
-                <option value="vuren">Vuren</option>
-                <option value="eiken">Eiken</option>
+                <option value="meranti">{$_('material.meranti')}</option>
+                <option value="accoya">{$_('material.accoya')}</option>
+                <option value="vuren">{$_('material.vuren')}</option>
+                <option value="eiken">{$_('material.eiken')}</option>
               </select>
             </div>
           </div>
 
           <div class="psection">
-            <h4>Afmetingen</h4>
+            <h4>{$_('profileEditor.dimensions')}</h4>
             <div class="field-row">
               <div class="field">
-                <label>Breedte</label>
+                <label>{$_('production.width')}</label>
                 <input type="number" bind:value={width} min="30" max="150" step="1" />
               </div>
               <div class="field">
-                <label>Diepte</label>
+                <label>{$_('props.depth')}</label>
                 <input type="number" bind:value={depth} min="50" max="250" step="1" />
               </div>
             </div>
           </div>
 
           <div class="psection">
-            <h4>Sponning (dagzijde)</h4>
+            <h4>{$_('shapeManager.sponningDagzijde')}</h4>
             <div class="field">
-              <label>Type</label>
+              <label>{$_('shapeManager.type')}</label>
               <select bind:value={sponningType}>
-                <option value="binnensponning">Binnensponning</option>
-                <option value="buitensponning">Buitensponning</option>
-                <option value="dubbele_sponning">Dubbele sponning</option>
-                <option value="draaikiep">Draaikiep</option>
-                <option value="geen">Geen</option>
+                <option value="binnensponning">{$_('shapeManager.sponning.binnen')}</option>
+                <option value="buitensponning">{$_('shapeManager.sponning.buiten')}</option>
+                <option value="dubbele_sponning">{$_('shapeManager.sponning.dubbel')}</option>
+                <option value="draaikiep">{$_('shapeManager.sponning.draaikiep')}</option>
+                <option value="geen">{$_('shapeManager.sponning.geen')}</option>
               </select>
             </div>
             {#if sponningType !== "geen"}
               <div class="field-row">
                 <div class="field">
-                  <label>Hoogte (mm)</label>
+                  <label>{$_('shapeManager.heightMm')}</label>
                   <input type="number" bind:value={sponningDepth} min="10" max="50" step="1" />
                 </div>
                 <div class="field">
-                  <label>Breedte (mm)</label>
+                  <label>{$_('props.width')}</label>
                   <input type="number" bind:value={sponningWidth} min="5" max="40" step="1" />
                 </div>
               </div>
@@ -470,14 +467,14 @@
             {#if sponningType === "draaikiep"}
               <div class="field-row">
                 <div class="field">
-                  <label>Opdek (mm)</label>
+                  <label>{$_('shapeManager.opdekMm')}</label>
                   <input type="number" bind:value={opdekWidth} min="5" max="25" step="1" />
                 </div>
                 <div class="field">
-                  <label>Rubbergroeven</label>
+                  <label>{$_('shapeManager.rubberGrooves')}</label>
                   <select bind:value={rubberCount}>
-                    <option value={2}>2 groeven</option>
-                    <option value={3}>3 groeven</option>
+                    <option value={2}>2 {$_('shapeManager.grooves')}</option>
+                    <option value={3}>3 {$_('shapeManager.grooves')}</option>
                   </select>
                 </div>
               </div>
@@ -485,11 +482,11 @@
             {#if sponningType === "dubbele_sponning"}
               <div class="field-row">
                 <div class="field">
-                  <label>2e hoogte</label>
+                  <label>{$_('shapeManager.secondHeight')}</label>
                   <input type="number" bind:value={secondDepth} min="10" max="50" step="1" />
                 </div>
                 <div class="field">
-                  <label>2e breedte</label>
+                  <label>{$_('shapeManager.secondWidth')}</label>
                   <input type="number" bind:value={secondWidth} min="5" max="40" step="1" />
                 </div>
               </div>
@@ -498,45 +495,45 @@
 
           {#if kvtType === "C"}
             <div class="psection">
-              <h4>Dorpel</h4>
+              <h4>{$_('profileEditor.sill')}</h4>
               <div class="field">
-                <label>Helling (graden)</label>
+                <label>{$_('shapeManager.slopeDegrees')}</label>
                 <input type="number" bind:value={slopeDegrees} min="0" max="30" step="1" />
               </div>
             </div>
           {/if}
 
           <div class="psection">
-            <h4>Glaslat & Thermisch</h4>
+            <h4>{$_('shapeManager.glazingThermal')}</h4>
             <div class="field-row">
               <div class="field">
-                <label>Glaslat B</label>
+                <label>{$_('shapeManager.glazingBeadW')}</label>
                 <input type="number" bind:value={glaslatWidth} min="8" max="40" step="1" />
               </div>
               <div class="field">
-                <label>Glaslat H</label>
+                <label>{$_('shapeManager.glazingBeadH')}</label>
                 <input type="number" bind:value={glaslatHeight} min="10" max="30" step="1" />
               </div>
               <div class="field">
-                <label>Uf</label>
+                <label>{$_('shapeManager.uf')}</label>
                 <input type="number" bind:value={ufValue} min="0.5" max="5" step="0.1" />
               </div>
             </div>
           </div>
 
           <div class="psection">
-            <h4>Toepassing</h4>
+            <h4>{$_('profileEditor.application')}</h4>
             <div class="checkbox-row">
-              <label class="cb"><input type="checkbox" bind:checked={applicableAs.frame}/> Kozijn</label>
-              <label class="cb"><input type="checkbox" bind:checked={applicableAs.sash}/> Raam</label>
-              <label class="cb"><input type="checkbox" bind:checked={applicableAs.divider}/> Verdeler</label>
-              <label class="cb"><input type="checkbox" bind:checked={applicableAs.sill}/> Dorpel</label>
+              <label class="cb"><input type="checkbox" bind:checked={applicableAs.frame}/> {$_('profileEditor.frame')}</label>
+              <label class="cb"><input type="checkbox" bind:checked={applicableAs.sash}/> {$_('shapeManager.window')}</label>
+              <label class="cb"><input type="checkbox" bind:checked={applicableAs.divider}/> {$_('profileEditor.divider')}</label>
+              <label class="cb"><input type="checkbox" bind:checked={applicableAs.sill}/> {$_('profileEditor.sill')}</label>
             </div>
           </div>
 
           <!-- KVT Validation -->
           <div class="psection validation">
-            <h4>KVT Validatie</h4>
+            <h4>{$_('shapeManager.validation.title')}</h4>
             {#each validations as v}
               <div class="vrow" class:vok={v.ok} class:vfail={!v.ok}>
                 <span class="vicon">{v.ok ? "\u2713" : "\u2717"}</span>
@@ -547,11 +544,11 @@
           </div>
 
           <div class="actions">
-            <button class="btn-primary" on:click={handleSave} disabled={!allValid}>
-              {allValid ? "Opslaan" : "KVT niet geldig"}
+            <button class="btn-primary" onclick={handleSave} disabled={!allValid}>
+              {allValid ? $_('profileEditor.save') : $_('shapeManager.kvtInvalid')}
             </button>
-            <button class="btn-secondary" on:click={applyKvtDefaults}>KVT Default</button>
-            <button class="btn-secondary" on:click={handleClose}>Annuleer</button>
+            <button class="btn-secondary" onclick={applyKvtDefaults}>{$_('shapeManager.kvtDefault')}</button>
+            <button class="btn-secondary" onclick={handleClose}>{$_('profileEditor.cancel')}</button>
           </div>
         </div>
       </div>
@@ -625,7 +622,7 @@
     border-radius: var(--radius-sm);
   }
   .point {
-    cursor: pointer;
+    cursor: default;
     transition: r 0.1s;
   }
   .point:hover { r: 3.5; }
@@ -696,7 +693,7 @@
     gap: 3px;
     font-size: 11px;
     color: var(--text-primary);
-    cursor: pointer;
+    cursor: default;
     text-transform: none;
     letter-spacing: normal;
     font-weight: 500;
@@ -706,9 +703,9 @@
   .validation { padding: var(--sp-2); background: var(--bg-surface-alt); border-radius: var(--radius-sm); border: var(--border-default); }
   .vrow { display: flex; align-items: center; gap: var(--sp-1); font-size: 11px; padding: 1px 0; }
   .vicon { font-weight: 700; width: 14px; text-align: center; }
-  .vok .vicon { color: #16A34A; }
-  .vfail .vicon { color: #DC2626; }
-  .vfail { color: #DC2626; font-weight: 500; }
+  .vok .vicon { color: var(--success); }
+  .vfail .vicon { color: var(--error); }
+  .vfail { color: var(--error); font-weight: 500; }
   .vval { color: var(--text-muted); font-size: 10px; }
 
   .actions {
@@ -726,8 +723,8 @@
     font-size: 12px;
     border-radius: var(--radius-sm);
   }
-  .btn-primary:hover:not(:disabled) { background: #B45309; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary:hover:not(:disabled) { background: var(--signal-orange); }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
   .btn-secondary {
     flex: 1;
     padding: var(--sp-2) var(--sp-3);

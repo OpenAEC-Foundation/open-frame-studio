@@ -7,11 +7,22 @@ mod blender;
 
 use state::AppState;
 
+#[tauri::command]
+fn get_platform() -> &'static str {
+    #[cfg(target_os = "windows")]
+    { "windows" }
+    #[cfg(target_os = "linux")]
+    { "linux" }
+    #[cfg(target_os = "macos")]
+    { "macos" }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             // Project commands
@@ -73,12 +84,32 @@ fn main() {
             commands::vliesgevel::get_vliesgevel_production,
             commands::vliesgevel::remove_vliesgevel,
             // Import commands
+            commands::profiles::load_profile_library,
+            commands::settings::load_settings,
+            commands::settings::save_settings,
             commands::import_profile::import_dxf_profile,
             commands::import_profile::import_catalog,
             // Blender commands
             commands::blender::send_to_blender,
             commands::blender::check_blender_connection,
+            get_platform,
         ])
+        .setup(|app| {
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+                let window = app.get_webview_window("main").unwrap();
+                let _ = window.with_webview(move |webview| unsafe {
+                    let core = webview.controller();
+                    let core3: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller3 =
+                        windows::core::Interface::cast(&core).unwrap();
+                    core3.SetBoundsMode(
+                        webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_BOUNDS_MODE_USE_RAW_PIXELS
+                    ).unwrap();
+                });
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Open Frame Studio");
 }

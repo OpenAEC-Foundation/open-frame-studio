@@ -1,30 +1,19 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
   import { productionDataProject, loadProductionDataProject } from "../../stores/production.js";
+  import { memberLabel, gasketLabel } from "../../lib/labels.js";
 
   let activeTab = "kortlijst";
 
-  const tabs = [
-    { id: "kortlijst", label: "Kortlijst" },
-    { id: "glaslijst", label: "Glaslijst" },
-    { id: "beslaglijst", label: "Beslaglijst" },
-    { id: "rubberlijst", label: "Rubberlijst" },
-    { id: "paneellijst", label: "Paneellijst" },
-    { id: "stuklijst", label: "Stuklijst" },
+  $: tabs = [
+    { id: "kortlijst", label: $_('production.cutList') },
+    { id: "glaslijst", label: $_('production.glassList') },
+    { id: "beslaglijst", label: $_('production.hardwareList') },
+    { id: "rubberlijst", label: $_('production.gasketList') },
+    { id: "paneellijst", label: $_('production.panelList') },
+    { id: "stuklijst", label: $_('production.bomList') },
   ];
-
-  const MEMBER_LABELS = {
-    frame_top: "Bovendorpel", frame_bottom: "Onderdorpel",
-    frame_left: "Stijl links", frame_right: "Stijl rechts",
-    divider_h: "Tussendorpel", divider_v: "Tussenstijl",
-    sash_top: "Raamhout boven", sash_bottom: "Raamhout onder",
-    sash_left: "Raamhout links", sash_right: "Raamhout rechts",
-  };
-
-  const GASKET_LABELS = {
-    glazing_inner: "Binnenrubber", glazing_outer: "Buitenrubber",
-    sash_seal: "Vleugelafdichting", frame_seal: "Kozijnafdichting",
-  };
 
   onMount(loadProductionDataProject);
 
@@ -55,8 +44,8 @@
 
 <div class="production-view">
   <div class="toolbar">
-    <h2>Productiestaten</h2>
-    <button class="refresh-btn" on:click={refresh}>Herbereken</button>
+    <h2>{$_('production.title')}</h2>
+    <button class="refresh-btn" onclick={refresh}>{$_('production.recalculate')}</button>
   </div>
 
   <div class="tab-bar">
@@ -64,7 +53,7 @@
       <button
         class="tab"
         class:active={activeTab === tab.id}
-        on:click={() => (activeTab = tab.id)}
+        onclick={() => (activeTab = tab.id)}
       >
         {tab.label}
         <span class="count">
@@ -84,15 +73,15 @@
     {#if activeTab === "kortlijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Pos.</th><th>Onderdeel</th><th>Profiel</th>
-          <th>Materiaal</th><th>Netto</th><th>Bruto</th><th>Hoek L</th><th>Hoek R</th><th>Aantal</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.part')}</th><th>{$_('production.profile')}</th>
+          <th>{$_('production.material')}</th><th>{$_('production.net')}</th><th>{$_('production.gross')}</th><th>{$_('production.angleL')}</th><th>{$_('production.angleR')}</th><th>{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allCut as item}
             <tr>
               <td>{item.mark}</td>
               <td>{item.pieceId}</td>
-              <td>{MEMBER_LABELS[item.memberType] || item.memberType}</td>
+              <td>{memberLabel($_, item.memberType)}</td>
               <td>{item.profileName}</td>
               <td>{item.material}</td>
               <td class="num">{Math.round(item.netLengthMm)}</td>
@@ -108,8 +97,8 @@
     {:else if activeTab === "glaslijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Pos.</th><th>Glastype</th><th>Breedte</th>
-          <th>Hoogte</th><th>Dikte</th><th>Ug</th><th>Opp.</th><th>Aantal</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.glassType')}</th><th>{$_('production.width')}</th>
+          <th>{$_('production.height')}</th><th>{$_('production.thickness')}</th><th>{$_('production.ug')}</th><th>{$_('production.area')}</th><th>{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allGlass as item}
@@ -131,7 +120,7 @@
     {:else if activeTab === "beslaglijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Cel</th><th>Component</th><th>Omschrijving</th><th>Aantal</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.cell')}</th><th>{$_('production.component')}</th><th>{$_('production.description')}</th><th>{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allHw as item}
@@ -149,13 +138,13 @@
     {:else if activeTab === "rubberlijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Type</th><th>Lengte (mm)</th><th>Aantal</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.type')}</th><th>{$_('production.lengthMm')}</th><th>{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allGasket as item}
             <tr>
               <td>{item.mark}</td>
-              <td>{GASKET_LABELS[item.gasketType] || item.gasketType}</td>
+              <td>{gasketLabel($_, item.gasketType)}</td>
               <td class="num">{Math.round(item.lengthMm)}</td>
               <td class="num">{item.quantity}</td>
             </tr>
@@ -166,7 +155,7 @@
     {:else if activeTab === "paneellijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Pos.</th><th>Breedte</th><th>Hoogte</th><th>Type</th><th>Aantal</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.width')}</th><th>{$_('production.height')}</th><th>{$_('production.type')}</th><th>{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allPanel as item}
@@ -185,7 +174,7 @@
     {:else if activeTab === "stuklijst"}
       <table>
         <thead><tr>
-          <th>Kozijn</th><th>Categorie</th><th>Omschrijving</th><th>Eenheid</th><th>Hoeveelheid</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.category')}</th><th>{$_('production.description')}</th><th>{$_('production.unit')}</th><th>{$_('production.amount')}</th>
         </tr></thead>
         <tbody>
           {#each allBom as item}
@@ -233,7 +222,7 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
+    cursor: default;
   }
 
   .tab-bar {
@@ -249,7 +238,7 @@
     border: none;
     border-bottom: 2px solid transparent;
     margin-bottom: -2px;
-    cursor: pointer;
+    cursor: default;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);

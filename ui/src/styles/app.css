@@ -38,7 +38,7 @@ code, pre {
 }
 
 button {
-  cursor: pointer;
+  cursor: default;
   font-family: var(--font-body);
   font-weight: 600;
   border: none;

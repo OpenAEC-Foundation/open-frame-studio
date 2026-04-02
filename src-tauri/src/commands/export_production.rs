@@ -8,35 +8,34 @@ pub async fn export_production_lists(
     output_path: String,
     format: String,
 ) -> Result<String, String> {
-    // Compute production data and serialize while holding the lock,
-    // then drop the lock before the async Python call.
-    let production_json = {
+    let production_data = {
         let project = state.project.lock().map_err(|e| e.to_string())?;
-        let production_data: Vec<_> = project
+        project
             .kozijnen
             .iter()
             .map(|k| compute_production_data(k))
-            .collect();
-        serde_json::to_string(&production_data).map_err(|e| e.to_string())?
-    }; // MutexGuard dropped here
+            .collect::<Vec<_>>()
+    };
 
-    let output = crate::state::python_command()
-        .current_dir("../python")
-        .arg("main.py")
-        .arg("generate-production-lists")
-        .arg("--output")
-        .arg(&output_path)
-        .arg("--format")
-        .arg(&format)
-        .arg("--production-json")
-        .arg(&production_json)
-        .output()
-        .await
-        .map_err(|e| format!("Python sidecar fout: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Productiestaten generatie mislukt: {}", stderr));
+    match format.as_str() {
+        "csv" => {
+            ofs_core::export::csv_production::generate_production_csv(
+                &production_data,
+                &output_path,
+            )?;
+        }
+        "xlsx" => {
+            ofs_core::export::xlsx::generate_production_xlsx(
+                &production_data,
+                &output_path,
+            )?;
+        }
+        _ => {
+            ofs_core::export::pdf::generate_production_pdf(
+                &production_data,
+                &output_path,
+            )?;
+        }
     }
 
     Ok(output_path)

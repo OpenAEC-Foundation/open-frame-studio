@@ -2,6 +2,7 @@
   import { currentKozijn, calculateThermal } from "../../stores/kozijn.js";
   import { zoom } from "../../stores/ui.js";
   import { kozijnen } from "../../stores/project.js";
+  import { _ } from "svelte-i18n";
 
   let thermalResult = null;
 
@@ -20,10 +21,10 @@
     : 0;
 
   $: material = $currentKozijn?.frame?.material?.wood
-    || ($currentKozijn?.frame?.material === "aluminum" ? "Aluminium"
-    : $currentKozijn?.frame?.material === "pvc" ? "PVC"
-    : $currentKozijn?.frame?.material === "wood_aluminum" ? "Hout-Alu"
-    : "Hout");
+    || ($currentKozijn?.frame?.material === "aluminum" ? $_('status.aluminum')
+    : $currentKozijn?.frame?.material === "pvc" ? $_('status.pvc')
+    : $currentKozijn?.frame?.material === "wood_aluminum" ? $_('status.woodAlu')
+    : $_('status.wood'));
 </script>
 
 <div class="statusbar">
@@ -36,9 +37,9 @@
       </span>
       <span class="sep">|</span>
       <span class="dim">{material}</span>
-      <span class="dim">{$currentKozijn.cells.length} cel(len)</span>
+      <span class="dim">{$_('status.cells', { values: { count: $currentKozijn.cells.length } })}</span>
     {:else}
-      <span class="dim">Geen kozijn geselecteerd</span>
+      <span class="dim">{$_('status.noKozijn')}</span>
     {/if}
   </div>
 
@@ -49,7 +50,7 @@
           <path d="M12 9v4m0 4h.01"/>
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
-        {missingHardware} cel(len) zonder beslag
+        {$_('status.missingHardware', { values: { count: missingHardware } })}
       </span>
     {/if}
   </div>
@@ -60,9 +61,9 @@
         Uw {thermalResult.uwValue}
       </span>
     {/if}
-    <span class="dim">{$kozijnen.length} kozijn(en)</span>
+    <span class="dim">{$_('status.kozijnen', { values: { count: $kozijnen.length } })}</span>
     <span class="sep">|</span>
-    <span class="dim">Zoom: {Math.round($zoom * 100)}%</span>
+    <span class="dim">{$_('status.zoom', { values: { value: Math.round($zoom * 100) } })}</span>
   </div>
 </div>
 
@@ -111,13 +112,13 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    color: #F59E0B;
+    color: var(--warning);
     font-size: 11px;
     font-weight: 500;
   }
 
   .warning svg {
-    stroke: #F59E0B;
+    stroke: var(--warning);
   }
 
   .thermal {
@@ -127,7 +128,7 @@
     border-radius: var(--radius-sm);
   }
 
-  .thermal-good { color: #16A34A; }
+  .thermal-good { color: var(--success); }
   .thermal-ok { color: #84CC16; }
-  .thermal-warn { color: #F59E0B; }
+  .thermal-warn { color: var(--warning); }
 </style>

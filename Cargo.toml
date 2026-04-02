@@ -1,5 +1,5 @@
 [workspace]
-members = ["src-tauri", "ofs-core"]
+members = ["src-tauri", "ofs-core", "ofs-wasm"]
 resolver = "2"
 
 [workspace.package]

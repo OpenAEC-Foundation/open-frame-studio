@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import {
     currentKozijn,
     selectedCellIndex,
@@ -7,34 +8,36 @@
     updateSecurityClass,
   } from "../../stores/kozijn.js";
 
-  export let visible = true;
+  let { visible = true } = $props();
 
   let collapsed = false;
 
-  const SECURITY_CLASSES = [
-    { value: "none", label: "Geen" },
-    { value: "RC1", label: "RC1 (basis)" },
-    { value: "RC2", label: "RC2 (standaard nieuwbouw)" },
-    { value: "RC3", label: "RC3 (verhoogd)" },
-    { value: "RC4", label: "RC4 (hoog)" },
-    { value: "RC5", label: "RC5 (zeer hoog)" },
-    { value: "RC6", label: "RC6 (maximaal)" },
-  ];
+  let SECURITY_CLASSES = $derived([
+    { value: "none", label: $_('hardware.secNone') },
+    { value: "RC1", label: $_('hardware.secRC1') },
+    { value: "RC2", label: $_('hardware.secRC2') },
+    { value: "RC3", label: $_('hardware.secRC3') },
+    { value: "RC4", label: $_('hardware.secRC4') },
+    { value: "RC5", label: $_('hardware.secRC5') },
+    { value: "RC6", label: $_('hardware.secRC6') },
+  ]);
 
   const OPERABLE_TYPES = [
     "turn_tilt", "turn", "tilt", "sliding", "door",
   ];
 
-  $: selectedCell =
+  let selectedCell = $derived(
     $currentKozijn && $selectedCellIndex !== null
       ? $currentKozijn.cells[$selectedCellIndex]
-      : null;
+      : null
+  );
 
-  $: hw = selectedCell?.hardwareSet || null;
+  let hw = $derived(selectedCell?.hardwareSet || null);
 
-  $: isOperable = selectedCell
+  let isOperable = $derived(selectedCell
     ? OPERABLE_TYPES.includes(selectedCell.panelType)
-    : false;
+    : false
+  );
 
   function toggleCollapsed() {
     collapsed = !collapsed;
@@ -64,9 +67,9 @@
 
 {#if visible}
   <div class="hardware-panel">
-    <button class="collapse-header" on:click={toggleCollapsed}>
+    <button class="collapse-header" onclick={toggleCollapsed}>
       <span class="collapse-icon" class:open={!collapsed}>&#9656;</span>
-      <h3>Hang &amp; Sluitwerk</h3>
+      <h3>{$_('hardware.title')}</h3>
       {#if hw?.autoSelected}
         <span class="auto-badge">AUTO</span>
       {/if}
@@ -76,20 +79,20 @@
       {#if selectedCell && isOperable}
         <!-- Security class -->
         <div class="section">
-          <h3>Beveiliging</h3>
+          <h3>{$_('hardware.security')}</h3>
           <div class="field">
-            <label>Weerstandsklasse</label>
+            <label>{$_('hardware.resistanceClass')}</label>
             <select
               value={hw?.securityClass || "none"}
-              on:change={onSecurityChange}
+              onchange={onSecurityChange}
             >
               {#each SECURITY_CLASSES as sc}
                 <option value={sc.value}>{sc.label}</option>
               {/each}
             </select>
           </div>
-          <button class="auto-btn" on:click={onAutoSelect}>
-            Automatisch selecteren
+          <button class="auto-btn" onclick={onAutoSelect}>
+            {$_('hardware.autoSelect')}
           </button>
         </div>
 
@@ -97,44 +100,44 @@
           <!-- Hinges -->
           {#if hw.hinges}
             <div class="section">
-              <h3>Scharnieren</h3>
+              <h3>{$_('hardware.hinges')}</h3>
               <div class="field">
-                <label>Type</label>
+                <label>{$_('hardware.type')}</label>
                 <select
                   value={hw.hinges.hingeType}
-                  on:change={(e) => onHwChange("hinges", "hingeType", e.target.value)}
+                  onchange={(e) => onHwChange("hinges", "hingeType", e.target.value)}
                 >
-                  <option value="opleg">Opleg</option>
-                  <option value="inboor">Inboor</option>
-                  <option value="verdekt">Verdekt</option>
+                  <option value="opleg">{$_('hardware.hingeOpleg')}</option>
+                  <option value="inboor">{$_('hardware.hingeInboor')}</option>
+                  <option value="verdekt">{$_('hardware.hingeVerdekt')}</option>
                 </select>
               </div>
               <div class="field-row">
                 <div class="field">
-                  <label>Aantal</label>
+                  <label>{$_('hardware.count')}</label>
                   <input
                     type="number"
                     value={hw.hinges.count}
-                    on:change={(e) => onHwChange("hinges", "count", parseInt(e.target.value))}
+                    onchange={(e) => onHwChange("hinges", "count", parseInt(e.target.value))}
                     min="2"
                     max="5"
                   />
                 </div>
                 <div class="field">
-                  <label>Zijde</label>
+                  <label>{$_('hardware.side')}</label>
                   <select
                     value={hw.hinges.side}
-                    on:change={(e) => onHwChange("hinges", "side", e.target.value)}
+                    onchange={(e) => onHwChange("hinges", "side", e.target.value)}
                   >
-                    <option value="left">Links</option>
-                    <option value="right">Rechts</option>
-                    <option value="top">Boven</option>
-                    <option value="bottom">Onder</option>
+                    <option value="left">{$_('hardware.left')}</option>
+                    <option value="right">{$_('hardware.right')}</option>
+                    <option value="top">{$_('hardware.top')}</option>
+                    <option value="bottom">{$_('hardware.bottom')}</option>
                   </select>
                 </div>
               </div>
               <div class="field">
-                <label>Draagkracht (kg)</label>
+                <label>{$_('hardware.loadCapacity')}</label>
                 <input
                   type="number"
                   value={Math.round(hw.hinges.loadCapacityKg)}
@@ -147,39 +150,39 @@
           <!-- Handle -->
           {#if hw.handle}
             <div class="section">
-              <h3>Greep</h3>
+              <h3>{$_('hardware.handle')}</h3>
               <div class="field">
-                <label>Type</label>
+                <label>{$_('hardware.type')}</label>
                 <select
                   value={hw.handle.handleType}
-                  on:change={(e) => onHwChange("handle", "handleType", e.target.value)}
+                  onchange={(e) => onHwChange("handle", "handleType", e.target.value)}
                 >
-                  <option value="kruk">Kruk</option>
-                  <option value="knop">Knop</option>
-                  <option value="t_greep">T-greep</option>
-                  <option value="inlaat_greep">Inlaatgreep</option>
-                  <option value="kruk_kruk">Kruk-kruk</option>
-                  <option value="stangen_greep">Stangengreep</option>
+                  <option value="kruk">{$_('hardware.handleKruk')}</option>
+                  <option value="knop">{$_('hardware.handleKnop')}</option>
+                  <option value="t_greep">{$_('hardware.handleTGreep')}</option>
+                  <option value="inlaat_greep">{$_('hardware.handleInlaat')}</option>
+                  <option value="kruk_kruk">{$_('hardware.handleKrukKruk')}</option>
+                  <option value="stangen_greep">{$_('hardware.handleStangen')}</option>
                 </select>
               </div>
               <div class="field-row">
                 <div class="field">
-                  <label>Zijde</label>
+                  <label>{$_('hardware.side')}</label>
                   <select
                     value={hw.handle.side}
-                    on:change={(e) => onHwChange("handle", "side", e.target.value)}
+                    onchange={(e) => onHwChange("handle", "side", e.target.value)}
                   >
-                    <option value="left">Links</option>
-                    <option value="right">Rechts</option>
-                    <option value="center">Midden</option>
+                    <option value="left">{$_('hardware.left')}</option>
+                    <option value="right">{$_('hardware.right')}</option>
+                    <option value="center">{$_('hardware.center')}</option>
                   </select>
                 </div>
                 <div class="field">
-                  <label>Hoogte (mm)</label>
+                  <label>{$_('hardware.height')}</label>
                   <input
                     type="number"
                     value={hw.handle.heightMm}
-                    on:change={(e) => onHwChange("handle", "heightMm", parseFloat(e.target.value))}
+                    onchange={(e) => onHwChange("handle", "heightMm", parseFloat(e.target.value))}
                     min="500"
                     max="1500"
                     step="10"
@@ -191,9 +194,9 @@
                   <input
                     type="checkbox"
                     checked={hw.handle.lockable}
-                    on:change={(e) => onHwChange("handle", "lockable", e.target.checked)}
+                    onchange={(e) => onHwChange("handle", "lockable", e.target.checked)}
                   />
-                  Afsluitbaar
+                  {$_('hardware.lockable')}
                 </label>
               </div>
             </div>
@@ -202,53 +205,53 @@
           <!-- Locking -->
           {#if hw.locking}
             <div class="section">
-              <h3>Sluiting</h3>
+              <h3>{$_('hardware.locking')}</h3>
               <div class="field">
-                <label>Type</label>
+                <label>{$_('hardware.type')}</label>
                 <select
                   value={hw.locking.lockType}
-                  on:change={(e) => onHwChange("locking", "lockType", e.target.value)}
+                  onchange={(e) => onHwChange("locking", "lockType", e.target.value)}
                 >
-                  <option value="espagnolet">Espagnolet</option>
-                  <option value="multi_point">Meerpuntssluiting</option>
-                  <option value="cylinder_lock">Cilinderslot</option>
-                  <option value="sliding_lock">Schuifslot</option>
+                  <option value="espagnolet">{$_('hardware.lockEspagnolet')}</option>
+                  <option value="multi_point">{$_('hardware.lockMultiPoint')}</option>
+                  <option value="cylinder_lock">{$_('hardware.lockCylinder')}</option>
+                  <option value="sliding_lock">{$_('hardware.lockSliding')}</option>
                 </select>
               </div>
               <div class="field-row">
                 <div class="field">
-                  <label>Sluitpunten</label>
+                  <label>{$_('hardware.lockingPoints')}</label>
                   <input
                     type="number"
                     value={hw.locking.lockingPoints}
-                    on:change={(e) => onHwChange("locking", "lockingPoints", parseInt(e.target.value))}
+                    onchange={(e) => onHwChange("locking", "lockingPoints", parseInt(e.target.value))}
                     min="1"
                     max="12"
                   />
                 </div>
                 <div class="field">
-                  <label>Noktype</label>
+                  <label>{$_('hardware.camType')}</label>
                   <select
                     value={hw.locking.camType}
-                    on:change={(e) => onHwChange("locking", "camType", e.target.value)}
+                    onchange={(e) => onHwChange("locking", "camType", e.target.value)}
                   >
-                    <option value="rol_nok">Rolnok</option>
-                    <option value="paddenstoel_nok">Paddenstoelnok</option>
-                    <option value="haak_sluit_nok">Haaksluitnok</option>
+                    <option value="rol_nok">{$_('hardware.camRol')}</option>
+                    <option value="paddenstoel_nok">{$_('hardware.camPaddenstoel')}</option>
+                    <option value="haak_sluit_nok">{$_('hardware.camHaak')}</option>
                   </select>
                 </div>
               </div>
               {#if hw.locking.cylinder && hw.locking.cylinder !== "none"}
                 <div class="field">
-                  <label>Cilinder</label>
+                  <label>{$_('hardware.cylinder')}</label>
                   <select
                     value={hw.locking.cylinder}
-                    on:change={(e) => onHwChange("locking", "cylinder", e.target.value)}
+                    onchange={(e) => onHwChange("locking", "cylinder", e.target.value)}
                   >
-                    <option value="euro_profile">Euro profiel</option>
-                    <option value="skg1">SKG*</option>
-                    <option value="skg2">SKG**</option>
-                    <option value="skg3">SKG***</option>
+                    <option value="euro_profile">{$_('hardware.cylEuro')}</option>
+                    <option value="skg1">{$_('hardware.cylSKG1')}</option>
+                    <option value="skg2">{$_('hardware.cylSKG2')}</option>
+                    <option value="skg3">{$_('hardware.cylSKG3')}</option>
                   </select>
                 </div>
               {/if}
@@ -256,16 +259,16 @@
           {/if}
         {:else}
           <div class="hint">
-            <p>Klik "Automatisch selecteren" om beslag te genereren</p>
+            <p>{$_('hardware.hintAutoSelect')}</p>
           </div>
         {/if}
       {:else if selectedCell && !isOperable}
         <div class="hint">
-          <p>Vast glas en panelen hebben geen hang &amp; sluitwerk</p>
+          <p>{$_('hardware.hintFixedNoHardware')}</p>
         </div>
       {:else}
         <div class="hint">
-          <p>Selecteer een cel om hang &amp; sluitwerk te configureren</p>
+          <p>{$_('hardware.hintSelectCell')}</p>
         </div>
       {/if}
     {/if}
@@ -284,7 +287,7 @@
     width: 100%;
     background: none;
     border: none;
-    cursor: pointer;
+    cursor: default;
     padding: var(--sp-2) 0;
     margin-bottom: var(--sp-2);
     border-bottom: var(--border-default);
@@ -394,7 +397,7 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
+    cursor: default;
     margin-top: var(--sp-2);
   }
 

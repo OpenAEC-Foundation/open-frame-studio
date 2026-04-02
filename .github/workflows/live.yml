@@ -1,0 +1,35 @@
+name: Deploy site
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: OpenAEC-Foundation/github/.github/workflows/deploy-site.yml@main
+    with:
+      deploy_host: ${{ vars.DEPLOY_HOST }}
+      deploy_port: ${{ vars.DEPLOY_PORT }}
+      deploy_user: ${{ vars.DEPLOY_USER }}
+      deploy_path: /var/www/open-frame-studio.open-aec.com
+      node_version: "22"
+      install_command: cd ui && npm ci
+      build_command: |
+        curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        rustup target add wasm32-unknown-unknown
+        cd ofs-wasm && wasm-pack build --target web --out-dir pkg && cd ..
+        mkdir -p ui/public/wasm
+        cp ofs-wasm/pkg/ofs_wasm.js ui/public/wasm/
+        cp ofs-wasm/pkg/ofs_wasm_bg.wasm ui/public/wasm/
+        cd ui && npm run build
+    secrets:
+      deploy_ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}

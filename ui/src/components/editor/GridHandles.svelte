@@ -1,14 +1,10 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import { get } from "svelte/store";
   import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
   import { zoom } from "../../stores/ui.js";
   import { invoke } from "../../lib/tauri.js";
 
-  export let geometry;
-  export let kozijn;
-
-  const dispatch = createEventDispatcher();
+  let { geometry, kozijn, onresize } = $props();
 
   const MIN_CELL_SIZE = 100; // minimum 100mm per cell
   const HIT_AREA = 20; // hit area width in SVG units (mm)
@@ -112,12 +108,12 @@
     }
 
     if (dragging.axis === "v") {
-      dispatch("resize", {
+      onresize?.({
         columnSizes: dragging.currentSizes,
         rowSizes: kozijn.grid.rows.map((r) => r.size),
       });
     } else {
-      dispatch("resize", {
+      onresize?.({
         columnSizes: kozijn.grid.columns.map((c) => c.size),
         rowSizes: dragging.currentSizes,
       });
@@ -157,7 +153,6 @@
   <!-- Vertical divider handles -->
   {#each geometry.vDividers as div, i}
     {@const cx = div.x + div.width / 2}
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <rect
       x={cx - HIT_AREA / 2}
       y={div.y}
@@ -166,14 +161,13 @@
       fill="transparent"
       class="handle handle-v"
       pointer-events="all"
-      on:mousedown={(e) => startDragV(i, e)}
+      onmousedown={(e) => startDragV(i, e)}
     />
   {/each}
 
   <!-- Horizontal divider handles -->
   {#each geometry.hDividers as div, i}
     {@const cy = div.y + div.height / 2}
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <rect
       x={div.x}
       y={cy - HIT_AREA / 2}
@@ -182,7 +176,7 @@
       fill="transparent"
       class="handle handle-h"
       pointer-events="all"
-      on:mousedown={(e) => startDragH(i, e)}
+      onmousedown={(e) => startDragH(i, e)}
     />
   {/each}
 
@@ -222,11 +216,11 @@
 
 <style>
   .handle-v {
-    cursor: col-resize;
+    cursor: default;
   }
 
   .handle-h {
-    cursor: row-resize;
+    cursor: default;
   }
 
   .handle:hover {

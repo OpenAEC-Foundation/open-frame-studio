@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
   import { invoke } from "../../lib/tauri.js";
 
@@ -23,28 +24,28 @@
 
 <div class="calc-view">
   <div class="toolbar">
-    <h2>Calculatie</h2>
-    <button class="refresh-btn" on:click={loadEstimates}>Herbereken</button>
+    <h2>{$_('calculation.title')}</h2>
+    <button class="refresh-btn" onclick={loadEstimates}>{$_('calculation.recalculate')}</button>
   </div>
 
   {#if loading}
-    <p class="hint">Berekenen...</p>
+    <p class="hint">{$_('calculation.calculating')}</p>
   {:else if estimates.length === 0}
-    <p class="hint">Geen kozijnen in het project</p>
+    <p class="hint">{$_('calculation.noKozijnen')}</p>
   {:else}
     <!-- Summary -->
     <div class="summary">
       <div class="summary-card">
-        <span class="label">Totaal</span>
+        <span class="label">{$_('calculation.total')}</span>
         <span class="value">&euro; {grandTotal.toFixed(2)}</span>
       </div>
       <div class="summary-card">
-        <span class="label">Kozijnen</span>
+        <span class="label">{$_('calculation.frames')}</span>
         <span class="value">{estimates.length}</span>
       </div>
       <div class="summary-card">
-        <span class="label">Uren</span>
-        <span class="value">{totalLabor.toFixed(1)} uur</span>
+        <span class="label">{$_('calculation.hours')}</span>
+        <span class="value">{totalLabor.toFixed(1)} {$_('calculation.hourUnit')}</span>
       </div>
     </div>
 
@@ -52,17 +53,17 @@
     <div class="table-container">
       <table>
         <thead><tr>
-          <th>NL-SfB</th>
-          <th>Kozijn</th>
-          <th>Materiaal</th>
-          <th>Glas</th>
-          <th>Beslag</th>
-          <th>Rubber</th>
-          <th>Panelen</th>
-          <th>Oppervlakte</th>
-          <th>Arbeid</th>
-          <th>Uren</th>
-          <th>Totaal</th>
+          <th>{$_('calculation.nlSfb')}</th>
+          <th>{$_('calculation.frame')}</th>
+          <th>{$_('calculation.material')}</th>
+          <th>{$_('calculation.glass')}</th>
+          <th>{$_('calculation.hardware')}</th>
+          <th>{$_('calculation.gasket')}</th>
+          <th>{$_('calculation.panels')}</th>
+          <th>{$_('calculation.surface')}</th>
+          <th>{$_('calculation.labor')}</th>
+          <th>{$_('calculation.hours')}</th>
+          <th>{$_('calculation.total')}</th>
         </tr></thead>
         <tbody>
           {#each estimates as est}
@@ -83,7 +84,7 @@
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="2"><strong>Totaal project</strong></td>
+            <td colspan="2"><strong>{$_('calculation.totalProject')}</strong></td>
             <td class="num">&euro; {estimates.reduce((s, e) => s + e.materialCost, 0).toFixed(2)}</td>
             <td class="num">&euro; {estimates.reduce((s, e) => s + e.glassCost, 0).toFixed(2)}</td>
             <td class="num">&euro; {estimates.reduce((s, e) => s + e.hardwareCost, 0).toFixed(2)}</td>
@@ -99,12 +100,12 @@
     </div>
 
     <!-- Line items detail -->
-    <h3 class="section-title">Kostenverdeling</h3>
+    <h3 class="section-title">{$_('calculation.costBreakdown')}</h3>
     <div class="table-container">
       <table>
         <thead><tr>
-          <th>NL-SfB</th><th>Omschrijving</th><th>Hoeveelheid</th>
-          <th>Eenheid</th><th>Eenheidsprijs</th><th>Totaal</th>
+          <th>{$_('calculation.nlSfb')}</th><th>{$_('calculation.description')}</th><th>{$_('calculation.quantity')}</th>
+          <th>{$_('calculation.unit')}</th><th>{$_('calculation.unitPrice')}</th><th>{$_('calculation.total')}</th>
         </tr></thead>
         <tbody>
           {#each estimates as est}
@@ -155,7 +156,7 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
+    cursor: default;
   }
 
   .summary {

@@ -21,7 +21,7 @@ jobs:
       version: ${{ steps.get-version.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get version
         id: get-version
@@ -34,7 +34,7 @@ jobs:
 
       - name: Create release
         id: create-release
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const version = '${{ steps.get-version.outputs.version }}';
@@ -43,7 +43,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: version,
               name: `Open Frame Studio ${version}`,
-              body: `## Open Frame Studio ${version}\n\nParametrische kozijntekensoftware voor de bouwsector.\n\n### Downloads\n- **Windows (System)**: Download de \`*_x64-setup.exe\` installer (vereist admin)\n- **Windows (User)**: Download de \`*_x64_user-setup.exe\` installer (geen admin nodig)\n- **Linux**: Download het \`.deb\` pakket of \`.AppImage\`\n\n### Kenmerken\n- Parametrisch kozijnontwerp met grid-editor\n- IFC / DXF / PDF export\n- Kozijnprofielen database (hout, PVC, aluminium)\n- Blender/Bonsai integratie\n- Kozijnstaat en werkplaatstekeningen`,
+              body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE)`,
               draft: true,
               prerelease: false
             });
@@ -58,27 +58,34 @@ jobs:
       matrix:
         include:
           - platform: 'ubuntu-22.04'
+            args: ''
             target: 'linux'
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            target: 'macos'
           - platform: 'windows-latest'
+            args: ''
             target: 'windows-system'
           - platform: 'windows-latest'
+            args: ''
             target: 'windows-user'
 
     runs-on: ${{ matrix.platform }}
-    env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust targets (macOS universal)
+        if: matrix.target == 'macos'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -120,8 +127,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: src-tauri
+          args: ${{ matrix.args }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          includeUpdaterJson: true
 
       - name: Build Tauri app (user installer)
         if: matrix.target == 'windows-user'
@@ -130,6 +137,43 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: src-tauri
+          args: ${{ matrix.args }}
+
+      - name: Authenticode sign Windows exe and installer
+        if: contains(matrix.target, 'windows')
+        uses: azure/trusted-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          cache-dependencies: false
+          files-folder: ${{ github.workspace }}/src-tauri/target/release/bundle/nsis
+          files-folder-filter: exe
+          files-folder-depth: 1
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Sign main executable
+        if: contains(matrix.target, 'windows')
+        uses: azure/trusted-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          cache-dependencies: false
+          files-folder: ${{ github.workspace }}/src-tauri/target/release
+          files-folder-filter: exe
+          files-folder-depth: 1
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Upload user installer to release
         if: matrix.target == 'windows-user'
@@ -154,7 +198,7 @@ jobs:
 
     steps:
       - name: Publish release
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           release_id: ${{ needs.create-release.outputs.release_id }}
         with:

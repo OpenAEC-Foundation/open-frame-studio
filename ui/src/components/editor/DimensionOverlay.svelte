@@ -3,10 +3,7 @@
    * DimensionOverlay — renders dimension lines in screen-space coordinates.
    * Font-size and stroke-width are constant screen pixels, always readable.
    */
-  export let dimensions = [];
-  export let zoom = 0.35;
-  export let panX = 0;
-  export let panY = 0;
+  let { dimensions = [], zoom = 0.35, panX = 0, panY = 0 } = $props();
 
   // Convert model coordinate to screen coordinate
   function toScreen(modelX, modelY) {

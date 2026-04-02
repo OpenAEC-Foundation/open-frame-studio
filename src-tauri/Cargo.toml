@@ -9,11 +9,16 @@ tauri.workspace = true
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
+tauri-plugin-shell = "2"
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 anyhow.workspace = true
-tokio = { version = "1", features = ["net", "io-util", "rt", "process"] }
+tokio = { version = "1", features = ["net", "io-util", "rt"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

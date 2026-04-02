@@ -2,6 +2,7 @@
   import VliesgevalCanvas from "./VliesgevalCanvas.svelte";
   import { currentVliesgevel, currentVgGeometry } from "../../stores/vliesgevel.js";
   import { zoom, editorPan } from "../../stores/ui.js";
+  import { _ } from "svelte-i18n";
 
   let svgEl;
 
@@ -34,7 +35,7 @@
   }
 </script>
 
-<div class="vliesgevel-editor" on:wheel={handleWheel}>
+<div class="vliesgevel-editor" onwheel={handleWheel}>
   {#if $currentVliesgevel && geom}
     <svg
       bind:this={svgEl}
@@ -48,7 +49,7 @@
     </svg>
   {:else}
     <div class="placeholder">
-      <p>Selecteer of maak een vliesgevel aan</p>
+      <p>{$_('editor.selectVliesgevel')}</p>
     </div>
   {/if}
 </div>

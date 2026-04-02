@@ -1,12 +1,10 @@
 <script>
-  export let crossSection = []; // Array of [x, y] points
-  export let width = 80;
-  export let height = 60;
-  export let sponning = null;
+  import { _ } from "svelte-i18n";
+  let { crossSection = [], width = 80, height = 60, sponning = null } = $props();
 
-  $: points = crossSection && crossSection.length > 2 ? crossSection : null;
+  let points = $derived(crossSection && crossSection.length > 2 ? crossSection : null);
 
-  $: viewBox = (() => {
+  let viewBox = $derived((() => {
     if (!points) return "0 0 80 60";
     const xs = points.map(p => p[0]);
     const ys = points.map(p => p[1]);
@@ -16,11 +14,12 @@
     const maxY = Math.max(...ys);
     const pad = 2;
     return `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
-  })();
+  })());
 
-  $: pathD = points
+  let pathD = $derived(points
     ? `M ${points.map(p => `${p[0]} ${p[1]}`).join(" L ")} Z`
-    : null;
+    : null
+  );
 </script>
 
 <div class="cross-section" style="width: {width}px; height: {height}px;">
@@ -41,7 +40,7 @@
     </svg>
   {:else}
     <div class="empty">
-      <span>Geen doorsnede</span>
+      <span>{$_('crossSection.none')}</span>
     </div>
   {/if}
 </div>

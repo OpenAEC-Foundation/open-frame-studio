@@ -1,22 +1,16 @@
 <script>
-  export let width = 67;
-  export let depth = 114;
-  export let sponningWidth = 12;
-  export let sponningDepth = 17;
-  export let sponningPos = "buiten";
-  export let noseDepth = 5;
-  export let svgWidth = 200;
-  export let svgHeight = 280;
+  let { width = 67, depth = 114, sponningWidth = 12, sponningDepth = 17, sponningPos = "buiten", noseDepth = 5, svgWidth = 200, svgHeight = 280 } = $props();
 
   // Generate cross-section polygon from parameters
-  $: points = generateCrossSection(width, depth, sponningWidth, sponningDepth, sponningPos, noseDepth);
-  $: pathD = points.length > 2
+  let points = $derived(generateCrossSection(width, depth, sponningWidth, sponningDepth, sponningPos, noseDepth));
+  let pathD = $derived(points.length > 2
     ? `M ${points.map(p => `${p[0]} ${p[1]}`).join(" L ")} Z`
-    : "";
+    : ""
+  );
 
   // ViewBox with padding for dimension labels
-  $: pad = 20;
-  $: viewBox = `${-pad} ${-pad} ${width + 2 * pad + 40} ${depth + 2 * pad + 20}`;
+  let pad = $derived(20);
+  let viewBox = $derived(`${-pad} ${-pad} ${width + 2 * pad + 40} ${depth + 2 * pad + 20}`);
 
   function generateCrossSection(w, d, sw, sd, pos, nd) {
     if (pos === "buiten") {

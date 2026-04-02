@@ -1,23 +1,19 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { allProfiles } from "../../stores/profiles.js";
 
-  export let value = null; // current ProfileRef { id, name }
-  export let filter = ""; // "frame" | "sash" | "divider" | "sill" | ""
-  export let label = "Profiel";
+  let { value = null, filter = "", label = "Profiel", onchange = null } = $props();
 
-  import { createEventDispatcher } from "svelte";
-  const dispatch = createEventDispatcher();
-
-  $: filteredProfiles = ($allProfiles || []).filter(p => {
+  let filteredProfiles = $derived(($allProfiles || []).filter(p => {
     if (!filter) return true;
     return (p.applicableAs || []).includes(filter);
-  });
+  }));
 
   function handleChange(e) {
     const selectedId = e.target.value;
     const profile = filteredProfiles.find(p => p.id === selectedId);
     if (profile) {
-      dispatch("change", {
+      onchange?.({
         id: profile.id,
         name: profile.name,
         width: profile.width,
@@ -29,8 +25,8 @@
 
 <div class="profile-selector">
   <label>{label}</label>
-  <select value={value?.id || ""} on:change={handleChange}>
-    <option value="" disabled>Kies profiel...</option>
+  <select value={value?.id || ""} onchange={handleChange}>
+    <option value="" disabled>{$_('profileSelector.choose')}</option>
     {#each filteredProfiles as profile}
       <option value={profile.id}>
         {profile.name} ({profile.width}x{profile.depth}mm)

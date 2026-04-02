@@ -1,8 +1,9 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
+  import { _ } from "svelte-i18n";
 
-  export let visible = true;
+  let { visible = true } = $props();
 
   let container;
   let canvas;
@@ -55,11 +56,7 @@
 
   async function loadThreeJS() {
     try {
-      const module = await import(
-        /* @vite-ignore */
-        "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-      );
-      THREE = module;
+      THREE = await import("three");
       loading = false;
       return true;
     } catch (e) {
@@ -332,11 +329,13 @@
   let prevKozijn = null;
   let prevGeometry = null;
 
-  $: if (scene && ($currentKozijn !== prevKozijn || $currentGeometry !== prevGeometry)) {
-    prevKozijn = $currentKozijn;
-    prevGeometry = $currentGeometry;
-    build3DKozijn(scene, $currentKozijn, $currentGeometry);
-  }
+  $effect(() => {
+    if (scene && ($currentKozijn !== prevKozijn || $currentGeometry !== prevGeometry)) {
+      prevKozijn = $currentKozijn;
+      prevGeometry = $currentGeometry;
+      build3DKozijn(scene, $currentKozijn, $currentGeometry);
+    }
+  });
 
   // --- Lifecycle ---
 
@@ -383,26 +382,26 @@
   <div
     class="viewer3d-container"
     bind:this={container}
-    on:mousedown={onMouseDown}
-    on:mousemove={onMouseMove}
-    on:mouseup={onMouseUp}
-    on:mouseleave={onMouseUp}
-    on:wheel|preventDefault={onWheel}
+    onmousedown={onMouseDown}
+    onmousemove={onMouseMove}
+    onmouseup={onMouseUp}
+    onmouseleave={onMouseUp}
+    onwheel={(e) => { e.preventDefault(); onWheel(e); }}
     role="img"
     aria-label="3D kozijn preview"
   >
     {#if loading}
       <div class="overlay">
         <div class="spinner"></div>
-        <p>3D viewer laden...</p>
+        <p>{$_('viewer3d.loading')}</p>
       </div>
     {:else if loadError}
       <div class="overlay">
-        <p class="error">Kan Three.js niet laden. Controleer je internetverbinding.</p>
+        <p class="error">{$_('viewer3d.loadError')}</p>
       </div>
     {:else if !$currentKozijn}
       <div class="overlay">
-        <p class="placeholder">Selecteer een kozijn voor 3D preview</p>
+        <p class="placeholder">{$_('viewer3d.selectKozijn')}</p>
       </div>
     {/if}
 
@@ -416,15 +415,15 @@
     width: 100%;
     height: 100%;
     min-height: 200px;
-    background: #1a1a2e;
+    background: var(--bg-app);
     overflow: hidden;
-    cursor: grab;
+    cursor: default;
     user-select: none;
     border-radius: 4px;
   }
 
   .viewer3d-container:active {
-    cursor: grabbing;
+    cursor: default;
   }
 
   canvas {

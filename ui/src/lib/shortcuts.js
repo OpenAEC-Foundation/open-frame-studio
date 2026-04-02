@@ -24,27 +24,95 @@ const PANEL_TYPE_KEYS = {
   "8": "ventilation",
 };
 
+// App shortcuts that override browser defaults
+const APP_SHORTCUTS = new Set(["n", "o", "s", "d", "z", "y"]);
+
 let registered = false;
 
-export function registerShortcuts({ onDuplicate, onDelete } = {}) {
+/**
+ * Block browser shortcuts, but allow app shortcuts through.
+ */
+function blockBrowserDefaults(e) {
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (["F3", "F5", "F7"].includes(e.key)) {
+    e.preventDefault();
+    return;
+  }
+
+  if (!ctrl) return;
+
+  // Let app shortcuts through — they're handled in the main handler
+  if (APP_SHORTCUTS.has(e.key.toLowerCase()) && !e.altKey) return;
+
+  // Block everything else with Ctrl
+  const blocked = ["p", "f", "g", "u", "r", "h", "j", "l", "e", "k", "t", "w", "q"];
+  if (blocked.includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    return;
+  }
+  if (e.shiftKey && ["I", "J", "i", "j"].includes(e.key)) {
+    e.preventDefault();
+    return;
+  }
+  if (e.key >= "0" && e.key <= "9") {
+    e.preventDefault();
+    return;
+  }
+  if (e.key === "=" || e.key === "+" || e.key === "-") {
+    e.preventDefault();
+    return;
+  }
+}
+
+export function registerShortcuts({ onDuplicate, onNew, onOpen, onSave, onSaveAs } = {}) {
   if (registered) return;
   registered = true;
 
+  document.addEventListener("keydown", blockBrowserDefaults, true);
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+
   document.addEventListener("keydown", (e) => {
-    // Ignore when typing in inputs
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
+    const ctrl = e.ctrlKey || e.metaKey;
     const k = get(currentKozijn);
+    const key = e.key.toLowerCase();
 
-    // Escape: deselect all
+    // ── File shortcuts ──────────────────────────────────
+    if (ctrl && key === "n") {
+      e.preventDefault();
+      if (onNew) onNew();
+      return;
+    }
+    if (ctrl && key === "o") {
+      e.preventDefault();
+      if (onOpen) onOpen();
+      return;
+    }
+    if (ctrl && e.shiftKey && key === "s") {
+      e.preventDefault();
+      if (onSaveAs) onSaveAs();
+      return;
+    }
+    if (ctrl && key === "s") {
+      e.preventDefault();
+      if (onSave) onSave();
+      return;
+    }
+
+    // ── Undo/Redo ───────────────────────────────────────
+    // Ctrl+Z / Ctrl+Y handled by history.js registerUndoRedoShortcuts
+
+    // ── Escape: deselect ────────────────────────────────
     if (e.key === "Escape") {
       selectedCellIndex.set(null);
       selectedMember.set(null);
       return;
     }
 
-    // Tab: next cell
+    // ── Tab: next/prev cell ─────────────────────────────
     if (e.key === "Tab" && k) {
       e.preventDefault();
       const current = get(selectedCellIndex);
@@ -58,56 +126,53 @@ export function registerShortcuts({ onDuplicate, onDelete } = {}) {
       return;
     }
 
-    // 1-8: quick panel type
-    if (PANEL_TYPE_KEYS[e.key] && get(selectedCellIndex) !== null) {
+    // ── 1-8: quick panel type ───────────────────────────
+    if (!ctrl && PANEL_TYPE_KEYS[e.key] && get(selectedCellIndex) !== null) {
       const panelType = PANEL_TYPE_KEYS[e.key];
       const dir = panelType === "turn_tilt" ? "left" : panelType === "door" ? "inward" : null;
       updateCellType(get(selectedCellIndex), panelType, dir);
       return;
     }
 
-    // Ctrl+D: duplicate
-    if (e.key === "d" && (e.ctrlKey || e.metaKey) && k) {
+    // ── Ctrl+D: duplicate ───────────────────────────────
+    if (ctrl && key === "d" && k) {
       e.preventDefault();
       if (onDuplicate) onDuplicate();
       return;
     }
 
-    // Delete: reset cell or deselect member
+    // ── Delete: reset cell ──────────────────────────────
     if (e.key === "Delete") {
       const cellIdx = get(selectedCellIndex);
       if (cellIdx !== null) {
         updateCellType(cellIdx, "fixed_glass", null);
       }
-      const member = get(selectedMember);
-      if (member) {
+      if (get(selectedMember)) {
         selectedMember.set(null);
       }
       return;
     }
 
-    // Ctrl+Shift+C: add column
-    if (e.key === "C" && e.ctrlKey && e.shiftKey && k) {
+    // ── Ctrl+Shift+C: add column ────────────────────────
+    if (e.key === "C" && ctrl && e.shiftKey && k) {
       e.preventDefault();
-      const innerW = k.frame.outerWidth - 2 * k.frame.frameWidth;
-      addColumn(innerW / 2);
+      addColumn((k.frame.outerWidth - 2 * k.frame.frameWidth) / 2);
       return;
     }
 
-    // Ctrl+Shift+R: add row
-    if (e.key === "R" && e.ctrlKey && e.shiftKey && k) {
+    // ── Ctrl+Shift+R: add row ───────────────────────────
+    if (e.key === "R" && ctrl && e.shiftKey && k) {
       e.preventDefault();
-      const innerH = k.frame.outerHeight - 2 * k.frame.frameWidth;
-      addRow(innerH / 2);
+      addRow((k.frame.outerHeight - 2 * k.frame.frameWidth) / 2);
       return;
     }
 
-    // +/- or =/- : zoom
-    if (e.key === "=" || e.key === "+") {
+    // ── +/- zoom ────────────────────────────────────────
+    if (!ctrl && (e.key === "=" || e.key === "+")) {
       zoom.update((z) => Math.min(2.0, z + 0.1));
       return;
     }
-    if (e.key === "-") {
+    if (!ctrl && e.key === "-") {
       zoom.update((z) => Math.max(0.05, z - 0.1));
       return;
     }

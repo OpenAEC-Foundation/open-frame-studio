@@ -1,8 +1,8 @@
 use crate::state::AppState;
 use ofs_core::vliesgevel::{CurtainPanel, CurtainPanelType, Vliesgevel};
-use ofs_core::vliesgevel_geometry::{compute_vliesgevel_2d, VliesgevelGeometry2D};
-use ofs_core::vliesgevel_grid;
-use ofs_core::vliesgevel_production::{compute_vliesgevel_production, VliesgevalProductionData};
+use ofs_core::vliesgevel::geometry::{compute_vliesgevel_2d, VliesgevelGeometry2D};
+use ofs_core::vliesgevel::grid;
+use ofs_core::vliesgevel::production::{compute_vliesgevel_production, VliesgevalProductionData};
 use tauri::State;
 
 #[tauri::command]
@@ -15,7 +15,7 @@ pub fn create_vliesgevel(
     mullion_spacing: f64,
     transom_spacing: f64,
 ) -> Result<Vliesgevel, String> {
-    let mut vg = vliesgevel_grid::create_regular_grid(width, height, mullion_spacing, transom_spacing);
+    let mut vg = grid::create_regular_grid(width, height, mullion_spacing, transom_spacing);
     vg.name = name;
     vg.mark = mark;
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
@@ -31,10 +31,10 @@ pub fn create_vliesgevel_from_template(
     height: f64,
 ) -> Result<Vliesgevel, String> {
     let vg = match template.as_str() {
-        "stick_system" => vliesgevel_grid::template_stick_system(width, height),
-        "unitized" => vliesgevel_grid::template_unitized(width, height),
-        "shopfront" => vliesgevel_grid::template_shopfront(width, height),
-        _ => vliesgevel_grid::create_regular_grid(width, height, 1500.0, 1200.0),
+        "stick_system" => grid::template_stick_system(width, height),
+        "unitized" => grid::template_unitized(width, height),
+        "shopfront" => grid::template_shopfront(width, height),
+        _ => grid::create_regular_grid(width, height, 1500.0, 1200.0),
     };
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     project.vliesgevels.push(vg.clone());

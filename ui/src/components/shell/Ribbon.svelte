@@ -1,5 +1,5 @@
 <script>
-  import { activeRibbonTab, zoom, toggleTheme, theme } from "../../stores/ui.js";
+  import { activeRibbonTab, zoom, setTheme, theme, THEMES, showAppMenu } from "../../stores/ui.js";
   import { undo, redo, canUndo, canRedo } from "../../stores/history.js";
   import {
     createKozijn,
@@ -13,14 +13,20 @@
     removeKozijn,
   } from "../../stores/kozijn.js";
   import { createVgFromTemplate } from "../../stores/vliesgevel.js";
-  import { invoke, isTauri } from "../../lib/tauri.js";
   import { onMount } from "svelte";
   import { registerShortcuts } from "../../lib/shortcuts.js";
+  import { fileNew, fileOpen, fileSave, fileSaveAs } from "../../lib/project-actions.js";
+  import {
+    exportIfc, exportDxf, exportKozijnstaat, exportWorkshop,
+    exportGltf, exportProduction, sendToBlender,
+    importDxfProfile, importCatalog,
+  } from "../../lib/export.js";
   import ShapeManager from "../panels/ShapeManager.svelte";
+  import { _ } from "svelte-i18n";
+  import { get } from "svelte/store";
 
   let showShapeManager = false;
 
-  // Sjabloon (template) system
   const SJABLONEN = [
     { id: "standaard-67-meranti", name: "Standaard 67mm Meranti", series: "67" },
     { id: "standaard-67-accoya", name: "Standaard 67mm Accoya", series: "67" },
@@ -30,14 +36,13 @@
   let activeSjabloonId = "standaard-67-meranti";
 
   const tabs = [
-    { id: "home", label: "Home" },
-    { id: "insert", label: "Invoegen" },
-    { id: "ifc", label: "IFC / Export" },
-    { id: "production", label: "Productie" },
-    { id: "view", label: "Beeld" },
+    { id: "home", key: "ribbon.home" },
+    { id: "insert", key: "ribbon.insert" },
+    { id: "ifc", key: "ribbon.ifc" },
+    { id: "production", key: "ribbon.production" },
+    { id: "view", key: "ribbon.view" },
   ];
 
-  // Template sizes including melkmeisje
   const templateSizes = {
     single_turn_tilt: [900, 1400],
     double_turn_tilt: [1800, 1500],
@@ -46,117 +51,12 @@
   };
 
   async function handleNewKozijn() {
-    await createKozijn("Nieuw kozijn", "K01", 1200, 1500);
+    await createKozijn(get(_)('ribbon.newKozijn'), "K01", 1200, 1500);
   }
 
   async function handleTemplate(template) {
     const [w, h] = templateSizes[template] || [1200, 1500];
     await createFromTemplate(template, w, h, activeSjabloonId);
-  }
-
-  async function handleExportIfc() {
-    if (!$currentKozijn) return;
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", `${$currentKozijn.mark}.ifc`) };
-    const path = await save({
-      filters: [{ name: "IFC", extensions: ["ifc"] }],
-      defaultPath: `${$currentKozijn.mark}.ifc`,
-    });
-    if (path) {
-      try {
-        await invoke("export_ifc", { id: $currentKozijn.id, outputPath: path });
-        alert("IFC export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
-  }
-
-  async function handleExportDxf() {
-    if (!$currentKozijn) return;
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", `${$currentKozijn.mark}.dxf`) };
-    const path = await save({
-      filters: [{ name: "DXF", extensions: ["dxf"] }],
-      defaultPath: `${$currentKozijn.mark}.dxf`,
-    });
-    if (path) {
-      try {
-        await invoke("export_dxf", { id: $currentKozijn.id, outputPath: path });
-        alert("DXF export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
-  }
-
-  async function handleExportKozijnstaat(format) {
-    const ext = format === "xlsx" ? "xlsx" : "pdf";
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", `kozijnstaat.${ext}`) };
-    const path = await save({
-      filters: [{ name: format.toUpperCase(), extensions: [ext] }],
-      defaultPath: `kozijnstaat.${ext}`,
-    });
-    if (path) {
-      try {
-        await invoke("export_kozijnstaat", { outputPath: path, format });
-        alert("Kozijnstaat export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
-  }
-
-  async function handleExportWorkshop() {
-    if (!$currentKozijn) return;
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", `${$currentKozijn.mark}_werkplaats.pdf`) };
-    const path = await save({
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-      defaultPath: `${$currentKozijn.mark}_werkplaats.pdf`,
-    });
-    if (path) {
-      try {
-        await invoke("export_workshop_drawing", { id: $currentKozijn.id, outputPath: path });
-        alert("Werkplaatstekening export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
-  }
-
-  async function handleExportGltf() {
-    if (!$currentKozijn) return;
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", `${$currentKozijn.mark}.glb`) };
-    const path = await save({
-      filters: [{ name: "glTF Binary", extensions: ["glb"] }],
-      defaultPath: `${$currentKozijn.mark}.glb`,
-    });
-    if (path) {
-      try {
-        await invoke("export_gltf", { id: $currentKozijn.id, outputPath: path });
-        alert("glTF export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
-  }
-
-  async function handleSendToBlender() {
-    if (!$currentKozijn) return;
-    try {
-      const result = await invoke("send_to_blender", { id: $currentKozijn.id });
-      alert("Verzonden naar Blender: " + result);
-    } catch (e) {
-      alert("Blender fout: " + e);
-    }
   }
 
   function quickSetPanel(panelType) {
@@ -167,121 +67,49 @@
 
   function handleAddColumn() {
     if (!$currentKozijn) return;
-    const innerW = $currentKozijn.frame.outerWidth - 2 * $currentKozijn.frame.frameWidth;
-    addColumn(innerW / 2);
-  }
-
-  async function handleExportProduction(format) {
-    const extMap = { pdf: "pdf", xlsx: "xlsx", csv: "csv" };
-    const ext = extMap[format] || "pdf";
-    const defaultName = format === "csv" ? "productiestaten" : `productiestaten.${ext}`;
-    const { save } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { save: async () => prompt("Bestandspad:", defaultName) };
-    const path = await save({
-      filters: [{ name: format.toUpperCase(), extensions: [ext] }],
-      defaultPath: defaultName,
-    });
-    if (path) {
-      try {
-        await invoke("export_production_lists", { outputPath: path, format });
-        alert("Productiestaten export succesvol: " + path);
-      } catch (e) {
-        alert("Export fout: " + e);
-      }
-    }
+    addColumn(($currentKozijn.frame.outerWidth - 2 * $currentKozijn.frame.frameWidth) / 2);
   }
 
   function handleAddRow() {
     if (!$currentKozijn) return;
-    const innerH = $currentKozijn.frame.outerHeight - 2 * $currentKozijn.frame.frameWidth;
-    addRow(innerH / 2);
+    addRow(($currentKozijn.frame.outerHeight - 2 * $currentKozijn.frame.frameWidth) / 2);
   }
 
   async function handleDuplicate() {
     if (!$currentKozijn) return;
-    const mark = "K" + String(Date.now()).slice(-3);
-    await duplicateKozijn(mark);
+    await duplicateKozijn("K" + String(Date.now()).slice(-3));
   }
 
   async function handleRemove() {
     if (!$currentKozijn) return;
-    if (confirm(`Kozijn "${$currentKozijn.mark}" verwijderen?`)) {
+    if (confirm(get(_)('confirm.deleteKozijn', { values: { mark: $currentKozijn.mark } }))) {
       await removeKozijn($currentKozijn.id);
     }
   }
 
   onMount(() => {
-    registerShortcuts({ onDuplicate: handleDuplicate });
+    registerShortcuts({
+      onDuplicate: handleDuplicate,
+      onNew: fileNew,
+      onOpen: fileOpen,
+      onSave: fileSave,
+      onSaveAs: fileSaveAs,
+    });
   });
-
-  let showImportDialog = false;
-  let importMode = "dxf"; // "dxf" | "catalog"
-
-  function openImportDxf() {
-    importMode = "dxf";
-    showImportDialog = true;
-  }
-
-  function openImportCatalog() {
-    importMode = "catalog";
-    showImportDialog = true;
-  }
-
-  async function handleImportDxf() {
-    const { open } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { open: async () => prompt("DXF bestandspad:") };
-    const path = await open({
-      filters: [{ name: "DXF", extensions: ["dxf"] }],
-      multiple: false,
-    });
-    if (path) {
-      try {
-        const result = await invoke("import_dxf_profile", { filePath: path });
-        const profile = JSON.parse(result);
-        await invoke("add_custom_profile", { profileJson: JSON.stringify(profile) });
-        alert(`Profiel "${profile.name}" (${profile.width}x${profile.depth}mm) geïmporteerd!`);
-      } catch (e) {
-        alert("DXF import fout: " + e);
-      }
-    }
-  }
-
-  async function handleImportCatalog() {
-    const { open } = isTauri
-      ? await import("@tauri-apps/plugin-dialog")
-      : { open: async () => prompt("Catalogus bestandspad:") };
-    const path = await open({
-      filters: [
-        { name: "Catalogus bestanden", extensions: ["json", "xlsx", "xls", "csv"] },
-      ],
-      multiple: false,
-    });
-    if (path) {
-      try {
-        const result = await invoke("import_catalog", { filePath: path, supplier: null });
-        const profiles = JSON.parse(result);
-        for (const profile of profiles) {
-          await invoke("add_custom_profile", { profileJson: JSON.stringify(profile) });
-        }
-        alert(`${profiles.length} profiel(en) geïmporteerd uit catalogus!`);
-      } catch (e) {
-        alert("Catalogus import fout: " + e);
-      }
-    }
-  }
 </script>
 
 <div class="ribbon">
   <div class="ribbon-tabs">
+    <button class="tab file-tab" onclick={() => showAppMenu.set(true)}>
+      {$_('titlebar.file')}
+    </button>
     {#each tabs as tab}
       <button
         class="tab"
         class:active={$activeRibbonTab === tab.id}
-        on:click={() => activeRibbonTab.set(tab.id)}
+        onclick={() => activeRibbonTab.set(tab.id)}
       >
-        {tab.label}
+        {$_(tab.key)}
       </button>
     {/each}
   </div>
@@ -289,7 +117,7 @@
   <div class="ribbon-content">
     {#if $activeRibbonTab === "home"}
       <div class="ribbon-group">
-        <span class="group-label">Sjabloon</span>
+        <span class="group-label">{$_('ribbon.template')}</span>
         <select class="sjabloon-select" bind:value={activeSjabloonId}>
           {#each SJABLONEN as sj}
             <option value={sj.id}>{sj.name}</option>
@@ -300,45 +128,45 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Nieuw kozijn</span>
+        <span class="group-label">{$_('ribbon.newKozijn')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleNewKozijn}>
+          <button class="ribbon-btn" onclick={handleNewKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="12" y1="8" x2="12" y2="16"/>
               <line x1="8" y1="12" x2="16" y2="12"/>
             </svg>
-            <span>Leeg</span>
+            <span>{$_('ribbon.empty')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("single_turn_tilt")}>
+          <button class="ribbon-btn" onclick={() => handleTemplate("single_turn_tilt")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <path d="M5 5 L19 12 L5 19" stroke-dasharray="2 2"/>
             </svg>
-            <span>Draaikiep</span>
+            <span>{$_('ribbon.turnTilt')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("double_turn_tilt")}>
+          <button class="ribbon-btn" onclick={() => handleTemplate("double_turn_tilt")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="12" y1="3" x2="12" y2="21"/>
             </svg>
-            <span>Dubbel</span>
+            <span>{$_('ribbon.double')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("sliding_door")}>
+          <button class="ribbon-btn" onclick={() => handleTemplate("sliding_door")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="12" y1="3" x2="12" y2="21"/>
               <path d="M14 10 L18 12 L14 14"/>
             </svg>
-            <span>Schuifpui</span>
+            <span>{$_('ribbon.slidingDoor')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleTemplate("front_door")}>
+          <button class="ribbon-btn" onclick={() => handleTemplate("front_door")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="3" y1="8" x2="21" y2="8"/>
               <circle cx="16" cy="14" r="1.5"/>
             </svg>
-            <span>Voordeur</span>
+            <span>{$_('ribbon.frontDoor')}</span>
           </button>
         </div>
       </div>
@@ -346,37 +174,37 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Bewerken</span>
+        <span class="group-label">{$_('ribbon.edit')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleAddColumn} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleAddColumn} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="3 2"/>
             </svg>
-            <span>+ Kolom</span>
+            <span>{$_('ribbon.addColumn')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleAddRow} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleAddRow} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 2"/>
             </svg>
-            <span>+ Rij</span>
+            <span>{$_('ribbon.addRow')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleDuplicate} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleDuplicate} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="6" y="6" width="14" height="14" rx="1"/>
               <rect x="4" y="4" width="14" height="14" rx="1"/>
             </svg>
-            <span>Dupliceer</span>
+            <span>{$_('ribbon.duplicate')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleRemove} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleRemove} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
               <line x1="10" y1="11" x2="10" y2="17"/>
               <line x1="14" y1="11" x2="14" y2="17"/>
             </svg>
-            <span>Verwijder</span>
+            <span>{$_('ribbon.remove')}</span>
           </button>
         </div>
       </div>
@@ -384,53 +212,53 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Importeren</span>
+        <span class="group-label">{$_('ribbon.import')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn primary" on:click={() => showShapeManager = true}>
+          <button class="ribbon-btn primary" onclick={() => showShapeManager = true}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="4" y="2" width="10" height="16" rx="1"/>
               <path d="M7 6h4m-4 3h4m-4 3h2"/>
               <circle cx="17" cy="17" r="5"/>
               <path d="M17 14v6m-3-3h6"/>
             </svg>
-            <span>Nieuw profiel</span>
+            <span>{$_('ribbon.newProfile')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleImportDxf}>
+          <button class="ribbon-btn" onclick={importDxfProfile}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v12m0 0l4-4m-4 4l-4-4"/>
               <rect x="4" y="18" width="16" height="3" rx="1"/>
             </svg>
-            <span>Profiel DXF</span>
+            <span>{$_('ribbon.profileDxf')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleImportCatalog}>
+          <button class="ribbon-btn" onclick={importCatalog}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 4h16v16H4z"/>
               <line x1="4" y1="9" x2="20" y2="9"/>
               <line x1="4" y1="14" x2="20" y2="14"/>
               <line x1="10" y1="4" x2="10" y2="20"/>
             </svg>
-            <span>Catalogus</span>
+            <span>{$_('ribbon.catalog')}</span>
           </button>
         </div>
       </div>
 
     {:else if $activeRibbonTab === "insert"}
       <div class="ribbon-group">
-        <span class="group-label">Onderverdeling</span>
+        <span class="group-label">{$_('ribbon.subdivision')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleAddColumn} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleAddColumn} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="3 2"/>
             </svg>
-            <span>Kolom</span>
+            <span>{$_('ribbon.column')}</span>
           </button>
-          <button class="ribbon-btn" on:click={handleAddRow} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={handleAddRow} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="3 2"/>
             </svg>
-            <span>Rij</span>
+            <span>{$_('ribbon.row')}</span>
           </button>
         </div>
       </div>
@@ -438,27 +266,27 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Paneel type</span>
+        <span class="group-label">{$_('ribbon.panelType')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={() => quickSetPanel("fixed_glass")} disabled={$selectedCellIndex === null}>
+          <button class="ribbon-btn" onclick={() => quickSetPanel("fixed_glass")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg>
-            <span>Vast glas</span>
+            <span>{$_('ribbon.fixedGlass')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => quickSetPanel("turn_tilt")} disabled={$selectedCellIndex === null}>
+          <button class="ribbon-btn" onclick={() => quickSetPanel("turn_tilt")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M6 6L18 12L6 18" stroke-dasharray="2 2"/></svg>
-            <span>Draaikiep</span>
+            <span>{$_('ribbon.turnTilt')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => quickSetPanel("sliding")} disabled={$selectedCellIndex === null}>
+          <button class="ribbon-btn" onclick={() => quickSetPanel("sliding")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M13 10L17 12L13 14"/></svg>
-            <span>Schuif</span>
+            <span>{$_('panel.sliding')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => quickSetPanel("door")} disabled={$selectedCellIndex === null}>
+          <button class="ribbon-btn" onclick={() => quickSetPanel("door")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="15" cy="12" r="1.5"/></svg>
-            <span>Deur</span>
+            <span>{$_('panel.door')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => quickSetPanel("panel")} disabled={$selectedCellIndex === null}>
+          <button class="ribbon-btn" onclick={() => quickSetPanel("panel")} disabled={$selectedCellIndex === null}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1" fill="#E7E5E4"/></svg>
-            <span>Paneel</span>
+            <span>{$_('ribbon.panel')}</span>
           </button>
         </div>
       </div>
@@ -466,9 +294,9 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Vliesgevel</span>
+        <span class="group-label">{$_('ribbon.curtainWall')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={() => createVgFromTemplate("stick_system", 9000, 3600)}>
+          <button class="ribbon-btn" onclick={() => createVgFromTemplate("stick_system", 9000, 3600)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="2" width="20" height="20" rx="0"/>
               <line x1="7" y1="2" x2="7" y2="22"/>
@@ -476,16 +304,16 @@
               <line x1="17" y1="2" x2="17" y2="22"/>
               <line x1="2" y1="11" x2="22" y2="11"/>
             </svg>
-            <span>Stijl-regel</span>
+            <span>{$_('ribbon.stickSystem')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => createVgFromTemplate("unitized", 6000, 3600)}>
+          <button class="ribbon-btn" onclick={() => createVgFromTemplate("unitized", 6000, 3600)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="2" width="20" height="20" rx="0"/>
               <line x1="7" y1="2" x2="7" y2="22"/>
               <line x1="12" y1="2" x2="12" y2="22"/>
               <line x1="17" y1="2" x2="17" y2="22"/>
             </svg>
-            <span>Element</span>
+            <span>{$_('ribbon.unitized')}</span>
           </button>
           <!-- Winkelpui verwijderd — niet relevant voor kozijnsoftware -->
         </div>
@@ -493,16 +321,16 @@
 
     {:else if $activeRibbonTab === "ifc"}
       <div class="ribbon-group">
-        <span class="group-label">Kozijn exporteren</span>
+        <span class="group-label">{$_('ribbon.exportKozijn')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn primary" on:click={handleExportIfc} disabled={!$currentKozijn}>
+          <button class="ribbon-btn primary" onclick={exportIfc} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
               <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
             </svg>
             <span>IFC</span>
           </button>
-          <button class="ribbon-btn" on:click={handleExportDxf} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={exportDxf} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
               <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
@@ -515,18 +343,18 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Project exporteren</span>
+        <span class="group-label">{$_('ribbon.exportProject')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={() => handleExportKozijnstaat("pdf")}>
+          <button class="ribbon-btn" onclick={() => exportKozijnstaat("pdf")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M6 2h8l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/>
               <path d="M14 2v6h6"/>
               <line x1="8" y1="13" x2="16" y2="13"/>
               <line x1="8" y1="17" x2="13" y2="17"/>
             </svg>
-            <span>Kozijnstaat PDF</span>
+            <span>{$_('ribbon.kozijnstaatPdf')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleExportKozijnstaat("xlsx")}>
+          <button class="ribbon-btn" onclick={() => exportKozijnstaat("xlsx")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M6 2h8l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/>
               <path d="M14 2v6h6"/>
@@ -534,7 +362,7 @@
               <line x1="12" y1="12" x2="12" y2="19"/>
               <line x1="7" y1="15.5" x2="17" y2="15.5"/>
             </svg>
-            <span>Kozijnstaat Excel</span>
+            <span>{$_('ribbon.kozijnstaatExcel')}</span>
           </button>
         </div>
       </div>
@@ -542,16 +370,16 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Werkplaats</span>
+        <span class="group-label">{$_('ribbon.workshop')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleExportWorkshop} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={exportWorkshop} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M6 2h8l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/>
               <path d="M14 2v6h6"/>
               <rect x="7" y="13" width="10" height="6" rx="1"/>
               <line x1="9" y1="16" x2="15" y2="16"/>
             </svg>
-            <span>Tekening PDF</span>
+            <span>{$_('ribbon.drawingPdf')}</span>
           </button>
         </div>
       </div>
@@ -559,9 +387,9 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">3D Export</span>
+        <span class="group-label">{$_('ribbon.export3d')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleExportGltf} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={exportGltf} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/>
               <path d="M2 17l10 5 10-5"/>
@@ -575,30 +403,30 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Blender / Bonsai</span>
+        <span class="group-label">{$_('ribbon.blender')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={handleSendToBlender} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" onclick={sendToBlender} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="9"/>
               <path d="M8 12l3 3 5-5"/>
             </svg>
-            <span>Naar Blender</span>
+            <span>{$_('ribbon.toBlender')}</span>
           </button>
         </div>
       </div>
 
     {:else if $activeRibbonTab === "production"}
       <div class="ribbon-group">
-        <span class="group-label">Productiestaten exporteren</span>
+        <span class="group-label">{$_('ribbon.prodExport')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={() => handleExportProduction("pdf")}>
+          <button class="ribbon-btn" onclick={() => exportProduction("pdf")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
             <span>PDF</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleExportProduction("xlsx")}>
+          <button class="ribbon-btn" onclick={() => exportProduction("xlsx")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="1"/>
               <line x1="3" y1="9" x2="21" y2="9"/>
@@ -608,7 +436,7 @@
             </svg>
             <span>Excel</span>
           </button>
-          <button class="ribbon-btn" on:click={() => handleExportProduction("csv")}>
+          <button class="ribbon-btn" onclick={() => exportProduction("csv")}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
@@ -622,21 +450,21 @@
 
     {:else if $activeRibbonTab === "view"}
       <div class="ribbon-group">
-        <span class="group-label">Ongedaan maken</span>
+        <span class="group-label">{$_('ribbon.undoGroup')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={undo} disabled={!$canUndo}>
+          <button class="ribbon-btn" onclick={undo} disabled={!$canUndo}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 10h10a5 5 0 015 5v2"/>
               <path d="M3 10l4-4m-4 4l4 4"/>
             </svg>
-            <span>Ongedaan</span>
+            <span>{$_('ribbon.undo')}</span>
           </button>
-          <button class="ribbon-btn" on:click={redo} disabled={!$canRedo}>
+          <button class="ribbon-btn" onclick={redo} disabled={!$canRedo}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 10H11a5 5 0 00-5 5v2"/>
               <path d="M21 10l-4-4m4 4l-4 4"/>
             </svg>
-            <span>Opnieuw</span>
+            <span>{$_('ribbon.redo')}</span>
           </button>
         </div>
       </div>
@@ -644,21 +472,21 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Zoom</span>
+        <span class="group-label">{$_('ribbon.zoom')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" on:click={() => zoom.update(z => Math.min(2.0, z + 0.1))}>
+          <button class="ribbon-btn" onclick={() => zoom.update(z => Math.min(2.0, z + 0.1))}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/>
               <line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/>
             </svg>
-            <span>Inzoomen</span>
+            <span>{$_('ribbon.zoomIn')}</span>
           </button>
-          <button class="ribbon-btn" on:click={() => zoom.update(z => Math.max(0.05, z - 0.1))}>
+          <button class="ribbon-btn" onclick={() => zoom.update(z => Math.max(0.05, z - 0.1))}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/>
               <line x1="8" y1="11" x2="14" y2="11"/>
             </svg>
-            <span>Uitzoomen</span>
+            <span>{$_('ribbon.zoomOut')}</span>
           </button>
         </div>
       </div>
@@ -666,25 +494,19 @@
       <div class="ribbon-divider"></div>
 
       <div class="ribbon-group">
-        <span class="group-label">Thema</span>
-        <div class="group-buttons">
-          <button class="ribbon-btn" on:click={toggleTheme}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              {#if $theme === "light"}
-                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-              {:else}
-                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-              {/if}
-            </svg>
-            <span>{$theme === "light" ? "Donker" : "Licht"}</span>
-          </button>
-        </div>
+        <span class="group-label">{$_('ribbon.theme')}</span>
+        <select class="sjabloon-select" value={$theme} onchange={(e) => setTheme(e.target.value)}>
+          {#each THEMES as t}
+            <option value={t}>{$_('settings.theme.' + t)}</option>
+          {/each}
+        </select>
       </div>
+
     {/if}
   </div>
 </div>
 
-<ShapeManager bind:visible={showShapeManager} on:saved={() => { showShapeManager = false; }} />
+<ShapeManager bind:visible={showShapeManager} onsaved={() => { showShapeManager = false; }} />
 
 <style>
   .ribbon {
@@ -712,6 +534,19 @@
 
   .tab:hover {
     color: var(--text-on-dark);
+  }
+
+  .file-tab {
+    background: var(--amber);
+    color: var(--night-build) !important;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-weight: 700;
+    margin-right: var(--sp-1);
+  }
+
+  .file-tab:hover {
+    background: var(--warm-gold);
+    color: var(--night-build) !important;
   }
 
   .tab.active {
@@ -784,6 +619,25 @@
     align-self: center;
   }
 
+  .lang-select {
+    padding: var(--sp-2) var(--sp-3);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-sm);
+    color: var(--text-on-dark);
+    font-size: 12px;
+    cursor: default;
+    margin-top: var(--sp-1);
+  }
+  .lang-select:focus {
+    outline: none;
+    border-color: var(--amber);
+  }
+  .lang-select option {
+    background: var(--bg-ribbon);
+    color: var(--text-on-dark);
+  }
+
   .sjabloon-select {
     padding: var(--sp-2) var(--sp-3);
     background: rgba(255, 255, 255, 0.08);
@@ -793,7 +647,7 @@
     font-size: 12px;
     font-weight: 600;
     min-width: 180px;
-    cursor: pointer;
+    cursor: default;
   }
   .sjabloon-select:focus {
     outline: none;

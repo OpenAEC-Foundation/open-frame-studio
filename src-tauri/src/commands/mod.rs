@@ -11,3 +11,5 @@ pub mod calculation;
 pub mod export_gltf;
 pub mod vliesgevel;
 pub mod import_profile;
+pub mod profiles;
+pub mod settings;

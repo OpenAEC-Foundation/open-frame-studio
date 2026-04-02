@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { currentKozijn, selectedCellIndex } from "../../stores/kozijn.js";
   import { invoke } from "../../lib/tauri.js";
   import { get } from "svelte/store";
@@ -12,10 +13,10 @@
   ];
 
   const PANE_TYPES = ["float", "gehard", "gelamineerd", "low-e"];
-  const SPACER_TYPES = [
-    { value: "aluminium", label: "Aluminium" },
-    { value: "warm-edge", label: "Warm Edge" },
-    { value: "super-spacer", label: "Super Spacer" },
+  $: SPACER_TYPES = [
+    { value: "aluminium", label: $_('glazing.spacerAluminium') },
+    { value: "warm-edge", label: $_('glazing.spacerWarmEdge') },
+    { value: "super-spacer", label: $_('glazing.spacerSuperSpacer') },
   ];
 
   $: cell = $currentKozijn && $selectedCellIndex !== null
@@ -66,11 +67,11 @@
 
 {#if glazing}
   <div class="glazing-panel">
-    <h3>Beglazing</h3>
+    <h3>{$_('glazing.title')}</h3>
 
     <div class="field">
-      <label>Glastype</label>
-      <select value={glazing.glassType} on:change={(e) => applyPreset(GLASS_PRESETS.find(p => p.type === e.target.value) || GLASS_PRESETS[2])}>
+      <label>{$_('glazing.glassType')}</label>
+      <select value={glazing.glassType} onchange={(e) => applyPreset(GLASS_PRESETS.find(p => p.type === e.target.value) || GLASS_PRESETS[2])}>
         {#each GLASS_PRESETS as preset}
           <option value={preset.type}>{preset.type}</option>
         {/each}
@@ -79,11 +80,11 @@
 
     <div class="field-row">
       <div class="field">
-        <label>Dikte (mm)</label>
+        <label>{$_('glazing.thickness')}</label>
         <div class="value">{glazing.thicknessMm}</div>
       </div>
       <div class="field">
-        <label>Ug-waarde</label>
+        <label>{$_('glazing.ugValue')}</label>
         <div class="value ug-badge" class:ug-good={glazing.ugValue < 1.3} class:ug-ok={glazing.ugValue >= 1.3 && glazing.ugValue < 2.0} class:ug-poor={glazing.ugValue >= 2.0}>
           {glazing.ugValue} W/m²K
         </div>
@@ -91,7 +92,7 @@
     </div>
 
     <div class="field">
-      <label>Opbouw</label>
+      <label>{$_('glazing.composition')}</label>
       <div class="pane-stack">
         {#each (glazing.panes || []) as pane, i}
           {#if i > 0}
@@ -120,8 +121,8 @@
     </div>
 
     <div class="field">
-      <label>Spacer</label>
-      <select value={glazing.spacerType || "warm-edge"} on:change={(e) => updateGlazingField("spacerType", e.target.value)}>
+      <label>{$_('glazing.spacer')}</label>
+      <select value={glazing.spacerType || "warm-edge"} onchange={(e) => updateGlazingField("spacerType", e.target.value)}>
         {#each SPACER_TYPES as st}
           <option value={st.value}>{st.label}</option>
         {/each}

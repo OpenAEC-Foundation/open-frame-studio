@@ -7,7 +7,7 @@
 import { writable, get } from "svelte/store";
 import { currentKozijn, currentGeometry } from "./kozijn.js";
 import { invoke } from "../lib/tauri.js";
-import { refreshProject } from "./project.js";
+import { refreshProject, markDirty } from "./project.js";
 
 const MAX_HISTORY = 50;
 
@@ -39,6 +39,7 @@ export function pushSnapshot() {
   // Clear redo stack on new action
   redoStack = [];
   updateFlags();
+  markDirty();
 }
 
 /**

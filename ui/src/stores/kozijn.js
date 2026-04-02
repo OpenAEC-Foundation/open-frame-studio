@@ -1,6 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
-import { refreshProject } from "./project.js";
+import { refreshProject, markDirty } from "./project.js";
 import { pushSnapshot, clearHistory } from "./history.js";
 
 export const currentKozijn = writable(null);
@@ -16,6 +16,7 @@ export async function createKozijn(name, mark, width, height) {
   currentKozijn.set(k);
   selectedCellIndex.set(null);
   await refreshGeometry(k.id);
+  markDirty();
   return k;
 }
 
@@ -30,6 +31,7 @@ export async function createFromTemplate(template, width, height, sjabloonId) {
   currentKozijn.set(k);
   selectedCellIndex.set(null);
   await refreshGeometry(k.id);
+  markDirty();
   return k;
 }
 
@@ -227,6 +229,7 @@ export async function duplicateKozijn(newMark) {
   currentKozijn.set(dup);
   selectedCellIndex.set(null);
   await refreshGeometry(dup.id);
+  markDirty();
   return dup;
 }
 
@@ -250,6 +253,7 @@ export async function removeKozijn(id) {
     currentGeometry.set(null);
     selectedCellIndex.set(null);
   }
+  markDirty();
 }
 
 async function refreshGeometry(id) {

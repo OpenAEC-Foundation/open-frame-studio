@@ -50,38 +50,18 @@ export async function loadProfiles() {
 }
 
 async function fetchProfileData() {
-  // In browser mode, use fetch to load from public assets
-  // In Tauri mode, use fs plugin to read from resources
   const isTauri = typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
 
   if (isTauri) {
-    // In Tauri: read from resource directory
     try {
-      const { readTextFile } = await import("@tauri-apps/plugin-fs");
-      const indexJson = await readTextFile("../profiles/index.json");
-      const index = JSON.parse(indexJson);
-
-      const categories = [];
-      for (const cat of index.categories) {
-        const profiles = [];
-        for (const file of cat.files) {
-          try {
-            const text = await readTextFile(`../profiles/${file}`);
-            const data = JSON.parse(text);
-            profiles.push(...data);
-          } catch (e) {
-            console.warn(`Profiel bestand ${file} niet geladen:`, e);
-          }
-        }
-        categories.push({ ...cat, profiles });
-      }
-      return categories;
+      const { invoke } = await import("@tauri-apps/api/core");
+      const json = await invoke("load_profile_library");
+      return JSON.parse(json);
     } catch (e) {
-      console.warn("Profielen laden via fs mislukt, gebruik fallback:", e);
+      console.warn("Profielen laden via command mislukt, gebruik fallback:", e);
     }
   }
 
-  // Browser fallback: embedded minimal profile set
   return getEmbeddedProfiles();
 }
 

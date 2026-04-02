@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import {
     currentKozijn,
     selectedCellIndex,
@@ -14,6 +15,7 @@
     calculateThermal,
   } from "../../stores/kozijn.js";
   import { allProfiles } from "../../stores/profiles.js";
+  import { PANEL_TYPE_KEYS, panelLabel, memberLabel } from "../../lib/labels.js";
   import HardwarePanel from "./HardwarePanel.svelte";
   import GlazingPanel from "./GlazingPanel.svelte";
   import ProfileSelector from "./ProfileSelector.svelte";
@@ -41,34 +43,19 @@
     }
   }
 
-  const panelTypes = [
-    { value: "fixed_glass", label: "Vast glas" },
-    { value: "turn_tilt", label: "Draaikiepraam" },
-    { value: "turn", label: "Draairaam" },
-    { value: "tilt", label: "Kiepraam" },
-    { value: "sliding", label: "Schuifraam" },
-    { value: "door", label: "Deur" },
-    { value: "panel", label: "Paneel" },
-    { value: "ventilation", label: "Ventilatie" },
-  ];
+  $: panelTypes = Object.keys(PANEL_TYPE_KEYS).map(value => ({
+    value,
+    label: panelLabel($_, value),
+  }));
 
   function handlePanelTypeChange(e) {
     if ($selectedCellIndex === null) return;
     updateCellType($selectedCellIndex, e.target.value, null);
   }
 
-  const MEMBER_LABELS = {
-    frame_top: "Bovendorpel",
-    frame_bottom: "Onderdorpel",
-    frame_left: "Stijl links",
-    frame_right: "Stijl rechts",
-    divider_v: "Tussenstijl",
-    divider_h: "Tussendorpel",
-  };
-
   function getMemberLabel(member) {
     if (!member) return "";
-    const base = MEMBER_LABELS[member.type] || member.type;
+    const base = memberLabel($_, member.type);
     if (member.type === "divider_v" || member.type === "divider_h") {
       return `${base} ${member.index + 1}`;
     }
@@ -123,33 +110,33 @@
 <div class="panel">
   {#if $currentKozijn}
     <div class="section">
-      <h3>Kozijn</h3>
+      <h3>{$_('props.kozijn')}</h3>
       <div class="field">
-        <label>Naam</label>
+        <label>{$_('props.name')}</label>
         <input type="text" value={$currentKozijn.name} disabled />
       </div>
       <div class="field">
-        <label>Merk</label>
+        <label>{$_('props.mark')}</label>
         <input type="text" value={$currentKozijn.mark} disabled />
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Breedte (mm)</label>
+          <label>{$_('props.width')}</label>
           <input
             type="number"
             bind:value={editWidth}
-            on:change={handleDimensionChange}
+            onchange={handleDimensionChange}
             step="10"
             min="200"
             max="6000"
           />
         </div>
         <div class="field">
-          <label>Hoogte (mm)</label>
+          <label>{$_('props.height')}</label>
           <input
             type="number"
             bind:value={editHeight}
-            on:change={handleDimensionChange}
+            onchange={handleDimensionChange}
             step="10"
             min="200"
             max="4000"
@@ -157,20 +144,20 @@
         </div>
       </div>
       <div class="field">
-        <label>Materiaal</label>
-        <div class="value">{$currentKozijn.frame.material?.wood || "Hout"}</div>
+        <label>{$_('props.material')}</label>
+        <div class="value">{$currentKozijn.frame.material?.wood || $_('props.wood')}</div>
       </div>
     </div>
 
     <div class="section">
-      <h3>Kleuren</h3>
+      <h3>{$_('props.colors')}</h3>
       <div class="field">
-        <label>Binnenzijde</label>
+        <label>{$_('props.inside')}</label>
         <div class="color-row">
           <span class="color-swatch" style="background: {ralToHex($currentKozijn.frame.colorInside)}"></span>
           <select
             value={$currentKozijn.frame.colorInside}
-            on:change={(e) => updateFrameColors(e.target.value, $currentKozijn.frame.colorOutside)}
+            onchange={(e) => updateFrameColors(e.target.value, $currentKozijn.frame.colorOutside)}
           >
             {#each RAL_COLORS as ral}
               <option value={ral.code}>{ral.code} — {ral.name}</option>
@@ -179,12 +166,12 @@
         </div>
       </div>
       <div class="field">
-        <label>Buitenzijde</label>
+        <label>{$_('props.outside')}</label>
         <div class="color-row">
           <span class="color-swatch" style="background: {ralToHex($currentKozijn.frame.colorOutside)}"></span>
           <select
             value={$currentKozijn.frame.colorOutside}
-            on:change={(e) => updateFrameColors($currentKozijn.frame.colorInside, e.target.value)}
+            onchange={(e) => updateFrameColors($currentKozijn.frame.colorInside, e.target.value)}
           >
             {#each RAL_COLORS as ral}
               <option value={ral.code}>{ral.code} — {ral.name}</option>
@@ -195,41 +182,41 @@
     </div>
 
     <div class="section">
-      <h3>Profielen</h3>
+      <h3>{$_('props.profiles')}</h3>
       <ProfileSelector
-        label="Kozijnprofiel"
+        label={$_('props.frameProfile')}
         filter="frame"
         value={$currentKozijn.frame.profile}
-        on:change={(e) => updateFrameProfile(e.detail.id, e.detail.name, e.detail.width, e.detail.depth)}
+        onchange={(detail) => updateFrameProfile(detail.id, detail.name, detail.width, detail.depth)}
       />
       <ProfileSelector
-        label="Dorpelprofiel"
+        label={$_('props.sillProfile')}
         filter="sill"
         value={$currentKozijn.frame.sillProfile}
-        on:change={(e) => updateSillProfile(e.detail.id, e.detail.name)}
+        onchange={(detail) => updateSillProfile(detail.id, detail.name)}
       />
     </div>
 
     <div class="section">
-      <h3>Vorm</h3>
+      <h3>{$_('props.shape')}</h3>
       <div class="field">
-        <label>Kozijnvorm</label>
+        <label>{$_('props.frameShape')}</label>
         <select
           value={$currentKozijn.frame.shape?.shapeType || "rectangular"}
-          on:change={(e) => updateFrameShape(e.target.value, e.target.value === "arched" ? $currentKozijn.frame.outerWidth / 6 : null)}
+          onchange={(e) => updateFrameShape(e.target.value, e.target.value === "arched" ? $currentKozijn.frame.outerWidth / 6 : null)}
         >
-          <option value="rectangular">Rechthoekig</option>
-          <option value="arched">Getoogd (segmentboog)</option>
-          <option value="round">Rond</option>
+          <option value="rectangular">{$_('props.rectangular')}</option>
+          <option value="arched">{$_('props.arched')}</option>
+          <option value="round">{$_('props.round')}</option>
         </select>
       </div>
       {#if $currentKozijn.frame.shape?.shapeType === "arched"}
         <div class="field">
-          <label>Booghoogte (mm)</label>
+          <label>{$_('props.archHeight')}</label>
           <input
             type="number"
             value={$currentKozijn.frame.shape.archHeight || Math.round($currentKozijn.frame.outerWidth / 6)}
-            on:change={(e) => updateFrameShape("arched", parseFloat(e.target.value))}
+            onchange={(e) => updateFrameShape("arched", parseFloat(e.target.value))}
             min="50"
             max={Math.round($currentKozijn.frame.outerHeight / 2)}
             step="10"
@@ -239,16 +226,16 @@
     </div>
 
     <div class="section">
-      <h3>Vakmaten</h3>
+      <h3>{$_('props.gridSizes')}</h3>
       <div class="field">
-        <label>Kolommen (mm)</label>
+        <label>{$_('props.columns')}</label>
         {#each $currentKozijn.grid.columns as col, i}
           <div class="field-row" style="margin-bottom: 4px;">
             <span class="col-label">{i + 1}</span>
             <input
               type="number"
               value={Math.round(col.size)}
-              on:change={(e) => {
+              onchange={(e) => {
                 const sizes = $currentKozijn.grid.columns.map(c => c.size);
                 sizes[i] = parseFloat(e.target.value) || sizes[i];
                 updateGridSizes(sizes, $currentKozijn.grid.rows.map(r => r.size));
@@ -260,14 +247,14 @@
         {/each}
       </div>
       <div class="field">
-        <label>Rijen (mm)</label>
+        <label>{$_('props.rows')}</label>
         {#each $currentKozijn.grid.rows as row, i}
           <div class="field-row" style="margin-bottom: 4px;">
             <span class="col-label">{i + 1}</span>
             <input
               type="number"
               value={Math.round(row.size)}
-              on:change={(e) => {
+              onchange={(e) => {
                 const sizes = $currentKozijn.grid.rows.map(r => r.size);
                 sizes[i] = parseFloat(e.target.value) || sizes[i];
                 updateGridSizes($currentKozijn.grid.columns.map(c => c.size), sizes);
@@ -282,44 +269,44 @@
 
     {#if $selectedMember}
       <div class="section">
-        <h3>Onderdeel</h3>
+        <h3>{$_('member.title')}</h3>
         <div class="field">
-          <label>Type</label>
+          <label>{$_('member.type')}</label>
           <div class="value">{getMemberLabel($selectedMember)}</div>
         </div>
         <ProfileSelector
-          label="Profiel"
+          label={$_('member.profile')}
           filter={getMemberProfileFilter($selectedMember)}
           value={getMemberProfile($selectedMember)}
-          on:change={(e) => handleMemberProfileChange(e.detail)}
+          onchange={(detail) => handleMemberProfileChange(detail)}
         />
         {#if getMemberProfile($selectedMember)}
           {@const profileDef = getMemberProfileDefinition($selectedMember)}
           <div class="field-row">
             <div class="field">
-              <label>Breedte (mm)</label>
+              <label>{$_('props.width')}</label>
               <div class="value">{getMemberProfile($selectedMember)?.width || profileDef?.width || "—"}</div>
             </div>
             <div class="field">
-              <label>Diepte (mm)</label>
+              <label>{$_('member.depth')}</label>
               <div class="value">{getMemberProfile($selectedMember)?.depth || profileDef?.depth || "—"}</div>
             </div>
           </div>
           {#if profileDef?.sponning}
             <div class="field">
-              <label>Sponning</label>
+              <label>{$_('member.rebate')}</label>
               <div class="value">{profileDef.sponning.width}x{profileDef.sponning.depth}mm ({profileDef.sponning.position})</div>
             </div>
           {/if}
           {#if profileDef?.ufValue}
             <div class="field">
-              <label>Uf-waarde</label>
+              <label>{$_('member.ufValue')}</label>
               <div class="value">{profileDef.ufValue} W/m²K</div>
             </div>
           {/if}
           {#if profileDef?.crossSection?.length > 2}
             <div class="field">
-              <label>Dwarsdoorsnede</label>
+              <label>{$_('member.crossSection')}</label>
               <ProfileCrossSection
                 crossSection={profileDef.crossSection}
                 sponning={profileDef.sponning}
@@ -330,10 +317,10 @@
       </div>
     {:else if selectedCell}
       <div class="section">
-        <h3>Cel {$selectedCellIndex + 1}</h3>
+        <h3>{$_('props.cell', { values: { index: $selectedCellIndex + 1 } })}</h3>
         <div class="field">
-          <label>Paneel type</label>
-          <select value={selectedCell.panelType} on:change={handlePanelTypeChange}>
+          <label>{$_('props.panelType')}</label>
+          <select value={selectedCell.panelType} onchange={handlePanelTypeChange}>
             {#each panelTypes as pt}
               <option value={pt.value}>{pt.label}</option>
             {/each}
@@ -342,27 +329,27 @@
 
         {#if ["turn_tilt", "turn", "tilt"].includes(selectedCell.panelType)}
           <div class="field">
-            <label>Openingsrichting</label>
+            <label>{$_('props.openingDirection')}</label>
             <select value={selectedCell.openingDirection || "left"}
-              on:change={(e) => updateCellType($selectedCellIndex, selectedCell.panelType, e.target.value)}>
-              <option value="left">Links</option>
-              <option value="right">Rechts</option>
+              onchange={(e) => updateCellType($selectedCellIndex, selectedCell.panelType, e.target.value)}>
+              <option value="left">{$_('props.left')}</option>
+              <option value="right">{$_('props.right')}</option>
             </select>
           </div>
           <ProfileSelector
-            label="Raamhout profiel"
+            label={$_('props.sashProfile')}
             filter="sash"
             value={selectedCell.sashProfile}
-            on:change={(e) => {/* TODO: update sash profile */}}
+            onchange={(detail) => {/* TODO: update sash profile */}}
           />
           {#if selectedCell.sashProfile}
             <div class="field-row">
               <div class="field">
-                <label>Raambreedte</label>
+                <label>{$_('props.sashWidth')}</label>
                 <div class="value">{selectedCell.sashWidth || 54}mm</div>
               </div>
               <div class="field">
-                <label>Raamdiepte</label>
+                <label>{$_('props.sashDepth')}</label>
                 <div class="value">{selectedCell.sashDepth || 67}mm</div>
               </div>
             </div>
@@ -371,20 +358,20 @@
 
         {#if selectedCell.panelType === "door"}
           <div class="field">
-            <label>Openingsrichting</label>
+            <label>{$_('props.openingDirection')}</label>
             <select value={selectedCell.openingDirection || "inward"}
-              on:change={(e) => updateCellType($selectedCellIndex, "door", e.target.value)}>
-              <option value="inward">Naar binnen</option>
-              <option value="outward">Naar buiten</option>
-              <option value="left">Links</option>
-              <option value="right">Rechts</option>
+              onchange={(e) => updateCellType($selectedCellIndex, "door", e.target.value)}>
+              <option value="inward">{$_('props.inward')}</option>
+              <option value="outward">{$_('props.outward')}</option>
+              <option value="left">{$_('props.left')}</option>
+              <option value="right">{$_('props.right')}</option>
             </select>
           </div>
           <ProfileSelector
-            label="Deurhout profiel"
+            label={$_('props.doorProfile')}
             filter="sash"
             value={selectedCell.sashProfile}
-            on:change={(e) => {/* TODO: update sash profile */}}
+            onchange={(detail) => {/* TODO: update sash profile */}}
           />
         {/if}
       </div>
@@ -392,15 +379,15 @@
       <HardwarePanel visible={true} />
     {:else}
       <div class="section hint">
-        <p>Klik op een cel of onderdeel in het kozijn om de eigenschappen te bewerken</p>
+        <p>{$_('props.hint')}</p>
       </div>
     {/if}
 
     {#if thermalResult}
       <div class="section">
-        <h3>Thermisch</h3>
+        <h3>{$_('props.thermal')}</h3>
         <div class="field">
-          <label>Uw-waarde (kozijn)</label>
+          <label>{$_('thermal.uwValue')}</label>
           <div class="value thermal-badge" class:thermal-a={thermalResult.rating === "A"} class:thermal-b={thermalResult.rating === "B"} class:thermal-c={thermalResult.rating === "C"} class:thermal-d={thermalResult.rating === "D"}>
             {thermalResult.uwValue} W/m²K
             <span class="rating">{thermalResult.rating}</span>
@@ -408,11 +395,11 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Uf (kozijn)</label>
+            <label>{$_('thermal.ufFrame')}</label>
             <div class="value">{thermalResult.ufValue}</div>
           </div>
           <div class="field">
-            <label>Ug (glas)</label>
+            <label>{$_('thermal.ugGlass')}</label>
             <div class="value">{thermalResult.ugValue}</div>
           </div>
           <div class="field">
@@ -422,11 +409,11 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Glas %</label>
+            <label>{$_('thermal.glassPercent')}</label>
             <div class="value">{thermalResult.areaTotalM2 > 0 ? Math.round(thermalResult.areaGlassM2 / thermalResult.areaTotalM2 * 100) : 0}%</div>
           </div>
           <div class="field">
-            <label>Opp. (m²)</label>
+            <label>{$_('thermal.area')}</label>
             <div class="value">{thermalResult.areaTotalM2}</div>
           </div>
         </div>
@@ -434,83 +421,90 @@
     {/if}
 
     <div class="section">
-      <h3>Grid</h3>
+      <h3>{$_('props.grid')}</h3>
       <div class="field-row">
         <div class="field">
-          <label>Kolommen</label>
+          <label>{$_('props.columnsCount')}</label>
           <div class="value">{$currentKozijn.grid.columns.length}</div>
         </div>
         <div class="field">
-          <label>Rijen</label>
+          <label>{$_('props.rowsCount')}</label>
           <div class="value">{$currentKozijn.grid.rows.length}</div>
         </div>
       </div>
     </div>
   {:else}
     <div class="empty">
-      <p>Selecteer of maak een kozijn</p>
+      <p>{$_('props.empty')}</p>
     </div>
   {/if}
 </div>
 
 <style>
   .panel {
-    width: 280px;
-    flex-shrink: 0;
+    width: 100%;
+    height: 100%;
     background: var(--bg-surface);
-    border-left: var(--border-default);
     overflow-y: auto;
-    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
   }
 
   .section {
-    margin-bottom: var(--sp-6);
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.06));
   }
 
   .section h3 {
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 8px 0;
+    padding: 0;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--amber);
-    margin-bottom: var(--sp-3);
-    padding-bottom: var(--sp-2);
-    border-bottom: var(--border-default);
+    letter-spacing: 0.05em;
+    border: none;
   }
 
   .field {
-    margin-bottom: var(--sp-3);
+    margin-bottom: 6px;
   }
 
   .field label {
     display: block;
     font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: var(--sp-1);
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
   }
 
   .field input, .field select {
     width: 100%;
-    padding: var(--sp-2) var(--sp-3);
+    padding: 4px 6px;
     background: var(--bg-surface-alt);
-    border: var(--border-default);
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+    border-radius: 2px;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 12px;
+    font-family: var(--font-body);
+    height: 24px;
   }
 
   .field input:focus, .field select:focus {
     outline: none;
     border-color: var(--amber);
-    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+  }
+
+  .field input:disabled {
+    opacity: 0.6;
+    background: transparent;
+    border-color: transparent;
   }
 
   .field-row {
     display: flex;
-    gap: var(--sp-2);
-    align-items: center;
+    gap: 6px;
+    align-items: flex-start;
   }
 
   .field-row .field {
@@ -521,19 +515,20 @@
     font-size: 10px;
     font-weight: 700;
     color: var(--text-muted);
-    min-width: 16px;
+    min-width: 14px;
+    line-height: 24px;
   }
 
   .value {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-primary);
-    padding: var(--sp-2) 0;
+    padding: 3px 0;
+    line-height: 1.4;
   }
 
   .hint {
     color: var(--text-muted);
-    font-size: 13px;
-    font-style: italic;
+    font-size: 12px;
   }
 
   .empty {
@@ -543,22 +538,24 @@
     height: 200px;
     color: var(--text-muted);
     text-align: center;
+    font-size: 12px;
   }
 
   .color-row {
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
+    gap: 6px;
   }
 
   .color-row select {
     flex: 1;
-    padding: var(--sp-2) var(--sp-3);
+    padding: 4px 6px;
     background: var(--bg-surface-alt);
-    border: var(--border-default);
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+    border-radius: 2px;
     color: var(--text-primary);
     font-size: 11px;
+    height: 24px;
   }
 
   .color-row select:focus {
@@ -568,10 +565,10 @@
 
   .color-swatch {
     display: inline-block;
-    width: 20px;
-    height: 20px;
-    border-radius: 3px;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    width: 18px;
+    height: 18px;
+    border-radius: 2px;
+    border: 1px solid var(--border-color, rgba(0,0,0,0.15));
     flex-shrink: 0;
   }
 
@@ -579,23 +576,24 @@
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
+    gap: 6px;
+    font-size: 12px;
   }
 
   .rating {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: white;
   }
 
-  .thermal-a .rating { background: #16A34A; }
+  .thermal-a .rating { background: var(--success); }
   .thermal-b .rating { background: #84CC16; }
-  .thermal-c .rating { background: #F59E0B; }
-  .thermal-d .rating { background: #DC2626; }
+  .thermal-c .rating { background: var(--warning); }
+  .thermal-d .rating { background: var(--error); }
 </style>
