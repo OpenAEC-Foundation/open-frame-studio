@@ -31,5 +31,6 @@ jobs:
         cp ofs-wasm/pkg/ofs_wasm.js ui/public/wasm/
         cp ofs-wasm/pkg/ofs_wasm_bg.wasm ui/public/wasm/
         cd ui && npm run build
+      deploy_source: ui/dist
     secrets:
       deploy_ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
