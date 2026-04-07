@@ -4,17 +4,23 @@
   import { _ } from "svelte-i18n";
   import KozijnCanvas from "./KozijnCanvas.svelte";
   import GridHandles from "./GridHandles.svelte";
+  import CellContextMenu from "./CellContextMenu.svelte";
   import { get } from "svelte/store";
 
-  let containerEl;
-  let isPanning = false;
-  let panStart = { x: 0, y: 0 };
-  let panOffset = { x: 0, y: 0 };
+  // Context menu state
+  let contextMenu = $state({ visible: false, cellIndex: 0, x: 0, y: 0 });
+
+  let containerEl = $state(null);
+  let isPanning = $state(false);
+  let panStart = $state({ x: 0, y: 0 });
+  let panOffset = $state({ x: 0, y: 0 });
 
   // Auto zoom-to-fit when kozijn changes
-  $: if ($currentGeometry && containerEl) {
-    requestAnimationFrame(() => zoomToFit());
-  }
+  $effect(() => {
+    if ($currentGeometry && containerEl) {
+      requestAnimationFrame(() => zoomToFit());
+    }
+  });
 
   function zoomToFit() {
     if (!containerEl || !$currentGeometry) return;
@@ -87,6 +93,14 @@
     await updateGridSizes(columnSizes, rowSizes);
   }
 
+  function handleCellContextMenu(cellIndex, screenX, screenY) {
+    contextMenu = { visible: true, cellIndex, x: screenX, y: screenY };
+  }
+
+  function closeContextMenu() {
+    contextMenu = { ...contextMenu, visible: false };
+  }
+
   // Double-click on canvas to add a column or row at click position
   function handleCanvasDblClick(e) {
     const k = get(currentKozijn);
@@ -142,10 +156,17 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <svg class="canvas" xmlns="http://www.w3.org/2000/svg" ondblclick={handleCanvasDblClick}>
       <g transform="translate({$editorPan.x}, {$editorPan.y}) scale({$zoom})">
-        <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} />
+        <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} oncellcontextmenu={handleCellContextMenu} />
         <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
       </g>
     </svg>
+    <CellContextMenu
+      visible={contextMenu.visible}
+      cellIndex={contextMenu.cellIndex}
+      screenX={contextMenu.x}
+      screenY={contextMenu.y}
+      onclose={closeContextMenu}
+    />
   {:else}
     <div class="empty-state">
       <div class="empty-icon">

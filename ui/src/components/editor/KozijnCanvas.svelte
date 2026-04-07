@@ -2,7 +2,7 @@
   import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
 
-  let { geometry, kozijn, zoom = 0.35 } = $props();
+  let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
 
   // Inline dimension editing state
   let editingDim = $state(null); // { index, value, x, y, isH, width, height }
@@ -122,6 +122,16 @@
   }
 
   const FRAME_MEMBER_NAMES = ["frame_top", "frame_bottom", "frame_left", "frame_right"];
+
+  function handleCellRightClick(cellIndex, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedCellIndex.set(cellIndex);
+    selectedMember.set(null);
+    if (oncellcontextmenu) {
+      oncellcontextmenu(cellIndex, e.clientX, e.clientY);
+    }
+  }
 
   function handleMemberClick(memberType, index, e) {
     e.stopPropagation();
@@ -260,6 +270,7 @@
       stroke-width={isSelected ? 3 : 1}
       class="cell"
       onclick={(e) => handleCellClick(cellRect.cellIndex, e)}
+      oncontextmenu={(e) => handleCellRightClick(cellRect.cellIndex, e)}
       role="button"
       tabindex="0"
     />
