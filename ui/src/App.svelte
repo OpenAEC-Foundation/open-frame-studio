@@ -17,6 +17,8 @@
   import ProductionListsView from "./components/project/ProductionListsView.svelte";
   import CalculationView from "./components/project/CalculationView.svelte";
   import Viewer3D from "./components/viewer3d/Viewer3D.svelte";
+  import ProfileEditorView from "./components/profile-editor/ProfileEditorView.svelte";
+  import AiAssistant from "./components/panels/AiAssistant.svelte";
   import { loadProject } from "./stores/project.js";
   import { loadProfiles } from "./stores/profiles.js";
   import { registerUndoRedoShortcuts } from "./stores/history.js";
@@ -25,6 +27,7 @@
 
   let cleanupShortcuts;
   let workspaceView = "editor";
+  let rightTab = "properties";
   let leftWidth = getSetting("left_panel_width") || 220;
   let rightWidth = getSetting("right_panel_width") || 290;
   let leftOpen = getSetting("left_panel_open") ?? true;
@@ -137,6 +140,18 @@
     </svg>
     {$_('tabs.calculation')}
   </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "profiles"}
+    onclick={() => (workspaceView = "profiles")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4 4h4v16H4z"/>
+      <path d="M12 4h2v16h-2z"/>
+      <path d="M18 4h2v16h-2z"/>
+    </svg>
+    {$_('tabs.profiles')}
+  </button>
 </div>
 
 <div class="workspace">
@@ -167,15 +182,31 @@
     {#if rightOpen}
       <ResizeHandle direction="horizontal" onresize={resizeRight} />
       <div class="side-panel right" style="width:{rightWidth}px">
-        <div class="panel-header">
-          <span>{$_('props.kozijn')}</span>
+        <div class="panel-header tabbed">
+          <div class="panel-tabs">
+            <button class="panel-tab" class:active={rightTab === "properties"} onclick={() => rightTab = "properties"}>
+              {$_('props.kozijn')}
+            </button>
+            <button class="panel-tab" class:active={rightTab === "ai"} onclick={() => rightTab = "ai"}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M12 2a5 5 0 015 5v1h1a3 3 0 013 3v1a3 3 0 01-3 3h-1v4a3 3 0 01-3 3H10a3 3 0 01-3-3v-4H6a3 3 0 01-3-3v-1a3 3 0 013-3h1V7a5 5 0 015-5z"/>
+              </svg>
+              AI
+            </button>
+          </div>
           <button class="collapse-btn" onclick={toggleRight}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </button>
         </div>
-        <div class="panel-body"><PropertiesPanel /></div>
+        <div class="panel-body">
+          {#if rightTab === "properties"}
+            <PropertiesPanel />
+          {:else}
+            <AiAssistant />
+          {/if}
+        </div>
       </div>
     {:else}
       <div class="collapsed-tab right" onclick={toggleRight}>
@@ -226,6 +257,8 @@
     <ProductionListsView />
   {:else if workspaceView === "calculation"}
     <CalculationView />
+  {:else if workspaceView === "profiles"}
+    <ProfileEditorView />
   {/if}
 </div>
 
@@ -362,6 +395,40 @@
   .collapse-btn:hover {
     background: rgba(0, 0, 0, 0.08);
     color: var(--text-primary);
+  }
+
+  .panel-header.tabbed {
+    padding: 0 4px 0 0;
+  }
+
+  .panel-tabs {
+    display: flex;
+    gap: 0;
+    height: 100%;
+  }
+
+  .panel-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    height: 100%;
+  }
+
+  .panel-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .panel-tab.active {
+    color: var(--amber);
+    border-bottom-color: var(--amber);
   }
 
   .panel-body {

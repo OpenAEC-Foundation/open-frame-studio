@@ -17,6 +17,8 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 ### Key Features
 
 - **2D Kozijn Editor** — Interactive SVG editor with grid subdivision, drag handles, dimension lines, and cell-type assignment
+- **Interactive Profile Editor** — Visual point-by-point cross-section editing with drag handles, edge splitting, mirroring, snap-to-grid, and undo/redo (DeltaPi-level functionality)
+- **AI Configurator Assistant** — Natural language kozijn design via OpenAI-compatible API (works with OpenAI, Ollama, or any compatible endpoint). Type "Maak een draaikiep 900x1400" and it creates the kozijn.
 - **Template Library** — Pre-built templates: draaikiepraam, dubbel draaikiepraam, schuifpui, voordeur, melkmeisje, melkmeisje met bovenlicht
 - **80+ Profielen** — Verified profile library from 17+ Dutch and European manufacturers (HEBO, Goemaat, WEBO, Weekamp, KVT, Reynaers, Schüco, Gealan, VEKA, Kömmerling, Aluplast, Deceuninck, and more)
 - **3D Viewer** — Three.js-based 3D preview with frame extrusion and transparent glass panels
@@ -44,7 +46,7 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 | Layer | Technology |
 |---|---|
 | Desktop framework | [Tauri 2.0](https://v2.tauri.app/) |
-| Frontend | [Svelte 4](https://svelte.dev/) + [Vite 5](https://vitejs.dev/) |
+| Frontend | [Svelte 5](https://svelte.dev/) + [Vite 6](https://vitejs.dev/) |
 | Core logic | Rust (`ofs-core` crate) |
 | 2D Editor | SVG (reactive Svelte bindings) |
 | 3D Viewer | [Three.js](https://threejs.org/) |
@@ -113,10 +115,10 @@ Open-Frame-Studio/
 ├── ui/                     # Svelte frontend
 │   └── src/
 │       ├── App.svelte      # Main app with workspace tabs
-│       ├── components/     # Shell, Editor, Panels, Viewer3D
-│       ├── stores/         # Svelte stores (project, kozijn, profiles, history)
+│       ├── components/     # Shell, Editor, Panels, Profile Editor, Viewer3D
+│       ├── stores/         # Svelte stores (project, kozijn, profiles, AI assistant, history)
 │       ├── styles/         # OpenAEC design tokens & themes
-│       └── lib/            # Tauri invoke wrapper + browser mocks
+│       └── lib/            # Tauri invoke wrapper, AI tools & system prompt, browser mocks
 ├── python/                 # Python sidecar for exports
 │   ├── ofs_ifc/            # IFC generation (IfcOpenShell)
 │   ├── ofs_dxf/            # DXF generation (ezdxf)
