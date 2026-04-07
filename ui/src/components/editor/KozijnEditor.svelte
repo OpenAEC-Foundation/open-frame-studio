@@ -10,6 +10,9 @@
   // Context menu state
   let contextMenu = $state({ visible: false, cellIndex: 0, x: 0, y: 0 });
 
+  // Split preview state
+  let splitPreview = $state(null); // { x, y1, y2 } for vertical or { y, x1, x2 } for horizontal
+
   let containerEl = $state(null);
   let isPanning = $state(false);
   let panStart = $state({ x: 0, y: 0 });
@@ -83,6 +86,34 @@
         y: panOffset.y + (e.clientY - panStart.y),
       });
     }
+
+    // Show split preview when Ctrl is held
+    const k = get(currentKozijn);
+    const geom = get(currentGeometry);
+    if (k && geom && containerEl && e.ctrlKey) {
+      const rect = containerEl.getBoundingClientRect();
+      const z = get(zoom);
+      const pan = get(editorPan);
+      const mx = (e.clientX - rect.left - pan.x) / z;
+      const my = (e.clientY - rect.top - pan.y) / z;
+      const fw = k.frame.frameWidth;
+      const ow = k.frame.outerWidth;
+      const oh = k.frame.outerHeight;
+
+      if (mx > fw && mx < ow - fw && my > fw && my < oh - fw) {
+        if (e.altKey) {
+          // Horizontal split preview
+          splitPreview = { type: "h", y: my, x1: fw, x2: ow - fw };
+        } else {
+          // Vertical split preview
+          splitPreview = { type: "v", x: mx, y1: fw, y2: oh - fw };
+        }
+      } else {
+        splitPreview = null;
+      }
+    } else if (!e.ctrlKey) {
+      splitPreview = null;
+    }
   }
 
   function handleMouseUp() {
@@ -101,41 +132,43 @@
     contextMenu = { ...contextMenu, visible: false };
   }
 
-  // Double-click on canvas to add a column or row at click position
-  function handleCanvasDblClick(e) {
+  // Ctrl+click or double-click on canvas to add a column or row at click position
+  function handleCanvasClick(e) {
+    if (e.ctrlKey && !e.altKey) {
+      // Ctrl+Click = add vertical column
+      addDividerAtMouse(e, false);
+    } else if (e.ctrlKey && e.altKey) {
+      // Ctrl+Alt+Click = add horizontal row
+      addDividerAtMouse(e, true);
+    }
+  }
+
+  function addDividerAtMouse(e, horizontal) {
     const k = get(currentKozijn);
-    const geom = get(currentGeometry);
-    if (!k || !geom || !containerEl) return;
+    if (!k || !containerEl) return;
 
     const rect = containerEl.getBoundingClientRect();
     const z = get(zoom);
     const pan = get(editorPan);
-
-    // Convert screen coords to model-space (mm)
     const mx = (e.clientX - rect.left - pan.x) / z;
     const my = (e.clientY - rect.top - pan.y) / z;
-
     const fw = k.frame.frameWidth;
     const ow = k.frame.outerWidth;
     const oh = k.frame.outerHeight;
 
-    // Check if click is inside the inner frame area
     if (mx < fw || mx > ow - fw || my < fw || my > oh - fw) return;
 
-    // Determine if we should add a column or row based on proximity to edges
-    const relX = mx - fw;  // position within inner area
-    const relY = my - fw;
-    const innerW = ow - 2 * fw;
-    const innerH = oh - 2 * fw;
-
-    // Use Alt+DblClick for row, normal DblClick for column
-    if (e.altKey) {
-      // Add horizontal row at Y position
+    if (horizontal) {
       addRow(my);
     } else {
-      // Add vertical column at X position
       addColumn(mx);
     }
+    splitPreview = null;
+  }
+
+  // Double-click on canvas to add a column or row at click position
+  function handleCanvasDblClick(e) {
+    addDividerAtMouse(e, e.altKey);
   }
 
   // Export for use in Beeld tab
@@ -154,10 +187,42 @@
 >
   {#if $currentKozijn && $currentGeometry}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <svg class="canvas" xmlns="http://www.w3.org/2000/svg" ondblclick={handleCanvasDblClick}>
+    <svg class="canvas" xmlns="http://www.w3.org/2000/svg" ondblclick={handleCanvasDblClick} onclick={handleCanvasClick}>
       <g transform="translate({$editorPan.x}, {$editorPan.y}) scale({$zoom})">
         <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} oncellcontextmenu={handleCellContextMenu} />
         <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
+
+        <!-- Split preview line (Ctrl+hover) -->
+        {#if splitPreview}
+          {#if splitPreview.type === "v"}
+            <line
+              x1={splitPreview.x} y1={splitPreview.y1}
+              x2={splitPreview.x} y2={splitPreview.y2}
+              stroke="var(--amber, #D97706)" stroke-width={2 / $zoom}
+              stroke-dasharray="{6 / $zoom} {4 / $zoom}"
+              opacity="0.7" pointer-events="none"
+            />
+            <text x={splitPreview.x} y={splitPreview.y1 - 4 / $zoom}
+              text-anchor="middle" fill="var(--amber)" font-size={10 / $zoom}
+              font-family="var(--font-body)" pointer-events="none">
+              {Math.round(splitPreview.x)}mm
+            </text>
+          {:else}
+            <line
+              x1={splitPreview.x1} y1={splitPreview.y}
+              x2={splitPreview.x2} y2={splitPreview.y}
+              stroke="var(--amber, #D97706)" stroke-width={2 / $zoom}
+              stroke-dasharray="{6 / $zoom} {4 / $zoom}"
+              opacity="0.7" pointer-events="none"
+            />
+            <text x={splitPreview.x2 + 4 / $zoom} y={splitPreview.y}
+              text-anchor="start" dominant-baseline="middle"
+              fill="var(--amber)" font-size={10 / $zoom}
+              font-family="var(--font-body)" pointer-events="none">
+              {Math.round(splitPreview.y)}mm
+            </text>
+          {/if}
+        {/if}
       </g>
     </svg>
     <CellContextMenu
