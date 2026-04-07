@@ -90,7 +90,7 @@
               <img class="about-icon" src="/icon.png" alt="" />
               <div class="about-text">
                 <strong>{$_('app.name')}</strong>
-                <span>v0.1.0</span>
+                <span>v0.1.1</span>
                 <span class="muted">{$_('app.org')}</span>
                 <span class="muted">AGPL-3.0</span>
               </div>

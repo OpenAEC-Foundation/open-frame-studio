@@ -157,6 +157,7 @@
         <option value="buiten">{$_("profileEditor.outside") || "Buiten"}</option>
         <option value="binnen">{$_("profileEditor.inside") || "Binnen"}</option>
         <option value="midden">{$_("profileEditor.center") || "Midden"}</option>
+        <option value="dubbel">{$_("profileEditor.double") || "Dubbel (voor+achter)"}</option>
       </select>
     </label>
     <div class="field-row">

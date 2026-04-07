@@ -239,7 +239,7 @@
       font-family="var(--font-body)"
       font-weight="600"
     >
-      {dim.label}
+      {Number(dim.label) > 0 ? Math.round(Number(dim.label)) : dim.label}
     </text>
   {/each}
 </g>

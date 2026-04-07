@@ -204,19 +204,84 @@
         />
 
         <!-- Sponning zone indicator -->
+        {@const b = $editorBounds}
         {#if sponningStore.position === "buiten"}
-          {@const b = $editorBounds}
           <rect
             x={sponningStore.width}
             y={b.maxY - sponningStore.depth}
             width={b.width - sponningStore.width * 2}
             height={sponningStore.depth}
-            fill="var(--info, #2563EB)"
-            fill-opacity="0.12"
-            stroke="var(--info, #2563EB)"
-            stroke-width={1 / zoom}
+            fill="var(--info, #2563EB)" fill-opacity="0.12"
+            stroke="var(--info, #2563EB)" stroke-width={1 / zoom}
             stroke-dasharray="{3 / zoom} {2 / zoom}"
           />
+          <text x={b.width / 2} y={b.maxY - sponningStore.depth / 2}
+            text-anchor="middle" dominant-baseline="middle"
+            fill="var(--info, #2563EB)" font-size={8 / zoom} opacity="0.6">
+            sponning {sponningStore.width}×{sponningStore.depth}
+          </text>
+        {:else if sponningStore.position === "binnen"}
+          <rect
+            x={sponningStore.width}
+            y={b.minY}
+            width={b.width - sponningStore.width * 2}
+            height={sponningStore.depth}
+            fill="var(--success, #16A34A)" fill-opacity="0.12"
+            stroke="var(--success, #16A34A)" stroke-width={1 / zoom}
+            stroke-dasharray="{3 / zoom} {2 / zoom}"
+          />
+          <text x={b.width / 2} y={b.minY + sponningStore.depth / 2}
+            text-anchor="middle" dominant-baseline="middle"
+            fill="var(--success, #16A34A)" font-size={8 / zoom} opacity="0.6">
+            sponning {sponningStore.width}×{sponningStore.depth}
+          </text>
+        {:else if sponningStore.position === "midden"}
+          {@const mid = (b.height - sponningStore.depth) / 2}
+          <rect
+            x={sponningStore.width}
+            y={b.minY + mid}
+            width={b.width - sponningStore.width * 2}
+            height={sponningStore.depth}
+            fill="var(--warning, #F59E0B)" fill-opacity="0.12"
+            stroke="var(--warning, #F59E0B)" stroke-width={1 / zoom}
+            stroke-dasharray="{3 / zoom} {2 / zoom}"
+          />
+          <text x={b.width / 2} y={b.minY + mid + sponningStore.depth / 2}
+            text-anchor="middle" dominant-baseline="middle"
+            fill="var(--warning, #F59E0B)" font-size={8 / zoom} opacity="0.6">
+            sponning {sponningStore.width}×{sponningStore.depth}
+          </text>
+        {:else if sponningStore.position === "dubbel"}
+          <!-- Voorsponning (boven) -->
+          <rect
+            x={sponningStore.width}
+            y={b.minY}
+            width={b.width - sponningStore.width * 2}
+            height={sponningStore.depth}
+            fill="var(--info, #2563EB)" fill-opacity="0.12"
+            stroke="var(--info, #2563EB)" stroke-width={1 / zoom}
+            stroke-dasharray="{3 / zoom} {2 / zoom}"
+          />
+          <text x={b.width / 2} y={b.minY + sponningStore.depth / 2}
+            text-anchor="middle" dominant-baseline="middle"
+            fill="var(--info, #2563EB)" font-size={7 / zoom} opacity="0.6">
+            voorsponning
+          </text>
+          <!-- Achtersponning (onder) -->
+          <rect
+            x={sponningStore.width}
+            y={b.maxY - sponningStore.depth}
+            width={b.width - sponningStore.width * 2}
+            height={sponningStore.depth}
+            fill="var(--success, #16A34A)" fill-opacity="0.12"
+            stroke="var(--success, #16A34A)" stroke-width={1 / zoom}
+            stroke-dasharray="{3 / zoom} {2 / zoom}"
+          />
+          <text x={b.width / 2} y={b.maxY - sponningStore.depth / 2}
+            text-anchor="middle" dominant-baseline="middle"
+            fill="var(--success, #16A34A)" font-size={7 / zoom} opacity="0.6">
+            achtersponning
+          </text>
         {/if}
       {/if}
 

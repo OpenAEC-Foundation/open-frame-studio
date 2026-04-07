@@ -120,7 +120,7 @@
         </nav>
 
         <div class="sidebar-footer">
-          <span class="footer-text">v0.1.0</span>
+          <span class="footer-text">v0.1.1</span>
         </div>
       </div>
 
