@@ -78,7 +78,7 @@
   </div>
 
   <div class="titlebar-center" data-tauri-drag-region>
-    <span class="subtitle">{$isDirty ? '* ' : ''}{$_('app.name')} <span class="version">v0.1.1</span></span>
+    <span class="subtitle">{$isDirty ? '* ' : ''}{$_('app.name')} <span class="version">v0.1.3</span></span>
   </div>
 
   {#if isTauri && platform !== "linux"}
