@@ -1,4 +1,4 @@
-# Open Frame Studio
+# Open Frame Studio v0.1.1
 
 **Free, open-source kozijn (window frame) design software for the Dutch construction industry.**
 
