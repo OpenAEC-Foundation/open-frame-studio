@@ -19,6 +19,49 @@ pub struct Kozijn {
     /// Series/batch reference (e.g., "Begane grond", "Verdieping 1")
     #[serde(default)]
     pub series_id: Option<String>,
+    /// Free-form extensions beyond the grid (e.g., extended dorpel, extra stijl)
+    #[serde(default)]
+    pub extensions: Vec<FrameExtension>,
+}
+
+/// A free-form member extension beyond the rectangular grid
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameExtension {
+    /// Extension type
+    pub extension_type: ExtensionType,
+    /// Profile used for this extension
+    pub profile: ProfileRef,
+    /// Start point (absolute coordinates in mm)
+    pub start_x: f64,
+    pub start_y: f64,
+    /// End point (absolute coordinates in mm)
+    pub end_x: f64,
+    pub end_y: f64,
+    /// Width of the member (face width in mm)
+    #[serde(default = "default_ext_width")]
+    pub member_width: f64,
+    /// Which grid member(s) this connects to
+    #[serde(default)]
+    pub connects_to: Vec<String>,
+}
+
+fn default_ext_width() -> f64 { 67.0 }
+
+/// Extension member type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionType {
+    /// Extended dorpel (wider than frame)
+    Dorpel,
+    /// Extra stijl (outside the grid)
+    Stijl,
+    /// Balk (structural beam)
+    Balk,
+    /// Neut (corner block at sill)
+    Neut,
+    /// Spouwlat (cavity batten)
+    Spouwlat,
 }
 
 impl Kozijn {
@@ -45,6 +88,7 @@ impl Kozijn {
                 right_profile: None,
                 shape: FrameShape::default(),
                 corner_joints: vec![],
+                edges: vec![],
             },
             grid: Grid {
                 columns: vec![GridDivision {
@@ -59,6 +103,7 @@ impl Kozijn {
             cells: vec![Cell::default()],
             placement: Placement::default(),
             series_id: None,
+            extensions: vec![],
         }
     }
 
@@ -87,6 +132,7 @@ impl Kozijn {
                 right_profile: Some(sj.stijl_profile.clone()),
                 shape: FrameShape::default(),
                 corner_joints: vec![],
+                edges: vec![],
             },
             grid: Grid {
                 columns: vec![GridDivision {
@@ -101,6 +147,7 @@ impl Kozijn {
             cells: vec![Cell::default_with_glazing(&sj.default_glazing)],
             placement: Placement::default(),
             series_id: None,
+            extensions: vec![],
         }
     }
 
@@ -231,6 +278,9 @@ pub struct Frame {
     /// Corner joint configurations [top-left, top-right, bottom-left, bottom-right]
     #[serde(default)]
     pub corner_joints: Vec<crate::joint::Joint>,
+    /// Edge configurations [left, right, top, bottom] — wall connection details
+    #[serde(default)]
+    pub edges: Vec<crate::edge::EdgeConfig>,
 }
 
 /// Frame shape definition for arched/round kozijnen

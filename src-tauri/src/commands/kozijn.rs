@@ -5,6 +5,7 @@ use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, PanelType, OpeningDirection,
 use ofs_core::profile::ProfileRef;
 use ofs_core::thermal;
 use ofs_core::template::{self, KozijnSjabloon};
+use ofs_core::edge::EdgeConfig;
 use ofs_core::grid;
 use tauri::State;
 
@@ -80,6 +81,69 @@ pub fn delete_custom_sjabloon(
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     project.custom_sjablonen.retain(|s| s.id != sjabloon_id);
     Ok(())
+}
+
+#[tauri::command]
+pub fn update_edge_config(
+    state: State<'_, AppState>,
+    id: String,
+    edge_index: usize,
+    edge_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    let edge: EdgeConfig = serde_json::from_str(&edge_json)
+        .map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
+
+    // Ensure edges vector has 4 entries (left, right, top, bottom)
+    while kozijn.frame.edges.len() < 4 {
+        kozijn.frame.edges.push(EdgeConfig::default());
+    }
+
+    if edge_index < 4 {
+        kozijn.frame.edges[edge_index] = edge;
+    }
+
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn add_frame_extension(
+    state: State<'_, AppState>,
+    id: String,
+    extension_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    let ext: ofs_core::kozijn::FrameExtension = serde_json::from_str(&extension_json)
+        .map_err(|e| format!("Ongeldig extension JSON: {}", e))?;
+    kozijn.extensions.push(ext);
+
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
+pub fn remove_frame_extension(
+    state: State<'_, AppState>,
+    id: String,
+    extension_index: usize,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+
+    if extension_index < kozijn.extensions.len() {
+        kozijn.extensions.remove(extension_index);
+    }
+
+    Ok(kozijn.clone())
 }
 
 #[tauri::command]
