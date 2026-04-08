@@ -41,6 +41,45 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 
 ---
 
+## Changelog v0.2.0 (2026-04-08)
+
+### Rendering Overhaul
+- **Arc/boog rendering herschreven** — correcte wiskundige berekening (center_y, acos hoeken, SVG sweep-flag), boog gaat nu naar boven
+- **Rond kozijn** — 360° gesplitst in twee semicirkels, gevulde donut-rendering met outer + inner cirkel
+- **Stijlen clippen** — bij getoogde kozijnen starten stijlen op de boogaanzet (arch_height), niet meer op y=0
+- **Sponninglijnen** op alle frame members — 17mm offset lijn toont de sponning/glasgroef
+- **Raamhout realistisch** — 3-laags rendering: buitenkant, sponninglijn, glaslatlijn (stippel) per EN standaard
+- **Deurhout realistisch** — dikke onderdorpel (150mm), drempellijn, zelfde 3-laags detail
+- **EN 12519 opening symbolen** — draai (driehoek basis=scharnier, punt=kruk), kiep, draai-kiep, schuif
+- **Scharnier- en kruk-indicatoren** — kleine cirkels aan scharnierkant, T-lijn aan krukkant
+
+### Maatvoering (NEN 3576 / GA Kozijn stijl)
+- **3-niveau systeem** — Niveau 1: houtdiktes + vakmaten (complete maatketen), Niveau 2: dagmaat, Niveau 3: buitenwerkse maat
+- **Rechts-labels 90° geroteerd** — geen overlap meer bij verticale dimensies
+- **Invoerveld vergroot** — 100/zoom breed, font schaalt mee met zoom
+
+### Nieuwe Features
+- **Hoekoplossingen UI** — JointPanel met 4 hoeken (pen/slis, verstek, contramal, stomp), quick-apply knoppen, kleurgecodeerde canvas-indicatoren
+- **Eigen sjablonen** — "Opslaan als sjabloon" knop in ribbon, dynamische lijst met ingebouwd + custom
+- **Profielbibliotheek browser** — "Laden uit bibliotheek" in ShapeManager, laadt profiel parameters
+- **Vrij tekenen profielen** — freeform drawing mode: sleep punten, dubbelklik = punt toevoegen, verwijder punten, undo, 5mm snap-grid
+- **Houtsoort per onderdeel** — per-member materiaal velden (top/bottom/left/right_material) in datamodel
+- **Sash profiel selector gewired** — raam/deur profielen nu wijzigbaar via dropdown (was TODO)
+
+### Data Verbeteringen
+- **21 profiel JSONs verrijkt** — alle ~65 profielen (hout, aluminium, PVC, hout-alu) hebben nu L-vormige sponning cross-sections
+- **Profiel doorsnede** — hatch pattern en sponning annotatie in ProfileCrossSection component
+- **Edge/spouwlat indicatoren** — paarse stippellijnen op canvas per frame-zijde
+- **Default 4 hoekverbindingen** — elk nieuw kozijn start met 4 pen/slis joints
+
+### Bugfixes
+- **Calculatie tabel** — 5 verkeerde i18n keys gecorrigeerd, colgroup herbalanceerd naar 100%
+- **3D Viewer** — `$state()` reactivity fix, WebGL detectie, deep change tracking via JSON serialisatie
+- **AI Assistent** — default Ollama endpoint, gedetailleerde foutmelding met oplossingsrichtingen
+- **ArchedTrapezoid** — toegevoegd aan is_arched check (geen dubbel bovendorpel meer)
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
