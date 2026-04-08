@@ -44,6 +44,7 @@ impl Kozijn {
                 left_profile: None,
                 right_profile: None,
                 shape: FrameShape::default(),
+                corner_joints: vec![],
             },
             grid: Grid {
                 columns: vec![GridDivision {
@@ -85,6 +86,7 @@ impl Kozijn {
                 left_profile: Some(sj.stijl_profile.clone()),
                 right_profile: Some(sj.stijl_profile.clone()),
                 shape: FrameShape::default(),
+                corner_joints: vec![],
             },
             grid: Grid {
                 columns: vec![GridDivision {
@@ -226,6 +228,9 @@ pub struct Frame {
     /// Frame shape (rectangular, arched, round)
     #[serde(default)]
     pub shape: FrameShape,
+    /// Corner joint configurations [top-left, top-right, bottom-left, bottom-right]
+    #[serde(default)]
+    pub corner_joints: Vec<crate::joint::Joint>,
 }
 
 /// Frame shape definition for arched/round kozijnen
@@ -499,6 +504,8 @@ pub struct Project {
     pub vliesgevels: Vec<crate::vliesgevel::Vliesgevel>,
     #[serde(default)]
     pub custom_profiles: Vec<crate::profile::ProfileDefinition>,
+    #[serde(default)]
+    pub custom_sjablonen: Vec<crate::template::KozijnSjabloon>,
 }
 
 impl Project {
@@ -515,6 +522,7 @@ impl Project {
             kozijnen: vec![],
             vliesgevels: vec![],
             custom_profiles: vec![],
+            custom_sjablonen: vec![],
         }
     }
 }

@@ -56,6 +56,8 @@ fn main() {
             commands::kozijn::duplicate_kozijn,
             commands::kozijn::calculate_thermal,
             commands::kozijn::get_sjablonen,
+            commands::kozijn::save_custom_sjabloon,
+            commands::kozijn::delete_custom_sjabloon,
             // Export commands
             commands::export_ifc::export_ifc,
             commands::export_dxf::export_dxf,

@@ -47,8 +47,39 @@ pub fn create_kozijn_from_template(
 }
 
 #[tauri::command]
-pub fn get_sjablonen() -> Vec<KozijnSjabloon> {
-    template::builtin_sjablonen()
+pub fn get_sjablonen(state: State<'_, AppState>) -> Vec<KozijnSjabloon> {
+    let mut all = template::builtin_sjablonen();
+    if let Ok(project) = state.project.lock() {
+        all.extend(project.custom_sjablonen.clone());
+    }
+    all
+}
+
+#[tauri::command]
+pub fn save_custom_sjabloon(
+    state: State<'_, AppState>,
+    sjabloon_json: String,
+) -> Result<(), String> {
+    let sjabloon: KozijnSjabloon = serde_json::from_str(&sjabloon_json)
+        .map_err(|e| format!("Ongeldig sjabloon JSON: {}", e))?;
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    // Update existing or add new
+    if let Some(existing) = project.custom_sjablonen.iter_mut().find(|s| s.id == sjabloon.id) {
+        *existing = sjabloon;
+    } else {
+        project.custom_sjablonen.push(sjabloon);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_custom_sjabloon(
+    state: State<'_, AppState>,
+    sjabloon_id: String,
+) -> Result<(), String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    project.custom_sjablonen.retain(|s| s.id != sjabloon_id);
+    Ok(())
 }
 
 #[tauri::command]

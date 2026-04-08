@@ -242,21 +242,55 @@
       />
     {/if}
 
-    <!-- Cell label -->
+    <!-- Cell label (GA Kozijn style: type + vakmaat + glasspec) -->
+    {@const cell = kozijn.cells?.[cellRect.cellIndex]}
+    {@const cellFs = 10 / zoom}
+    {@const smallFs = 8 / zoom}
+    {@const cx = cellRect.rect.x + cellRect.rect.width / 2}
+    {@const cy = cellRect.rect.y + cellRect.rect.height / 2}
+    {@const vakW = Math.round(cellRect.rect.width)}
+    {@const vakH = Math.round(cellRect.rect.height)}
+    <!-- Type label (DK, VG, etc) -->
     <text
-      x={cellRect.rect.x + cellRect.rect.width / 2}
-      y={cellRect.rect.y + cellRect.rect.height / 2}
-      text-anchor="middle"
-      dominant-baseline="central"
+      x={cx} y={cy - cellFs * 1.5}
+      text-anchor="middle" dominant-baseline="central"
       fill="var(--text-secondary)"
-      font-size="24"
+      font-size={cellFs * 1.4}
       font-family="var(--font-heading)"
       font-weight="700"
-      opacity="0.4"
+      opacity="0.5"
       pointer-events="none"
     >
       {cellLabel(cellRect.cellIndex)}
     </text>
+    <!-- Vakmaat -->
+    <text
+      x={cx} y={cy}
+      text-anchor="middle" dominant-baseline="central"
+      fill="#DC2626"
+      font-size={smallFs}
+      font-family="var(--font-body)"
+      font-weight="600"
+      opacity="0.7"
+      pointer-events="none"
+    >
+      {vakW}×{vakH}
+    </text>
+    <!-- Glass spec -->
+    {#if cell?.glazing}
+      <text
+        x={cx} y={cy + cellFs * 1.2}
+        text-anchor="middle" dominant-baseline="central"
+        fill="#16A34A"
+        font-size={smallFs * 0.9}
+        font-family="var(--font-body)"
+        font-weight="500"
+        opacity="0.6"
+        pointer-events="none"
+      >
+        {cell.glazing.glassType} {cell.glazing.thicknessMm}mm
+      </text>
+    {/if}
   {/each}
 
   <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is visible) -->

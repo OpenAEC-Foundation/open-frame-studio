@@ -10,5 +10,6 @@ pub mod sill;
 pub mod vliesgevel;
 pub mod thermal;
 pub mod template;
+pub mod joint;
 pub mod export;
 pub mod import;

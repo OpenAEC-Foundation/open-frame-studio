@@ -111,16 +111,20 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         height: oh - 2.0 * fw,
     };
 
-    // Frame members
+    // Frame members — adjust for arched/special shapes
+    let is_arched = kozijn.frame.shape.shape_type == ShapeType::Arched
+        || kozijn.frame.shape.shape_type == ShapeType::Round;
+    let top_rect_height = if is_arched { 0.0 } else { fw };
+
     let frame_rects = vec![
-        // Top
-        Rect2D { x: 0.0, y: 0.0, width: ow, height: fw },
+        // Top (hidden for arched — arc replaces it)
+        Rect2D { x: 0.0, y: 0.0, width: ow, height: top_rect_height },
         // Bottom (sill)
         Rect2D { x: 0.0, y: oh - fw, width: ow, height: fw },
-        // Left
-        Rect2D { x: 0.0, y: fw, width: fw, height: oh - 2.0 * fw },
+        // Left (full height for arched, starts at 0)
+        Rect2D { x: 0.0, y: top_rect_height, width: fw, height: oh - top_rect_height - fw },
         // Right
-        Rect2D { x: ow - fw, y: fw, width: fw, height: oh - 2.0 * fw },
+        Rect2D { x: ow - fw, y: top_rect_height, width: fw, height: oh - top_rect_height - fw },
     ];
 
     // Calculate column positions (x coordinates of cell starts)
