@@ -412,6 +412,36 @@
     {/if}
   {/each}
 
+  <!-- Frame extensions (free-form members beyond the grid) -->
+  {#each (kozijn.extensions || []) as ext, i}
+    {@const dx = ext.endX - ext.startX}
+    {@const dy = ext.endY - ext.startY}
+    {@const len = Math.sqrt(dx * dx + dy * dy)}
+    {@const hw = (ext.memberWidth || 67) / 2}
+    {#if len > 0}
+      {@const nx = -dy / len * hw}
+      {@const ny = dx / len * hw}
+      <polygon
+        points="{ext.startX + nx},{ext.startY + ny} {ext.endX + nx},{ext.endY + ny} {ext.endX - nx},{ext.endY - ny} {ext.startX - nx},{ext.startY - ny}"
+        fill="var(--editor-frame)"
+        fill-opacity="0.4"
+        stroke="var(--amber)"
+        stroke-width={1.5 / zoom}
+        stroke-dasharray="{4 / zoom} {3 / zoom}"
+        pointer-events="none"
+      />
+      <text
+        x={(ext.startX + ext.endX) / 2}
+        y={(ext.startY + ext.endY) / 2}
+        text-anchor="middle" dominant-baseline="central"
+        fill="var(--amber)" font-size={9 / zoom} opacity="0.7"
+        pointer-events="none"
+      >
+        {ext.extensionType || "ext"}
+      </text>
+    {/if}
+  {/each}
+
   <!-- Dimension lines — rendered in model-space with inverse-zoom for constant screen size -->
   {#each geometry.dimensions as dim, dimIdx}
     {@const fontSize = 12 / zoom}

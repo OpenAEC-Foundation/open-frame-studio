@@ -1,5 +1,6 @@
 <script>
   import { _ } from "svelte-i18n";
+  import { invoke } from "../../lib/tauri.js";
   import {
     currentKozijn,
     selectedCellIndex,
@@ -475,6 +476,68 @@
         </div>
       </div>
     </div>
+
+    <div class="section">
+      <h3>Randen</h3>
+      {#each ["Links", "Rechts", "Boven", "Onder"] as eName, ei}
+        {@const edge = ($currentKozijn.frame.edges || [])[ei]}
+        <div class="field">
+          <label>{eName}</label>
+          <div class="edge-row">
+            <select
+              value={edge?.randsponningType || "haaks"}
+              onchange={(e) => {
+                invoke("update_edge_config", {
+                  id: $currentKozijn.id,
+                  edgeIndex: ei,
+                  edgeJson: JSON.stringify({
+                    ...(edge || {}),
+                    randsponningType: e.target.value,
+                    randsponningDepth: edge?.randsponningDepth || 5,
+                    randsponningWidth: edge?.randsponningWidth || 46,
+                    sealType: edge?.sealType || "compriband",
+                    folieBinnen: edge?.folieBinnen || "geen",
+                    folieBuiten: edge?.folieBuiten || "geen",
+                    anchorSpacingMm: edge?.anchorSpacingMm || 500,
+                  })
+                }).then(k => currentKozijn.set(k));
+              }}
+            >
+              <option value="haaks">Haaks</option>
+              <option value="kalksponning">Kalksponning</option>
+              <option value="renovatie">Renovatie</option>
+              <option value="vlak">Vlak</option>
+            </select>
+            <select
+              value={edge?.spouwlat?.width || 100}
+              onchange={(e) => {
+                const w = parseFloat(e.target.value);
+                invoke("update_edge_config", {
+                  id: $currentKozijn.id,
+                  edgeIndex: ei,
+                  edgeJson: JSON.stringify({
+                    ...(edge || {}),
+                    randsponningType: edge?.randsponningType || "haaks",
+                    randsponningDepth: edge?.randsponningDepth || 5,
+                    randsponningWidth: edge?.randsponningWidth || 46,
+                    spouwlat: { width: w, height: 27, material: "vuren", glued: true, nailSpacingMm: 300 },
+                    sealType: edge?.sealType || "compriband",
+                    folieBinnen: edge?.folieBinnen || "geen",
+                    folieBuiten: edge?.folieBuiten || "geen",
+                    anchorSpacingMm: edge?.anchorSpacingMm || 500,
+                  })
+                }).then(k => currentKozijn.set(k));
+              }}
+            >
+              <option value="100">SL 100</option>
+              <option value="120">SL 120</option>
+              <option value="140">SL 140</option>
+              <option value="160">SL 160</option>
+            </select>
+          </div>
+        </div>
+      {/each}
+    </div>
   {:else}
     <div class="empty">
       <p>{$_('props.empty')}</p>
@@ -638,4 +701,24 @@
   .thermal-b .rating { background: #84CC16; }
   .thermal-c .rating { background: var(--warning); }
   .thermal-d .rating { background: var(--error); }
+
+  .edge-row {
+    display: flex;
+    gap: var(--sp-1);
+  }
+
+  .edge-row select {
+    flex: 1;
+    padding: 3px 4px;
+    background: var(--bg-surface-alt);
+    border: var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 11px;
+  }
+
+  .edge-row select:focus {
+    outline: none;
+    border-color: var(--amber);
+  }
 </style>

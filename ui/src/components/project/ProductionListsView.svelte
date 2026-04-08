@@ -72,9 +72,13 @@
   <div class="table-container">
     {#if activeTab === "kortlijst"}
       <table>
+        <colgroup>
+          <col style="width:7%"><col style="width:9%"><col style="width:14%"><col style="width:14%">
+          <col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:8%"><col style="width:6%">
+        </colgroup>
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.part')}</th><th>{$_('production.profile')}</th>
-          <th>{$_('production.material')}</th><th>{$_('production.net')}</th><th>{$_('production.gross')}</th><th>{$_('production.angleL')}</th><th>{$_('production.angleR')}</th><th>{$_('production.quantity')}</th>
+          <th>{$_('production.material')}</th><th class="num">{$_('production.net')}</th><th class="num">{$_('production.gross')}</th><th class="num">{$_('production.angleL')}</th><th class="num">{$_('production.angleR')}</th><th class="num">{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allCut as item}
@@ -96,9 +100,13 @@
 
     {:else if activeTab === "glaslijst"}
       <table>
+        <colgroup>
+          <col style="width:8%"><col style="width:10%"><col style="width:14%"><col style="width:12%">
+          <col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:6%">
+        </colgroup>
         <thead><tr>
-          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.glassType')}</th><th>{$_('production.width')}</th>
-          <th>{$_('production.height')}</th><th>{$_('production.thickness')}</th><th>{$_('production.ug')}</th><th>{$_('production.area')}</th><th>{$_('production.quantity')}</th>
+          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.glassType')}</th><th class="num">{$_('production.width')}</th>
+          <th class="num">{$_('production.height')}</th><th class="num">{$_('production.thickness')}</th><th class="num">{$_('production.ug')}</th><th class="num">{$_('production.area')}</th><th class="num">{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allGlass as item}

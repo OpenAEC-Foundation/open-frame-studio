@@ -52,18 +52,23 @@
     <!-- Per kozijn -->
     <div class="table-container">
       <table>
+        <colgroup>
+          <col style="width:6%"><col style="width:8%"><col style="width:9%"><col style="width:9%">
+          <col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:9%">
+          <col style="width:9%"><col style="width:7%"><col style="width:10%">
+        </colgroup>
         <thead><tr>
           <th>{$_('calculation.nlSfb')}</th>
           <th>{$_('calculation.frame')}</th>
-          <th>{$_('calculation.material')}</th>
-          <th>{$_('calculation.glass')}</th>
-          <th>{$_('calculation.hardware')}</th>
-          <th>{$_('calculation.gasket')}</th>
-          <th>{$_('calculation.panels')}</th>
-          <th>{$_('calculation.surface')}</th>
-          <th>{$_('calculation.labor')}</th>
-          <th>{$_('calculation.hours')}</th>
-          <th>{$_('calculation.total')}</th>
+          <th class="num">{$_('calculation.material')}</th>
+          <th class="num">{$_('calculation.glass')}</th>
+          <th class="num">{$_('calculation.hardware')}</th>
+          <th class="num">{$_('calculation.gasket')}</th>
+          <th class="num">{$_('calculation.panels')}</th>
+          <th class="num">{$_('calculation.surface')}</th>
+          <th class="num">{$_('calculation.labor')}</th>
+          <th class="num">{$_('calculation.hours')}</th>
+          <th class="num">{$_('calculation.total')}</th>
         </tr></thead>
         <tbody>
           {#each estimates as est}
