@@ -1,5 +1,5 @@
 <script>
-  import { activeRibbonTab, zoom, setTheme, theme, THEMES, showAppMenu } from "../../stores/ui.js";
+  import { activeRibbonTab, activeWorkspaceView, zoom, setTheme, theme, THEMES, showAppMenu } from "../../stores/ui.js";
   import { undo, redo, canUndo, canRedo } from "../../stores/history.js";
   import {
     createKozijn,
@@ -20,6 +20,8 @@
     exportIfc, exportDxf, exportKozijnstaat, exportWorkshop,
     exportGltf, exportProduction, sendToBlender,
     importDxfProfile, importCatalog,
+    exportCncGcode, exportLabels, exportIfcWithLod,
+    importIfcFile, compareIfcRoundtrip,
   } from "../../lib/export.js";
   import ShapeManager from "../panels/ShapeManager.svelte";
   import { _ } from "svelte-i18n";
@@ -28,6 +30,7 @@
   import { toast } from "../../stores/toast.js";
 
   let showShapeManager = false;
+  let ifcLod = 200;
 
   const BUILTIN_SJABLONEN = [
     { id: "standaard-67-meranti", name: "Standaard 67mm Meranti", series: "67" },
@@ -87,6 +90,10 @@
     double_turn_tilt: [1800, 1500],
     sliding_door: [3000, 2400],
     front_door: [1000, 2400],
+    klapraam: [900, 600],
+    hefschuif: [4000, 2400],
+    pivot: [900, 1400],
+    stolp: [1800, 1500],
   };
 
   async function handleNewKozijn() {
@@ -209,6 +216,39 @@
               <circle cx="16" cy="14" r="1.5"/>
             </svg>
             <span>{$_('ribbon.frontDoor')}</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => handleTemplate("klapraam")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="6" width="18" height="12" rx="1"/>
+              <path d="M5 18L12 10L19 18" stroke-dasharray="2 2"/>
+            </svg>
+            <span>Klapraam</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => handleTemplate("hefschuif")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="18" rx="1"/>
+              <line x1="11" y1="3" x2="11" y2="21"/>
+              <path d="M13 11L17 12L13 13"/>
+              <path d="M7 11L3 12"/>
+            </svg>
+            <span>Hefschuif</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => handleTemplate("pivot")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="3" width="14" height="18" rx="1"/>
+              <line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/>
+              <path d="M8 8L12 12L16 8"/>
+            </svg>
+            <span>Pivot</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => handleTemplate("stolp")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="1"/>
+              <line x1="12" y1="3" x2="12" y2="21"/>
+              <path d="M5 5L12 12L5 19" stroke-dasharray="2 2"/>
+              <path d="M19 5L12 12L19 19" stroke-dasharray="2 2"/>
+            </svg>
+            <span>Stolp</span>
           </button>
         </div>
       </div>
@@ -365,7 +405,7 @@
       <div class="ribbon-group">
         <span class="group-label">{$_('ribbon.exportKozijn')}</span>
         <div class="group-buttons">
-          <button class="ribbon-btn primary" onclick={exportIfc} disabled={!$currentKozijn}>
+          <button class="ribbon-btn primary" onclick={() => exportIfcWithLod(ifcLod)} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
               <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
@@ -378,6 +418,37 @@
               <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
             </svg>
             <span>DXF</span>
+          </button>
+        </div>
+        <select class="sjabloon-select" style="min-width:100px" bind:value={ifcLod}>
+          <option value={100}>LOD 100</option>
+          <option value={200}>LOD 200</option>
+          <option value={300}>LOD 300</option>
+          <option value={350}>LOD 350</option>
+          <option value={400}>LOD 400</option>
+        </select>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <span class="group-label">IFC Import</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" onclick={importIfcFile}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 15V3m0 0l-4 4m4-4l4 4"/>
+              <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+            </svg>
+            <span>IFC Import</span>
+          </button>
+          <button class="ribbon-btn" onclick={compareIfcRoundtrip}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 1l4 4-4 4"/>
+              <path d="M3 11V9a4 4 0 014-4h14"/>
+              <path d="M7 23l-4-4 4-4"/>
+              <path d="M21 13v2a4 4 0 01-4 4H3"/>
+            </svg>
+            <span>IFC Roundtrip</span>
           </button>
         </div>
       </div>
@@ -486,6 +557,56 @@
               <line x1="8" y1="17" x2="16" y2="17"/>
             </svg>
             <span>CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <span class="group-label">CNC / Labels</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" onclick={exportCncGcode} disabled={!$currentKozijn}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="6" width="20" height="12" rx="2"/>
+              <path d="M6 10h4v4H6z"/>
+              <line x1="14" y1="10" x2="18" y2="10"/>
+              <line x1="14" y1="14" x2="18" y2="14"/>
+            </svg>
+            <span>CNC G-code</span>
+          </button>
+          <button class="ribbon-btn" onclick={exportLabels}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="6" rx="1"/>
+              <rect x="4" y="14" width="16" height="6" rx="1"/>
+              <line x1="8" y1="7" x2="16" y2="7"/>
+              <line x1="8" y1="17" x2="16" y2="17"/>
+            </svg>
+            <span>Labels PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <span class="group-label">Planning / Optimalisatie</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("optimization")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="6" width="20" height="3" rx="1"/>
+              <rect x="2" y="11" width="14" height="3" rx="1"/>
+              <rect x="2" y="16" width="18" height="3" rx="1"/>
+            </svg>
+            <span>Zaagplan</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("planning")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="16" rx="1"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <line x1="9" y1="4" x2="9" y2="20"/>
+            </svg>
+            <span>Planning</span>
           </button>
         </div>
       </div>

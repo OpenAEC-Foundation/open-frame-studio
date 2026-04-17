@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 import { saveSetting, getSetting } from "../lib/settings.js";
 
 export const activeRibbonTab = writable("home");
+export const activeWorkspaceView = writable("editor");
 export const showAppMenu = writable(false);
 export const showSettings = writable(false);
 export const zoom = writable(0.35);

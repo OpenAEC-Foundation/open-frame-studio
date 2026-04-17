@@ -106,6 +106,71 @@ export async function sendToBlender() {
   toast.success(get(_)("alert.blenderSuccess", { values: { result } }));
 }
 
+// ── CNC & Labels ───────────────────────────────────────────
+
+export async function exportCncGcode() {
+  const k = get(currentKozijn);
+  if (!k) return;
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "G-code", extensions: ["nc", "gcode"] }],
+    defaultPath: `${k.mark}_cnc`,
+  });
+  if (!path) return;
+  await api("export_cnc_gcode", { id: k.id, outputDir: path });
+  toast.success(get(_)("alert.exportSuccess", { values: { type: "CNC G-code", path } }));
+}
+
+export async function exportLabels() {
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+    defaultPath: "labels.pdf",
+  });
+  if (!path) return;
+  await api("export_labels_pdf", { outputPath: path });
+  toast.success(get(_)("alert.exportSuccess", { values: { type: "Labels PDF", path } }));
+}
+
+export async function exportIfcWithLod(lod) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    defaultPath: `${k.mark}_lod${lod}.ifc`,
+  });
+  if (!path) return;
+  await api("export_ifc", { id: k.id, outputPath: path, lod });
+  toast.success(get(_)("alert.exportSuccess", { values: { type: `IFC LOD${lod}`, path } }));
+}
+
+// ── IFC Import & Compare ───────────────────────────────────
+
+export async function importIfcFile() {
+  const { open } = await getOpenDialog();
+  const path = await open({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    multiple: false,
+  });
+  if (!path) return;
+  const result = await api("import_ifc_file", { filePath: path });
+  toast.success(`IFC bestand geimporteerd: ${path}`);
+  return result;
+}
+
+export async function compareIfcRoundtrip() {
+  const { open } = await getOpenDialog();
+  const path = await open({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    multiple: false,
+  });
+  if (!path) return;
+  const result = await api("compare_ifc_roundtrip", { filePath: path });
+  toast.success("IFC roundtrip vergelijking voltooid");
+  return result;
+}
+
 // ── Import functions ────────────────────────────────────────
 
 export async function importDxfProfile() {

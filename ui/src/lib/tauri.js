@@ -107,6 +107,22 @@ function wasmCommand(cmd, args) {
       case "check_blender_connection":
         return "not_available";
 
+      // New feature commands — return empty defaults in WASM mode
+      case "get_quotations": return [];
+      case "create_quotation": return { version: 1, status: "draft" };
+      case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
+      case "get_project_energy": return { items: [] };
+      case "check_certification": return { ceChecks: [], skhChecks: [] };
+      case "get_bcf_topics": return [];
+      case "create_bcf_topic": return { id: "new", title: args?.title };
+      case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
+      case "validate_project_ids": return { checks: [] };
+      case "get_glass_library": return [];
+      case "export_cnc_gcode": return "ok";
+      case "export_labels_pdf": return "ok";
+      case "import_ifc_file": return null;
+      case "compare_ifc_roundtrip": return null;
+
       default:
         console.warn(`[web] unhandled WASM command: ${cmd}`, args);
         return null;
@@ -132,6 +148,20 @@ function browserFallback(cmd, args) {
     case "get_all_vliesgevels": return [];
     case "load_profile_library": return [];
     case "get_sjablonen": return [];
+    case "get_quotations": return [];
+    case "create_quotation": return { version: 1, status: "draft" };
+    case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
+    case "get_project_energy": return { items: [] };
+    case "check_certification": return { ceChecks: [], skhChecks: [] };
+    case "get_bcf_topics": return [];
+    case "create_bcf_topic": return { id: "new" };
+    case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
+    case "validate_project_ids": return { checks: [] };
+    case "get_glass_library": return [];
+    case "export_cnc_gcode": return "ok";
+    case "export_labels_pdf": return "ok";
+    case "import_ifc_file": return null;
+    case "compare_ifc_roundtrip": return null;
     case "get_platform": return "web";
     case "load_settings":
       return localStorage.getItem("ofs-settings") || JSON.stringify({

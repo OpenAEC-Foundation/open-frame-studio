@@ -18,15 +18,22 @@
   import CalculationView from "./components/project/CalculationView.svelte";
   import Viewer3D from "./components/viewer3d/Viewer3D.svelte";
   import ProfileEditorView from "./components/profile-editor/ProfileEditorView.svelte";
+  import QuotationView from "./components/project/QuotationView.svelte";
+  import PlanningView from "./components/project/PlanningView.svelte";
+  import EnergyView from "./components/project/EnergyView.svelte";
+  import CertificationView from "./components/project/CertificationView.svelte";
+  import BcfView from "./components/project/BcfView.svelte";
+  import CutOptimizationView from "./components/project/CutOptimizationView.svelte";
+  import IdsValidationView from "./components/project/IdsValidationView.svelte";
   import AiAssistant from "./components/panels/AiAssistant.svelte";
   import { loadProject } from "./stores/project.js";
   import { loadProfiles } from "./stores/profiles.js";
   import { registerUndoRedoShortcuts } from "./stores/history.js";
-  import { activeRibbonTab } from "./stores/ui.js";
+  import { activeRibbonTab, activeWorkspaceView } from "./stores/ui.js";
   import { getSetting, saveSetting } from "./lib/settings.js";
 
   let cleanupShortcuts;
-  let workspaceView = "editor";
+  $: workspaceView = $activeWorkspaceView;
   let rightTab = "properties";
   let leftWidth = getSetting("left_panel_width") || 220;
   let rightWidth = getSetting("right_panel_width") || 290;
@@ -79,7 +86,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "editor"}
-    onclick={() => (workspaceView = "editor")}
+    onclick={() => activeWorkspaceView.set("editor")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <rect x="3" y="3" width="18" height="18" rx="1"/>
@@ -91,7 +98,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "viewer3d"}
-    onclick={() => (workspaceView = "viewer3d")}
+    onclick={() => activeWorkspaceView.set("viewer3d")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -103,7 +110,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "kozijnstaat"}
-    onclick={() => (workspaceView = "kozijnstaat")}
+    onclick={() => activeWorkspaceView.set("kozijnstaat")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <rect x="3" y="3" width="18" height="18" rx="1"/>
@@ -116,7 +123,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "production"}
-    onclick={() => (workspaceView = "production")}
+    onclick={() => activeWorkspaceView.set("production")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
@@ -129,7 +136,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "calculation"}
-    onclick={() => (workspaceView = "calculation")}
+    onclick={() => activeWorkspaceView.set("calculation")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <rect x="4" y="2" width="16" height="20" rx="1"/>
@@ -143,7 +150,7 @@
   <button
     class="ws-tab"
     class:active={workspaceView === "profiles"}
-    onclick={() => (workspaceView = "profiles")}
+    onclick={() => activeWorkspaceView.set("profiles")}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M4 4h4v16H4z"/>
@@ -151,6 +158,53 @@
       <path d="M18 4h2v16h-2z"/>
     </svg>
     {$_('tabs.profiles')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "planning"}
+    onclick={() => activeWorkspaceView.set("planning")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="4" width="18" height="16" rx="1"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="9" y1="4" x2="9" y2="20"/>
+    </svg>
+    Productieplan
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "energy"}
+    onclick={() => activeWorkspaceView.set("energy")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+    Energie
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "quotation"}
+    onclick={() => activeWorkspaceView.set("quotation")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <path d="M14 2v6h6"/>
+      <line x1="8" y1="13" x2="16" y2="13"/>
+      <line x1="8" y1="17" x2="16" y2="17"/>
+    </svg>
+    Offertes
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "bcf"}
+    onclick={() => activeWorkspaceView.set("bcf")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="9"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    BCF
   </button>
 </div>
 
@@ -259,6 +313,20 @@
     <CalculationView />
   {:else if workspaceView === "profiles"}
     <ProfileEditorView />
+  {:else if workspaceView === "planning"}
+    <PlanningView />
+  {:else if workspaceView === "energy"}
+    <EnergyView />
+  {:else if workspaceView === "quotation"}
+    <QuotationView />
+  {:else if workspaceView === "bcf"}
+    <BcfView />
+  {:else if workspaceView === "optimization"}
+    <CutOptimizationView />
+  {:else if workspaceView === "ids"}
+    <IdsValidationView />
+  {:else if workspaceView === "certification"}
+    <CertificationView />
   {/if}
 </div>
 

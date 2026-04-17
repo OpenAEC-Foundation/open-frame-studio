@@ -1,16 +1,36 @@
 <script>
   import { _ } from "svelte-i18n";
+  import { onMount } from "svelte";
   import { currentKozijn, selectedCellIndex } from "../../stores/kozijn.js";
   import { invoke } from "../../lib/tauri.js";
   import { get } from "svelte/store";
 
-  const GLASS_PRESETS = [
+  const FALLBACK_PRESETS = [
     { type: "Enkel", thickness: 6, ug: 5.8, panes: [{ thickness_mm: 6, pane_type: "float" }], spacer: "aluminium" },
     { type: "Dubbel", thickness: 20, ug: 2.8, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "float" }], spacer: "aluminium" },
     { type: "HR++", thickness: 24, ug: 1.0, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "warm-edge" },
     { type: "HR+++", thickness: 30, ug: 0.7, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "super-spacer" },
     { type: "Triple", thickness: 36, ug: 0.5, panes: [{ thickness_mm: 4, pane_type: "low-e" }, { thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "super-spacer" },
   ];
+
+  let GLASS_PRESETS = [...FALLBACK_PRESETS];
+
+  onMount(async () => {
+    try {
+      const library = await invoke("get_glass_library", {});
+      if (library && Array.isArray(library) && library.length > 0) {
+        GLASS_PRESETS = library.map(g => ({
+          type: g.type || g.name,
+          thickness: g.thickness || g.thicknessMm || 24,
+          ug: g.ug || g.ugValue || 1.0,
+          panes: g.panes || [],
+          spacer: g.spacer || g.spacerType || "warm-edge",
+        }));
+      }
+    } catch (e) {
+      // Glass library not available, use fallback presets
+    }
+  });
 
   const PANE_TYPES = ["float", "gehard", "gelamineerd", "low-e"];
   $: SPACER_TYPES = [

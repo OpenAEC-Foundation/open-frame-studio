@@ -213,6 +213,9 @@
           <option value="round">{$_('props.round')}</option>
           <option value="trapezoid">{$_('props.trapezoid') || "Trapezium (schuine stijlen)"}</option>
           <option value="arched_trapezoid">{$_('props.archedTrapezoid') || "Boog + trapezium"}</option>
+          <option value="elliptical">{$_('props.elliptical') || "Elliptisch"}</option>
+          <option value="triangle">{$_('props.triangle') || "Driehoek"}</option>
+          <option value="polygon">{$_('props.polygon') || "Polygonaal"}</option>
         </select>
       </div>
       {#if $currentKozijn.frame.shape?.shapeType === "arched" || $currentKozijn.frame.shape?.shapeType === "arched_trapezoid"}
