@@ -140,6 +140,7 @@ fn main() {
             commands::combination::remove_combination,
             // IFC roundtrip commands
             commands::ifc_roundtrip::compare_ifc_files,
+            commands::ifc_roundtrip::compare_ifc_roundtrip,
             get_platform,
         ])
         .setup(|app| {

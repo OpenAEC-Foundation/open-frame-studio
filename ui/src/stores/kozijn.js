@@ -151,6 +151,48 @@ export async function updateDividerProfile(dividerIndex, isColumn, profileId, pr
   await refreshProject();
 }
 
+export async function updateMemberProfile(memberType, memberIndex, profileId, profileName, profileWidth, profileDepth) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_member_profile", {
+    id: k.id,
+    memberType,
+    memberIndex: memberIndex ?? null,
+    profileId,
+    profileName,
+    profileWidth: profileWidth || null,
+    profileDepth: profileDepth || null,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
+export async function addFrameExtension(extension) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("add_frame_extension", {
+    id: k.id,
+    extensionJson: JSON.stringify(extension),
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
+export async function removeFrameExtension(extensionIndex) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("remove_frame_extension", {
+    id: k.id,
+    extensionIndex,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+}
+
 export async function updateFrameShape(shapeType, archHeight, topWidth, leftAngle, rightAngle) {
   const k = get(currentKozijn);
   if (!k) return;

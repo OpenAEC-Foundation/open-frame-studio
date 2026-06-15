@@ -4,6 +4,9 @@
   import { invoke } from "../../lib/tauri.js";
   import { toast } from "../../stores/toast.js";
 
+  // QuotationStatus enum values as serialized by the backend (snake_case serde)
+  const STATUSES = ["draft", "sent", "accepted", "rejected", "expired"];
+
   let quotations = [];
   let loading = false;
 
@@ -23,45 +26,96 @@
     try {
       await invoke("create_quotation", { kozijnMarks: [], totalInclBtw: 0 });
       await loadQuotations();
-      toast.success("Offerte aangemaakt");
+      toast.success($_("quotation.created"));
     } catch (e) {
-      toast.error("Fout bij aanmaken offerte: " + e);
+      toast.error($_("quotation.createFailed") + ": " + e);
+    }
+  }
+
+  async function updateStatus(q, status) {
+    if (!status || status === q.status) return;
+    try {
+      await invoke("update_quotation_status", { quotationId: q.id, status });
+      await loadQuotations();
+      toast.success($_("quotation.statusUpdated"));
+    } catch (e) {
+      toast.error($_("quotation.statusUpdateFailed") + ": " + e);
+      await loadQuotations();
+    }
+  }
+
+  async function createRevision(q) {
+    const desc = prompt($_("quotation.revisionPrompt"), "");
+    if (!desc) return;
+    const totalStr = prompt($_("quotation.revisionTotalPrompt"), String(q.totalInclBtw ?? 0));
+    if (totalStr === null) return;
+    const newTotal = parseFloat(totalStr.replace(",", "."));
+    if (Number.isNaN(newTotal) || newTotal < 0) {
+      toast.error($_("quotation.invalidTotal"));
+      return;
+    }
+    try {
+      await invoke("create_quotation_revision", { quotationId: q.id, newTotal, changeDescription: desc });
+      await loadQuotations();
+      toast.success($_("quotation.revisionCreated"));
+    } catch (e) {
+      toast.error($_("quotation.revisionFailed") + ": " + e);
     }
   }
 </script>
 
 <div class="view">
   <div class="toolbar">
-    <h2>Offertes</h2>
+    <h2>{$_("quotation.title")}</h2>
     <div class="toolbar-actions">
-      <button class="action-btn" onclick={loadQuotations}>Vernieuwen</button>
-      <button class="action-btn primary" onclick={createQuotation}>+ Nieuwe offerte</button>
+      <button class="action-btn" onclick={loadQuotations}>{$_("quotation.refresh")}</button>
+      <button class="action-btn primary" onclick={createQuotation}>{$_("quotation.new")}</button>
     </div>
   </div>
   {#if loading}
-    <p class="hint">Laden...</p>
+    <p class="hint">{$_("quotation.loading")}</p>
   {:else if quotations.length === 0}
-    <p class="hint">Nog geen offertes. Klik op "+ Nieuwe offerte" om te beginnen.</p>
+    <p class="hint">{$_("quotation.empty")}</p>
   {:else}
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th>Versie</th>
-            <th>Status</th>
-            <th>Datum</th>
-            <th>Totaal incl. BTW</th>
-            <th>Wijziging</th>
+            <th>{$_("quotation.col.version")}</th>
+            <th>{$_("quotation.col.status")}</th>
+            <th>{$_("quotation.col.date")}</th>
+            <th>{$_("quotation.col.total")}</th>
+            <th>{$_("quotation.col.change")}</th>
+            <th>{$_("quotation.col.actions")}</th>
           </tr>
         </thead>
         <tbody>
-          {#each quotations as q}
+          {#each quotations as q (q.id)}
             <tr>
               <td>v{q.version || 1}</td>
-              <td><span class="status-badge {q.status || 'draft'}">{q.status || "concept"}</span></td>
-              <td>{q.createdAt?.slice(0, 10) || "\u2014"}</td>
+              <td>
+                <span class="status-badge {q.status || 'draft'}">
+                  {$_("quotation.status." + (q.status || "draft"))}
+                </span>
+              </td>
+              <td>{q.createdAt?.slice(0, 10) || "—"}</td>
               <td class="num">&euro; {(q.totalInclBtw || 0).toFixed(2)}</td>
-              <td>{q.changeDescription || "\u2014"}</td>
+              <td>{q.changeDescription || "—"}</td>
+              <td class="actions">
+                <select
+                  class="status-select"
+                  value={q.status || "draft"}
+                  onchange={(e) => updateStatus(q, e.target.value)}
+                  title={$_("quotation.changeStatus")}
+                >
+                  {#each STATUSES as s}
+                    <option value={s}>{$_("quotation.status." + s)}</option>
+                  {/each}
+                </select>
+                <button class="row-btn" onclick={() => createRevision(q)}>
+                  {$_("quotation.newRevision")}
+                </button>
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -85,9 +139,14 @@
   tbody tr:hover { background: rgba(217, 119, 6, 0.04); }
   td { padding: var(--sp-2) var(--sp-3); color: var(--text-primary); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.actions { white-space: nowrap; }
+  .status-select { padding: 2px var(--sp-2); background: var(--bg-surface-alt); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 11px; margin-right: var(--sp-2); }
+  .row-btn { padding: 2px var(--sp-2); background: var(--bg-surface-alt); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; cursor: default; }
+  .row-btn:hover { border-color: var(--amber); color: var(--amber); }
   .status-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
   .status-badge.draft { background: #333; color: #888; }
   .status-badge.sent { background: #3b82f6; color: #fff; }
   .status-badge.accepted { background: #22c55e; color: #111; }
   .status-badge.rejected { background: #ef4444; color: #fff; }
+  .status-badge.expired { background: #a16207; color: #fff; }
 </style>

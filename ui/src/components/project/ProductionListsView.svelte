@@ -1,10 +1,19 @@
 <script>
   import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
+  import { invoke } from "../../lib/tauri.js";
   import { productionDataProject, loadProductionDataProject } from "../../stores/production.js";
+  import { vliesgevels, loadVliesgevels } from "../../stores/vliesgevel.js";
   import { memberLabel, gasketLabel } from "../../lib/labels.js";
 
   let activeTab = "kortlijst";
+
+  // Vliesgevel production (one vliesgevel at a time, picked via the selector)
+  let selectedVgId = "";
+  let vgProduction = null;
+
+  // Tabs for which vliesgevel production data exists
+  const vgTabs = ["kortlijst", "glaslijst", "rubberlijst", "stuklijst"];
 
   $: tabs = [
     { id: "kortlijst", label: $_('production.cutList') },
@@ -15,7 +24,33 @@
     { id: "stuklijst", label: $_('production.bomList') },
   ];
 
-  onMount(loadProductionDataProject);
+  onMount(() => {
+    loadProductionDataProject();
+    loadVliesgevels();
+  });
+
+  // Keep the selector valid: pick the first vliesgevel when none (or a removed one) is selected.
+  $: if ($vliesgevels.length > 0 && !$vliesgevels.some((v) => v.id === selectedVgId)) {
+    selectedVgId = $vliesgevels[0].id;
+  }
+  $: if ($vliesgevels.length === 0 && selectedVgId) {
+    selectedVgId = "";
+    vgProduction = null;
+  }
+  $: if (selectedVgId) loadVgProduction(selectedVgId);
+
+  $: vgCut = vgProduction
+    ? [...(vgProduction.mullionList || []), ...(vgProduction.transomList || [])]
+    : [];
+
+  async function loadVgProduction(id) {
+    try {
+      vgProduction = await invoke("get_vliesgevel_production", { id });
+    } catch (e) {
+      console.error("Vliesgevel productiedata laden mislukt:", e);
+      vgProduction = null;
+    }
+  }
 
   // Flatten data per list type
   $: allCut = ($productionDataProject || []).flatMap(p =>
@@ -39,6 +74,8 @@
 
   async function refresh() {
     await loadProductionDataProject();
+    await loadVliesgevels();
+    if (selectedVgId) await loadVgProduction(selectedVgId);
   }
 </script>
 
@@ -197,6 +234,112 @@
         </tbody>
       </table>
     {/if}
+
+    {#if $vliesgevels.length > 0 && vgTabs.includes(activeTab)}
+      <div class="vg-section">
+        <div class="vg-toolbar">
+          <h3>{$_('vliesgevel.title')}</h3>
+          <select class="vg-select" bind:value={selectedVgId} title={$_('vliesgevel.select')}>
+            {#each $vliesgevels as vg (vg.id)}
+              <option value={vg.id}>{vg.mark} — {vg.name}</option>
+            {/each}
+          </select>
+        </div>
+
+        {#if vgProduction}
+          {#if activeTab === "kortlijst"}
+            <table>
+              <colgroup>
+                <col style="width:7%"><col style="width:9%"><col style="width:14%"><col style="width:14%">
+                <col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:8%"><col style="width:6%">
+              </colgroup>
+              <thead><tr>
+                <th>{$_('vliesgevel.vliesgevel')}</th><th>{$_('production.position')}</th><th>{$_('production.part')}</th><th>{$_('production.profile')}</th>
+                <th>{$_('production.material')}</th><th class="num">{$_('production.net')}</th><th class="num">{$_('production.gross')}</th><th class="num">{$_('production.angleL')}</th><th class="num">{$_('production.angleR')}</th><th class="num">{$_('production.quantity')}</th>
+              </tr></thead>
+              <tbody>
+                {#each vgCut as item}
+                  <tr>
+                    <td>{vgProduction.mark}</td>
+                    <td>{item.pieceId}</td>
+                    <td>{memberLabel($_, item.memberType)}</td>
+                    <td>{item.profileName}</td>
+                    <td>{item.material}</td>
+                    <td class="num">{Math.round(item.netLengthMm)}</td>
+                    <td class="num">{Math.round(item.grossLengthMm)}</td>
+                    <td class="num">{item.miterLeftDeg}&deg;</td>
+                    <td class="num">{item.miterRightDeg}&deg;</td>
+                    <td class="num">{item.quantity}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+          {:else if activeTab === "glaslijst"}
+            <table>
+              <colgroup>
+                <col style="width:8%"><col style="width:10%"><col style="width:14%"><col style="width:12%">
+                <col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:6%">
+              </colgroup>
+              <thead><tr>
+                <th>{$_('vliesgevel.vliesgevel')}</th><th>{$_('production.position')}</th><th>{$_('production.glassType')}</th><th class="num">{$_('production.width')}</th>
+                <th class="num">{$_('production.height')}</th><th class="num">{$_('production.thickness')}</th><th class="num">{$_('production.ug')}</th><th class="num">{$_('production.area')}</th><th class="num">{$_('production.quantity')}</th>
+              </tr></thead>
+              <tbody>
+                {#each vgProduction.glassList || [] as item}
+                  <tr>
+                    <td>{vgProduction.mark}</td>
+                    <td>{item.pieceId}</td>
+                    <td>{item.glassType}</td>
+                    <td class="num">{Math.round(item.widthMm)}</td>
+                    <td class="num">{Math.round(item.heightMm)}</td>
+                    <td class="num">{item.thicknessMm}</td>
+                    <td class="num">{item.ugValue.toFixed(1)}</td>
+                    <td class="num">{item.areaM2.toFixed(2)} m&sup2;</td>
+                    <td class="num">{item.quantity}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+          {:else if activeTab === "rubberlijst"}
+            <table>
+              <thead><tr>
+                <th>{$_('vliesgevel.vliesgevel')}</th><th>{$_('production.type')}</th><th>{$_('production.lengthMm')}</th><th>{$_('production.quantity')}</th>
+              </tr></thead>
+              <tbody>
+                {#each vgProduction.gasketList || [] as item}
+                  <tr>
+                    <td>{vgProduction.mark}</td>
+                    <td>{gasketLabel($_, item.gasketType)}</td>
+                    <td class="num">{Math.round(item.lengthMm)}</td>
+                    <td class="num">{item.quantity}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+          {:else if activeTab === "stuklijst"}
+            <table>
+              <thead><tr>
+                <th>{$_('vliesgevel.vliesgevel')}</th><th>{$_('production.category')}</th><th>{$_('production.description')}</th><th>{$_('production.unit')}</th><th>{$_('production.amount')}</th>
+              </tr></thead>
+              <tbody>
+                {#each vgProduction.bom || [] as item}
+                  <tr>
+                    <td>{vgProduction.mark}</td>
+                    <td>{item.category}</td>
+                    <td>{item.description}</td>
+                    <td>{item.unit}</td>
+                    <td class="num">{item.quantity.toFixed(2)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -270,6 +413,34 @@
   .table-container {
     flex: 1;
     overflow: auto;
+  }
+
+  .vg-section {
+    margin-top: var(--sp-5);
+    border-top: 2px solid var(--border-color, #e5e7eb);
+    padding-top: var(--sp-3);
+  }
+
+  .vg-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-3);
+  }
+
+  .vg-toolbar h3 {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .vg-select {
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
   }
 
   table {

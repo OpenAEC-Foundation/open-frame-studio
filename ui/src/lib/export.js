@@ -141,7 +141,8 @@ export async function exportIfcWithLod(lod) {
     defaultPath: `${k.mark}_lod${lod}.ifc`,
   });
   if (!path) return;
-  await api("export_ifc", { id: k.id, outputPath: path, lod });
+  // Rust expects lod as Option<String> — always pass a string.
+  await api("export_ifc", { id: k.id, outputPath: path, lod: String(lod) });
   toast.success(get(_)("alert.exportSuccess", { values: { type: `IFC LOD${lod}`, path } }));
 }
 
@@ -159,6 +160,29 @@ export async function importIfcFile() {
   return result;
 }
 
+function toastIfcDiffSummary(result) {
+  let diff = null;
+  try {
+    diff = typeof result === "string" ? JSON.parse(result) : result;
+  } catch {
+    diff = null;
+  }
+  if (!diff) {
+    toast.warning(get(_)("alert.ifcCompareNoResult"));
+    return;
+  }
+  toast.success(
+    get(_)("alert.ifcCompareSummary", {
+      values: {
+        added: diff.added?.length ?? 0,
+        removed: diff.removed?.length ?? 0,
+        modified: diff.modified?.length ?? 0,
+        unchanged: diff.unchanged ?? 0,
+      },
+    })
+  );
+}
+
 export async function compareIfcRoundtrip() {
   const { open } = await getOpenDialog();
   const path = await open({
@@ -167,7 +191,26 @@ export async function compareIfcRoundtrip() {
   });
   if (!path) return;
   const result = await api("compare_ifc_roundtrip", { filePath: path });
-  toast.success("IFC roundtrip vergelijking voltooid");
+  toastIfcDiffSummary(result);
+  return result;
+}
+
+export async function compareIfcFiles() {
+  const { open } = await getOpenDialog();
+  const oldPath = await open({
+    title: get(_)("dialog.selectOldIfc"),
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    multiple: false,
+  });
+  if (!oldPath) return;
+  const newPath = await open({
+    title: get(_)("dialog.selectNewIfc"),
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    multiple: false,
+  });
+  if (!newPath) return;
+  const result = await api("compare_ifc_files", { oldPath, newPath });
+  toastIfcDiffSummary(result);
   return result;
 }
 

@@ -21,7 +21,7 @@
     exportGltf, exportProduction, sendToBlender,
     importDxfProfile, importCatalog,
     exportCncGcode, exportLabels, exportIfcWithLod,
-    importIfcFile, compareIfcRoundtrip,
+    importIfcFile, compareIfcRoundtrip, compareIfcFiles,
   } from "../../lib/export.js";
   import ShapeManager from "../panels/ShapeManager.svelte";
   import { _ } from "svelte-i18n";
@@ -29,8 +29,8 @@
   import { invoke } from "../../lib/tauri.js";
   import { toast } from "../../stores/toast.js";
 
-  let showShapeManager = false;
-  let ifcLod = 200;
+  let showShapeManager = $state(false);
+  let ifcLod = $state("300");
 
   const BUILTIN_SJABLONEN = [
     { id: "standaard-67-meranti", name: "Standaard 67mm Meranti", series: "67" },
@@ -40,7 +40,8 @@
   ];
   let customSjablonen = $state([]);
   let allSjablonen = $derived([...BUILTIN_SJABLONEN, ...customSjablonen]);
-  let activeSjabloonId = "standaard-67-meranti";
+  let activeSjabloonId = $state("standaard-67-meranti");
+  let isCustomSjabloon = $derived(activeSjabloonId.startsWith("custom-"));
 
   // Load custom sjablonen from backend
   onMount(async () => {
@@ -74,6 +75,30 @@
       toast.success(`Sjabloon "${name}" opgeslagen`);
     } catch (e) {
       toast.error(`Fout bij opslaan: ${e}`);
+    }
+  }
+
+  async function deleteSjabloon() {
+    if (!isCustomSjabloon) return;
+    const sj = customSjablonen.find(s => s.id === activeSjabloonId);
+    if (!confirm(get(_)('confirm.deleteSjabloon', { values: { name: sj?.name || activeSjabloonId } }))) return;
+    try {
+      await invoke("delete_custom_sjabloon", { sjabloonId: activeSjabloonId });
+      customSjablonen = customSjablonen.filter(s => s.id !== activeSjabloonId);
+      activeSjabloonId = BUILTIN_SJABLONEN[0].id;
+      toast.success(get(_)('alert.sjabloonDeleted'));
+    } catch (e) {
+      toast.error(`${e}`);
+    }
+  }
+
+  async function testBlenderConnection() {
+    try {
+      const ok = await invoke("check_blender_connection", {});
+      if (ok === true) toast.success(get(_)('alert.blenderConnected'));
+      else toast.warning(get(_)('alert.blenderNotConnected'));
+    } catch (e) {
+      toast.error(get(_)('alert.blenderError', { values: { error: e } }));
     }
   }
 
@@ -171,6 +196,9 @@
         </select>
         <button class="ribbon-btn-sm" onclick={saveAsTemplate} title="Huidig kozijn opslaan als sjabloon">
           💾 Opslaan als sjabloon
+        </button>
+        <button class="ribbon-btn-sm" onclick={deleteSjabloon} disabled={!isCustomSjabloon} title={$_('ribbon.deleteSjabloon')}>
+          🗑 {$_('ribbon.deleteSjabloon')}
         </button>
       </div>
 
@@ -421,11 +449,9 @@
           </button>
         </div>
         <select class="sjabloon-select" style="min-width:100px" bind:value={ifcLod}>
-          <option value={100}>LOD 100</option>
-          <option value={200}>LOD 200</option>
-          <option value={300}>LOD 300</option>
-          <option value={350}>LOD 350</option>
-          <option value={400}>LOD 400</option>
+          <option value="200">LOD 200</option>
+          <option value="300">LOD 300</option>
+          <option value="400">LOD 400</option>
         </select>
       </div>
 
@@ -449,6 +475,36 @@
               <path d="M21 13v2a4 4 0 01-4 4H3"/>
             </svg>
             <span>IFC Roundtrip</span>
+          </button>
+          <button class="ribbon-btn" onclick={compareIfcFiles}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="7" height="16" rx="1"/>
+              <rect x="14" y="4" width="7" height="16" rx="1"/>
+              <path d="M10 12h4"/>
+            </svg>
+            <span>{$_('ribbon.compareIfc')}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <span class="group-label">{$_('ribbon.validation')}</span>
+        <div class="group-buttons">
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("ids")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+            </svg>
+            <span>{$_('tabs.ids')}</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("certification")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="9" r="6"/>
+              <path d="M9 14l-1 8 4-3 4 3-1-8"/>
+            </svg>
+            <span>{$_('tabs.certification')}</span>
           </button>
         </div>
       </div>
@@ -524,6 +580,12 @@
               <path d="M8 12l3 3 5-5"/>
             </svg>
             <span>{$_('ribbon.toBlender')}</span>
+          </button>
+          <button class="ribbon-btn" onclick={testBlenderConnection}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h3l2-4 4 8 2-4h3"/>
+            </svg>
+            <span>{$_('ribbon.testBlender')}</span>
           </button>
         </div>
       </div>
@@ -607,6 +669,23 @@
               <line x1="9" y1="4" x2="9" y2="20"/>
             </svg>
             <span>Planning</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("cnc")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="6" width="20" height="12" rx="2"/>
+              <path d="M6 10h4v4H6z"/>
+              <line x1="14" y1="10" x2="18" y2="10"/>
+              <line x1="14" y1="14" x2="18" y2="14"/>
+            </svg>
+            <span>{$_('tabs.cnc')}</span>
+          </button>
+          <button class="ribbon-btn" onclick={() => activeWorkspaceView.set("procurement")}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="20" r="1.5"/>
+              <circle cx="17" cy="20" r="1.5"/>
+              <path d="M3 4h2l2.5 12h11L21 8H6"/>
+            </svg>
+            <span>{$_('tabs.procurement')}</span>
           </button>
         </div>
       </div>

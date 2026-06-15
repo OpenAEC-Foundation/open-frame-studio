@@ -1,11 +1,28 @@
 <script>
   import { _ } from "svelte-i18n";
+  import { onMount } from "svelte";
   import { kozijnen } from "../../stores/project.js";
   import { selectKozijn, removeKozijn, currentKozijn } from "../../stores/kozijn.js";
+  import {
+    vliesgevels,
+    loadVliesgevels,
+    selectVliesgevel,
+    removeVliesgevel,
+    currentVliesgevel,
+    clearVliesgevelSelection,
+  } from "../../stores/vliesgevel.js";
   import { panelTypeSummary } from "../../lib/labels.js";
+
+  onMount(loadVliesgevels);
 
   function cellSummary(kozijn) {
     return panelTypeSummary($_, kozijn.cells);
+  }
+
+  function openKozijn(id) {
+    // Clear the vliesgevel selection so the editor swaps back to the kozijn editor.
+    clearVliesgevelSelection();
+    selectKozijn(id);
   }
 </script>
 
@@ -18,8 +35,8 @@
       {#each $kozijnen as kozijn}
         <div
           class="card"
-          class:active={$currentKozijn?.id === kozijn.id}
-          onclick={() => selectKozijn(kozijn.id)}
+          class:active={!$currentVliesgevel && $currentKozijn?.id === kozijn.id}
+          onclick={() => openKozijn(kozijn.id)}
           role="button"
           tabindex="0"
         >
@@ -35,6 +52,35 @@
           <div class="card-info">
             <span>{kozijn.frame.outerWidth} x {kozijn.frame.outerHeight} mm</span>
             <span class="cells">{cellSummary(kozijn)}</span>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  {#if $vliesgevels && $vliesgevels.length > 0}
+    <h3 class="section-title">{$_('vliesgevel.title')}</h3>
+    <div class="list">
+      {#each $vliesgevels as vg (vg.id)}
+        <div
+          class="card"
+          class:active={$currentVliesgevel?.id === vg.id}
+          onclick={() => selectVliesgevel(vg.id)}
+          role="button"
+          tabindex="0"
+        >
+          <div class="card-header">
+            <span class="mark">{vg.mark}</span>
+            <span class="name">{vg.name}</span>
+            <button
+              class="delete-btn"
+              onclick={(e) => { e.stopPropagation(); removeVliesgevel(vg.id); }}
+              title={$_('project.delete')}
+            >x</button>
+          </div>
+          <div class="card-info">
+            <span>{Math.round(vg.overallWidth)} x {Math.round(vg.overallHeight)} mm</span>
+            <span class="cells">{vg.panels.length} {$_('vliesgevel.panels')}</span>
           </div>
         </div>
       {/each}
@@ -58,6 +104,12 @@
     color: var(--text-muted);
     margin: 0;
     padding: 4px 10px 6px;
+  }
+
+  .section-title {
+    margin-top: 12px;
+    border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+    padding-top: 10px;
   }
 
   .empty {

@@ -146,7 +146,9 @@ fn extract_dimensions(line: &str) -> Option<(f64, f64)> {
         }
     }
     if floats.len() >= 2 {
-        Some((floats[1], floats[0])) // width, height
+        // Reverse scan: floats[0] is the LAST attribute (OverallWidth),
+        // floats[1] the one before it (OverallHeight)
+        Some((floats[0], floats[1])) // (width, height)
     } else {
         None
     }

@@ -25,6 +25,9 @@
   import BcfView from "./components/project/BcfView.svelte";
   import CutOptimizationView from "./components/project/CutOptimizationView.svelte";
   import IdsValidationView from "./components/project/IdsValidationView.svelte";
+  import CombinationView from "./components/project/CombinationView.svelte";
+  import ProcurementView from "./components/project/ProcurementView.svelte";
+  import CncView from "./components/project/CncView.svelte";
   import AiAssistant from "./components/panels/AiAssistant.svelte";
   import { loadProject } from "./stores/project.js";
   import { loadProfiles } from "./stores/profiles.js";
@@ -169,7 +172,7 @@
       <line x1="3" y1="10" x2="21" y2="10"/>
       <line x1="9" y1="4" x2="9" y2="20"/>
     </svg>
-    Productieplan
+    {$_('tabs.planning')}
   </button>
   <button
     class="ws-tab"
@@ -179,7 +182,7 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
     </svg>
-    Energie
+    {$_('tabs.energy')}
   </button>
   <button
     class="ws-tab"
@@ -192,7 +195,7 @@
       <line x1="8" y1="13" x2="16" y2="13"/>
       <line x1="8" y1="17" x2="16" y2="17"/>
     </svg>
-    Offertes
+    {$_('tabs.quotation')}
   </button>
   <button
     class="ws-tab"
@@ -204,7 +207,77 @@
       <line x1="12" y1="8" x2="12" y2="12"/>
       <line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    BCF
+    {$_('tabs.bcf')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "optimization"}
+    onclick={() => activeWorkspaceView.set("optimization")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="6" width="20" height="3" rx="1"/>
+      <rect x="2" y="11" width="14" height="3" rx="1"/>
+      <rect x="2" y="16" width="18" height="3" rx="1"/>
+    </svg>
+    {$_('tabs.optimization')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "cnc"}
+    onclick={() => activeWorkspaceView.set("cnc")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="6" width="20" height="12" rx="2"/>
+      <path d="M6 10h4v4H6z"/>
+      <line x1="14" y1="10" x2="18" y2="10"/>
+      <line x1="14" y1="14" x2="18" y2="14"/>
+    </svg>
+    {$_('tabs.cnc')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "procurement"}
+    onclick={() => activeWorkspaceView.set("procurement")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="9" cy="20" r="1.5"/>
+      <circle cx="17" cy="20" r="1.5"/>
+      <path d="M3 4h2l2.5 12h11L21 8H6"/>
+    </svg>
+    {$_('tabs.procurement')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "combination"}
+    onclick={() => activeWorkspaceView.set("combination")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="6" width="9" height="12" rx="1"/>
+      <rect x="13" y="6" width="9" height="12" rx="1"/>
+    </svg>
+    {$_('tabs.combination')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "ids"}
+    onclick={() => activeWorkspaceView.set("ids")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+    {$_('tabs.ids')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "certification"}
+    onclick={() => activeWorkspaceView.set("certification")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="9" r="6"/>
+      <path d="M9 14l-1 8 4-3 4 3-1-8"/>
+    </svg>
+    {$_('tabs.certification')}
   </button>
 </div>
 
@@ -327,6 +400,12 @@
     <IdsValidationView />
   {:else if workspaceView === "certification"}
     <CertificationView />
+  {:else if workspaceView === "combination"}
+    <CombinationView />
+  {:else if workspaceView === "procurement"}
+    <ProcurementView />
+  {:else if workspaceView === "cnc"}
+    <CncView />
   {/if}
 </div>
 
@@ -337,6 +416,7 @@
 <style>
   .workspace-tabs {
     display: flex;
+    flex-wrap: wrap;
     background: var(--bg-surface-alt);
     border-bottom: var(--border-default);
     padding: 0 var(--sp-3);

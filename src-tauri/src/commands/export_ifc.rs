@@ -21,7 +21,9 @@ pub async fn export_ifc(
 
     let lod_level = match lod.as_deref() {
         Some("200") => ofs_core::export::ifc::LodLevel::Lod200,
+        Some("300") => ofs_core::export::ifc::LodLevel::Lod300,
         Some("400") => ofs_core::export::ifc::LodLevel::Lod400,
+        // Unknown or absent LOD: fall back to the default level.
         _ => ofs_core::export::ifc::LodLevel::Lod300,
     };
 

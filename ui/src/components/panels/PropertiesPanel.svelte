@@ -9,14 +9,17 @@
     updateCellType,
     updateFrameProfile,
     updateSillProfile,
-    updateDividerProfile,
     updateFrameShape,
     updateGridSizes,
     updateFrameColors,
     calculateThermal,
     updateCellSashProfile,
+    updateMemberProfile,
+    addFrameExtension,
+    removeFrameExtension,
   } from "../../stores/kozijn.js";
   import { allProfiles } from "../../stores/profiles.js";
+  import { toast } from "../../stores/toast.js";
   import { PANEL_TYPE_KEYS, panelLabel, memberLabel } from "../../lib/labels.js";
   import HardwarePanel from "./HardwarePanel.svelte";
   import JointPanel from "./JointPanel.svelte";
@@ -65,21 +68,31 @@
     return base;
   }
 
-  function getMemberProfile(member) {
-    if (!member || !$currentKozijn) return null;
-    const frame = $currentKozijn.frame;
-    if (member.type === "frame_top") return frame.topProfile || frame.profile;
-    if (member.type === "frame_bottom") return frame.bottomProfile || frame.sillProfile || frame.profile;
-    if (member.type === "frame_left") return frame.leftProfile || frame.profile;
-    if (member.type === "frame_right") return frame.rightProfile || frame.profile;
+  // The profile override set on this specific member, or null when the
+  // member follows the default frame profile. Divider i sits between
+  // division i and i+1; ofs-core stores its profile on division i+1.
+  function getMemberOverride(member, kozijn) {
+    if (!member || !kozijn) return null;
+    const frame = kozijn.frame;
+    if (member.type === "frame_top") return frame.topProfile || null;
+    if (member.type === "frame_bottom") return frame.bottomProfile || null;
+    if (member.type === "frame_left") return frame.leftProfile || null;
+    if (member.type === "frame_right") return frame.rightProfile || null;
     if (member.type === "divider_v") {
-      const col = $currentKozijn.grid.columns[member.index];
-      return col?.dividerProfile || frame.profile;
+      return kozijn.grid.columns[member.index + 1]?.dividerProfile || null;
     }
     if (member.type === "divider_h") {
-      const row = $currentKozijn.grid.rows[member.index];
-      return row?.dividerProfile || frame.profile;
+      return kozijn.grid.rows[member.index + 1]?.dividerProfile || null;
     }
+    return null;
+  }
+
+  function getMemberProfile(member) {
+    if (!member || !$currentKozijn) return null;
+    const override = getMemberOverride(member, $currentKozijn);
+    if (override) return override;
+    const frame = $currentKozijn.frame;
+    if (member.type === "frame_bottom") return frame.sillProfile || frame.profile;
     return frame.profile;
   }
 
@@ -99,14 +112,51 @@
   function handleMemberProfileChange(detail) {
     const member = $selectedMember;
     if (!member) return;
-    if (member.type.startsWith("frame_")) {
-      // For now, frame members share the main frame profile
-      updateFrameProfile(detail.id, detail.name, detail.width, detail.depth);
-    } else if (member.type === "divider_v") {
-      updateDividerProfile(member.index, true, detail.id, detail.name);
-    } else if (member.type === "divider_h") {
-      updateDividerProfile(member.index, false, detail.id, detail.name);
+    const memberIndex =
+      member.type === "divider_v" || member.type === "divider_h" ? member.index : null;
+    updateMemberProfile(member.type, memberIndex, detail.id, detail.name, detail.width, detail.depth)
+      .catch((e) => toast.error(String(e)));
+  }
+
+  // ── Frame extensions (verlengde dorpel, extra stijl, ...) ──
+  const EXTENSION_TYPE_KEYS = {
+    dorpel: "props.extDorpel",
+    stijl: "props.extStijl",
+    balk: "props.extBalk",
+    neut: "props.extNeut",
+    spouwlat: "props.extSpouwlat",
+  };
+
+  let newExtType = "dorpel";
+  let newExtSize = 100;
+
+  function extensionLength(ext) {
+    return Math.round(Math.hypot(ext.endX - ext.startX, ext.endY - ext.startY));
+  }
+
+  async function handleAddExtension() {
+    const k = $currentKozijn;
+    if (!k || !(newExtSize > 0)) return;
+    const vertical = newExtType === "stijl";
+    const ext = {
+      extensionType: newExtType,
+      profile: { id: k.frame.profile.id, name: k.frame.profile.name },
+      startX: 0,
+      startY: 0,
+      endX: vertical ? 0 : newExtSize,
+      endY: vertical ? newExtSize : 0,
+      memberWidth: k.frame.frameWidth,
+      connectsTo: [],
+    };
+    try {
+      await addFrameExtension(ext);
+    } catch (e) {
+      toast.error(String(e));
     }
+  }
+
+  function handleRemoveExtension(index) {
+    removeFrameExtension(index).catch((e) => toast.error(String(e)));
   }
 </script>
 
@@ -317,6 +367,7 @@
     </div>
 
     {#if $selectedMember}
+      {@const memberOverride = getMemberOverride($selectedMember, $currentKozijn)}
       <div class="section">
         <h3>{$_('member.title')}</h3>
         <div class="field">
@@ -329,6 +380,14 @@
           value={getMemberProfile($selectedMember)}
           onchange={(detail) => handleMemberProfileChange(detail)}
         />
+        <div class="field">
+          <label>{$_('props.memberOverride')}</label>
+          {#if memberOverride}
+            <div class="value override-value">{memberOverride.name}</div>
+          {:else}
+            <div class="value override-default">{$_('props.memberStandard')}</div>
+          {/if}
+        </div>
         {#if getMemberProfile($selectedMember)}
           {@const profileDef = getMemberProfileDefinition($selectedMember)}
           <div class="field-row">
@@ -545,6 +604,47 @@
         </div>
       {/each}
     </div>
+
+    <div class="section">
+      <h3>{$_('props.extensions')}</h3>
+      {#if ($currentKozijn.extensions || []).length > 0}
+        <ul class="ext-list">
+          {#each $currentKozijn.extensions as ext, i}
+            <li class="ext-item">
+              <span class="ext-type" title={ext.profile?.name || ""}>
+                {EXTENSION_TYPE_KEYS[ext.extensionType] ? $_(EXTENSION_TYPE_KEYS[ext.extensionType]) : ext.extensionType}
+              </span>
+              <span class="ext-size">{extensionLength(ext)} mm</span>
+              <button
+                class="ext-remove"
+                title={$_('props.extensionRemove')}
+                aria-label={$_('props.extensionRemove')}
+                onclick={() => handleRemoveExtension(i)}
+              >×</button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="ext-empty">{$_('props.extensionsEmpty')}</p>
+      {/if}
+      <div class="field-row">
+        <div class="field">
+          <label>{$_('props.extensionType')}</label>
+          <select bind:value={newExtType}>
+            {#each Object.keys(EXTENSION_TYPE_KEYS) as et}
+              <option value={et}>{$_(EXTENSION_TYPE_KEYS[et])}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="field">
+          <label>{$_('props.extensionSize')}</label>
+          <input type="number" bind:value={newExtSize} min="10" max="6000" step="10" />
+        </div>
+      </div>
+      <button class="ext-add" onclick={handleAddExtension}>
+        {$_('props.extensionAdd')}
+      </button>
+    </div>
   {:else}
     <div class="empty">
       <p>{$_('props.empty')}</p>
@@ -708,6 +808,95 @@
   .thermal-b .rating { background: #84CC16; }
   .thermal-c .rating { background: var(--warning); }
   .thermal-d .rating { background: var(--error); }
+
+  .override-value {
+    font-weight: 600;
+  }
+
+  .override-default {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .ext-list {
+    list-style: none;
+    margin: 0 0 8px 0;
+    padding: 0;
+  }
+
+  .ext-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.06));
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .ext-item:last-child {
+    border-bottom: none;
+  }
+
+  .ext-type {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ext-size {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .ext-remove {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+    border-radius: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .ext-remove:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
+
+  .ext-empty {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .ext-add {
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 4px 6px;
+    background: var(--bg-surface-alt);
+    border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+    border-radius: 2px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-body);
+    cursor: pointer;
+  }
+
+  .ext-add:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
 
   .edge-row {
     display: flex;

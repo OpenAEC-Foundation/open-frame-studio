@@ -1,10 +1,40 @@
 import { writable, get } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
-import { refreshProject } from "./project.js";
+import { refreshProject, project } from "./project.js";
 
 export const currentVliesgevel = writable(null);
 export const currentVgGeometry = writable(null);
 export const selectedPanelIndex = writable(null);
+
+/** All vliesgevels in the current project. */
+export const vliesgevels = writable([]);
+
+// Keep the list in sync with the project store. Every mutation (create from
+// template, add/remove mullion, remove, ...) calls refreshProject(), and
+// open/new project replace the project store — so newly created vliesgevels
+// show up here automatically.
+project.subscribe(($project) => {
+  vliesgevels.set($project?.vliesgevels || []);
+});
+
+/** Load all vliesgevels from the backend into the list store. */
+export async function loadVliesgevels() {
+  try {
+    const list = await invoke("get_all_vliesgevels");
+    vliesgevels.set(Array.isArray(list) ? list : []);
+    return list;
+  } catch (e) {
+    console.error("Vliesgevels laden mislukt:", e);
+    return [];
+  }
+}
+
+/** Clear the vliesgevel selection so the kozijn editor becomes active again. */
+export function clearVliesgevelSelection() {
+  currentVliesgevel.set(null);
+  currentVgGeometry.set(null);
+  selectedPanelIndex.set(null);
+}
 
 export async function createVliesgevel(name, mark, width, height, mullionSpacing, transomSpacing) {
   const vg = await invoke("create_vliesgevel", {
