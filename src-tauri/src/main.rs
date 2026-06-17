@@ -131,6 +131,8 @@ fn main() {
             commands::energy::get_project_energy,
             // Circularity / material passport commands
             commands::circularity::get_project_circularity,
+            // Plausibility (indicative static wind-load) commands
+            commands::plausibility::get_project_plausibility,
             // Certification commands
             commands::certification::check_certification,
             // Declaration of Performance (DoP) commands

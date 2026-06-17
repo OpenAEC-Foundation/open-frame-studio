@@ -290,6 +290,16 @@ pub fn get_project_circularity() -> Result<String, String> {
     })
 }
 
+// ── Plausibility (indicative static wind-load) ──────────────────
+
+#[wasm_bindgen]
+pub fn get_project_plausibility(wind_pressure_pa: f64) -> Result<String, String> {
+    with_project(|p| {
+        let result = ofs_core::plausibility::calculate_project_plausibility(p, wind_pressure_pa);
+        serde_json::to_string(&result).unwrap()
+    })
+}
+
 // ── Declaration of Performance (DoP) ────────────────────────────
 
 #[wasm_bindgen]

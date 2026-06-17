@@ -23,6 +23,7 @@ pub mod procurement;
 pub mod planning;
 pub mod energy;
 pub mod circularity;
+pub mod plausibility;
 pub mod certification;
 pub mod dop;
 pub mod cnc;
