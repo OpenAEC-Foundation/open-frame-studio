@@ -43,6 +43,23 @@ export async function selectKozijn(id) {
   await refreshGeometry(id);
 }
 
+/**
+ * Persist the free-subdivision layout tree onto the current kozijn.
+ * Optimistically updates the store so the UI reflects it immediately; the IPC
+ * persists it server-side (and into .ofs) once the wasm bundle exposes the cmd.
+ */
+export async function setKozijnLayout(tree) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  currentKozijn.set({ ...k, layout: tree });
+  try {
+    await invoke("update_kozijn_layout", { id: k.id, layoutJson: JSON.stringify(tree) });
+  } catch (e) {
+    console.error("Layout opslaan mislukt:", e);
+  }
+}
+
 export async function updateDimensions(width, height) {
   const k = get(currentKozijn);
   if (!k) return;

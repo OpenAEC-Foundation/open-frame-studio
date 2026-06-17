@@ -169,6 +169,10 @@ function wasmCommand(cmd, args) {
       case "update_cell_panel_filling": return J(wasm.update_cell_panel_filling(args?.id, args?.cellIndex, args?.panelFillingJson));
       case "update_cell_glaslat": return J(wasm.update_cell_glaslat(args?.id, args?.cellIndex, args?.glaslatJson));
       case "update_cell_escape": return J(wasm.update_cell_escape(args?.id, args?.cellIndex, args?.isEscape));
+      case "update_kozijn_layout":
+        return typeof wasm.update_kozijn_layout === "function"
+          ? J(wasm.update_kozijn_layout(args?.id, args?.layoutJson))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "add_column": return J(wasm.add_column(args?.id, args?.position));
       case "add_row": return J(wasm.add_row(args?.id, args?.position));
 
@@ -309,6 +313,7 @@ function browserFallback(cmd, args) {
     case "get_project_energy": return energyStub(args);
     case "get_project_circularity": return circularityStub();
     case "get_project_plausibility": return plausibilityStub();
+    case "update_kozijn_layout": return null;
     case "check_certification": return certStub();
     case "generate_dop_for_kozijn": return dopStub();
     case "get_bcf_topics": return [];

@@ -1,9 +1,11 @@
 <script>
+  import { onMount } from "svelte";
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
     melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
+  import { currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
 
   // Proof-of-concept for the free subdivision model (recursive split tree).
   // Fully local — pure JS/SVG, no backend/wasm.
@@ -14,6 +16,11 @@
 
   let tree = $state(melkmeisje1());
   let selectedId = $state(null);
+
+  // If the selected kozijn already has a layout, start from it.
+  onMount(() => { if ($currentKozijn?.layout) tree = $currentKozijn.layout; });
+  function applyToKozijn() { if ($currentKozijn) setKozijnLayout(tree); }
+  function loadFromKozijn() { if ($currentKozijn?.layout) { tree = $currentKozijn.layout; selectedId = null; } }
 
   let inner = $derived({ x: FRAME, y: FRAME, width: OUTER.w - 2 * FRAME, height: OUTER.h - 2 * FRAME });
   let geom = $derived(layoutToRects(tree, inner, DIVIDER));
@@ -53,6 +60,16 @@
 
   <div class="body">
     <div class="controls">
+      <div class="group">
+        <span class="g-label">Kozijn</span>
+        {#if $currentKozijn}
+          <button onclick={applyToKozijn}>Toepassen op {$currentKozijn.mark}</button>
+          <button onclick={loadFromKozijn} disabled={!$currentKozijn.layout}>Laad van kozijn</button>
+        {:else}
+          <span class="hint">Selecteer een kozijn om de indeling toe te passen.</span>
+        {/if}
+      </div>
+
       <div class="group">
         <span class="g-label">Sjablonen</span>
         <button onclick={() => setTemplate(melkmeisje1)}>Melkmeisje (1-zijdig)</button>
