@@ -1,8 +1,21 @@
 <script>
   import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
+  import { layoutToRects, vullingLabel } from "../../lib/layout.js";
 
   let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
+
+  // Free-subdivision layout (read-only render when a kozijn carries a layout tree).
+  let layoutGeom = $derived.by(() => {
+    const k = kozijn;
+    if (!k?.layout || !k.frame) return null;
+    const fw = k.frame.frameWidth || 67;
+    const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
+    return layoutToRects(k.layout, inner, fw);
+  });
+  function vullingFill(t) {
+    return t === "deur" ? "#b98b5e" : t === "paneel" ? "#c9c2b2" : t === "rooster" ? "#9aa0a8" : "var(--editor-glass)";
+  }
 
   // Inline dimension editing state
   let editingDim = $state(null); // { index, value, x, y, isH, width, height }
@@ -266,6 +279,33 @@
     />
   {/each}
 
+  {#if kozijn?.layout && layoutGeom}
+    <!-- Free-subdivision layout (read-only) -->
+    {#each layoutGeom.dividers as d}
+      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill="var(--editor-frame)" pointer-events="none" />
+    {/each}
+    {#each layoutGeom.leaves as l}
+      {#if l.node.vulling.type !== "buiten"}
+        {@const r = l.rect}
+        {@const v = l.node.vulling}
+        {@const lcx = r.x + r.width / 2}
+        {@const lcy = r.y + r.height / 2}
+        {@const sb = (kozijn.frame.frameWidth || 67) * 0.4}
+        <rect x={r.x} y={r.y} width={r.width} height={r.height} fill={vullingFill(v.type)} stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
+        {#if v.type === "raam" || v.type === "deur"}
+          <rect x={r.x + sb} y={r.y + sb} width={Math.max(1, r.width - sb * 2)} height={Math.max(1, r.height - sb * 2)} fill="none" stroke="var(--amber)" stroke-width={1.2} opacity="0.7" pointer-events="none" />
+        {/if}
+        {#if v.glaslat}
+          {@const gi = sb + 6}
+          <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
+        {/if}
+        <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
+        <text x={lcx} y={lcy + 9 / zoom} text-anchor="middle" dominant-baseline="central" fill="#DC2626" font-size={8 / zoom} opacity="0.7" pointer-events="none">{Math.round(r.width)}×{Math.round(r.height)}</text>
+      {/if}
+    {/each}
+  {/if}
+
+  {#if !kozijn?.layout}
   <!-- Cell fills (glazing/panel areas) -->
   {#each geometry.cellRects as cellRect}
     {@const colors = cellColor(cellRect.cellIndex)}
@@ -368,6 +408,7 @@
       </text>
     {/if}
   {/each}
+  {/if}
 
   <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is visible) -->
   {#each geometry.frameRects as rect, i}
@@ -495,6 +536,7 @@
     />
   {/each}
 
+  {#if !kozijn?.layout}
   <!-- Vertical dividers -->
   {#each geometry.vDividers as rect, i}
     {@const isSelected = $selectedMember?.type === "divider_v" && $selectedMember?.index === i}
@@ -526,6 +568,7 @@
       tabindex="0"
     />
   {/each}
+  {/if}
 
   <!-- Profile codes on frame members (GA Kozijn style - green text) -->
   {#each geometry.frameRects as rect, i}
@@ -550,6 +593,7 @@
     </text>
   {/each}
 
+  {#if !kozijn?.layout}
   <!-- Sash frame (raamhout/deurhout) with sponning detail -->
   {#each geometry.cellRects as cellRect}
     {@const cell = kozijn.cells?.[cellRect.cellIndex]}
@@ -595,6 +639,7 @@
       {/if}
     {/if}
   {/each}
+  {/if}
 
   <!-- Edge/spouwlat indicators (dashed outlines along frame edges) -->
   {#if kozijn.edges?.length > 0}
