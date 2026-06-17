@@ -105,6 +105,15 @@ function circularityStub() {
   };
 }
 
+function dopStub() {
+  return {
+    dopNumber: "", productType: "", kozijnMark: "", kozijnName: "",
+    intendedUse: "", harmonisedStandard: "", avcpSystem: "", notifiedBody: "",
+    manufacturer: "", material: "", widthMm: 0, heightMm: 0, declaredUw: 0,
+    characteristics: [], conformityStatement: "",
+  };
+}
+
 // ── WASM command dispatch ───────────────────────────────────
 
 // ofs-wasm functions return JSON strings; the Tauri commands return parsed
@@ -202,6 +211,10 @@ function wasmCommand(cmd, args) {
           ? J(wasm.get_project_circularity())
           : circularityStub();
       case "check_certification": return { ceChecks: [], skhChecks: [] };
+      case "generate_dop_for_kozijn":
+        return typeof wasm.generate_dop_for_kozijn === "function"
+          ? J(wasm.generate_dop_for_kozijn(args?.id))
+          : dopStub();
       case "get_bcf_topics": return [];
       case "create_bcf_topic": return bcfTopicStub(args);
       case "update_bcf_topic_status": return bcfTopicStub(args);
@@ -258,6 +271,7 @@ function browserFallback(cmd, args) {
     case "get_project_energy": return { items: [] };
     case "get_project_circularity": return circularityStub();
     case "check_certification": return { ceChecks: [], skhChecks: [] };
+    case "generate_dop_for_kozijn": return dopStub();
     case "get_bcf_topics": return [];
     case "create_bcf_topic": return bcfTopicStub(args);
     case "update_bcf_topic_status": return bcfTopicStub(args);

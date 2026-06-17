@@ -9,8 +9,23 @@
   let ceChecks = [];
   let skhChecks = [];
   let loading = false;
+  let dop = null;
+  let dopLoading = false;
 
   onMount(runChecks);
+
+  async function generateDop() {
+    const k = get(currentKozijn);
+    if (!k) return;
+    dopLoading = true;
+    try {
+      dop = await invoke("generate_dop_for_kozijn", { id: k.id });
+    } catch (e) {
+      console.error("DoP genereren mislukt:", e);
+      toast.error?.("Prestatieverklaring genereren mislukt");
+    }
+    dopLoading = false;
+  }
 
   async function runChecks() {
     const k = get(currentKozijn);
@@ -34,7 +49,10 @@
   <div class="toolbar">
     <h2>Certificatie (CE / SKH / KOMO)</h2>
     <div class="toolbar-actions">
-      <button class="action-btn primary" onclick={runChecks}>Controleren</button>
+      <button class="action-btn" onclick={runChecks}>Controleren</button>
+      <button class="action-btn primary" onclick={generateDop} disabled={!$currentKozijn}>
+        {dopLoading ? "Genereren..." : "Genereer DoP"}
+      </button>
     </div>
   </div>
 
@@ -94,6 +112,49 @@
         </div>
       {/if}
     </div>
+
+    {#if dop && dop.dopNumber}
+      <div class="cert-section dop-section">
+        <div class="section-header">
+          <h3>Prestatieverklaring (DoP) — EN 14351-1</h3>
+          <span class="badge neutral">Concept</span>
+        </div>
+        <div class="dop-doc">
+          <div class="dop-head">
+            <div class="dop-no">{dop.dopNumber}</div>
+            <div class="dop-product">{dop.productType}</div>
+          </div>
+          <div class="dop-meta">
+            <div><span class="lbl">Kozijn</span><span>{dop.kozijnMark} — {dop.kozijnName}</span></div>
+            <div><span class="lbl">Beoogd gebruik</span><span>{dop.intendedUse}</span></div>
+            <div><span class="lbl">Geharmoniseerde norm</span><span>{dop.harmonisedStandard}</span></div>
+            <div><span class="lbl">AVCP-systeem</span><span>{dop.avcpSystem}</span></div>
+            <div><span class="lbl">Materiaal</span><span>{dop.material}</span></div>
+            <div><span class="lbl">Afmeting (b×h)</span><span>{Math.round(dop.widthMm)} × {Math.round(dop.heightMm)} mm</span></div>
+            <div><span class="lbl">Uw (gedeclareerd)</span><span>{dop.declaredUw.toFixed(2)} W/m²K</span></div>
+            <div><span class="lbl">Aangemelde instantie</span><span class="placeholder">{dop.notifiedBody}</span></div>
+            <div><span class="lbl">Fabrikant</span><span class="placeholder">{dop.manufacturer}</span></div>
+          </div>
+
+          <table class="dop-table">
+            <thead><tr>
+              <th>Essentiële eigenschap</th><th>Prestatie</th><th>Norm</th>
+            </tr></thead>
+            <tbody>
+              {#each dop.characteristics as ch}
+                <tr>
+                  <td>{ch.characteristic}</td>
+                  <td class:npd={ch.performance === "NPD"}>{ch.performance}</td>
+                  <td class="std">{ch.standard}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+
+          <p class="dop-statement">{dop.conformityStatement}</p>
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -123,4 +184,23 @@
   .check-content { display: flex; flex-direction: column; gap: 1px; }
   .check-req { font-size: 12px; font-weight: 600; color: var(--text-primary); }
   .check-detail { font-size: 11px; color: var(--text-muted); }
+
+  .badge.neutral { background: rgba(107, 114, 128, 0.18); color: #9aa0a8; }
+  .action-btn:disabled { opacity: 0.5; }
+
+  .dop-doc { background: var(--bg-surface-alt); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); padding: var(--sp-4); }
+  .dop-head { border-bottom: 2px solid var(--amber); padding-bottom: var(--sp-2); margin-bottom: var(--sp-3); }
+  .dop-no { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--amber); text-transform: uppercase; }
+  .dop-product { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .dop-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-2) var(--sp-4); margin-bottom: var(--sp-3); }
+  .dop-meta > div { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+  .dop-meta .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .dop-meta span:not(.lbl) { color: var(--text-primary); }
+  .dop-meta .placeholder { color: #d97706; font-style: italic; }
+  .dop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: var(--sp-3); }
+  .dop-table thead th { text-align: left; padding: var(--sp-2) var(--sp-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); border-bottom: 2px solid var(--border-color, #333); }
+  .dop-table tbody td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-color, #333); color: var(--text-primary); }
+  .dop-table td.std { color: var(--text-muted); font-size: 11px; }
+  .dop-table td.npd { color: var(--text-muted); font-style: italic; }
+  .dop-statement { font-size: 11px; color: var(--text-secondary); font-style: italic; line-height: 1.5; margin: 0; }
 </style>
