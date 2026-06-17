@@ -8,6 +8,7 @@ pub mod production;
 pub mod calculation;
 pub mod sill;
 pub mod panel_filling;
+pub mod glaslat;
 pub mod vliesgevel;
 pub mod thermal;
 pub mod template;

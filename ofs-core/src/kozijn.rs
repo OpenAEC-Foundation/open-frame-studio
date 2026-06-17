@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::glaslat::Glaslat;
 use crate::hardware::HardwareSet;
 use crate::panel_filling::PanelFilling;
 use crate::profile::ProfileRef;
@@ -401,6 +402,9 @@ pub struct Cell {
     /// Infill panel spec for Panel/Ventilation cells (vakvulling). None = use defaults.
     #[serde(default)]
     pub panel_filling: Option<PanelFilling>,
+    /// Glazing bead spec for glazed cells (glaslat). None = no explicit bead.
+    #[serde(default)]
+    pub glaslat: Option<Glaslat>,
 }
 
 impl Default for Cell {
@@ -415,6 +419,7 @@ impl Default for Cell {
             sash_width: None,
             sash_depth: None,
             panel_filling: None,
+            glaslat: None,
         }
     }
 }

@@ -52,6 +52,7 @@ fn main() {
             commands::kozijn::get_kozijn_geometry,
             commands::kozijn::update_cell_hardware,
             commands::kozijn::update_cell_panel_filling,
+            commands::kozijn::update_cell_glaslat,
             commands::kozijn::auto_select_hardware,
             commands::kozijn::update_security_class,
             commands::kozijn::update_cell_glazing,

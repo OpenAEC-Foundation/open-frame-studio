@@ -86,6 +86,20 @@ export async function updateCellPanelFilling(cellIndex, panelFilling) {
   await refreshGeometry(updated.id);
 }
 
+export async function updateCellGlaslat(cellIndex, glaslat) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_cell_glaslat", {
+    id: k.id,
+    cellIndex,
+    glaslatJson: JSON.stringify(glaslat),
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
 export async function addColumn(position) {
   const k = get(currentKozijn);
   if (!k) return;

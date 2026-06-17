@@ -22,6 +22,7 @@ pub struct ProductionData {
     pub hardware_list: Vec<HardwareListItem>,
     pub gasket_list: Vec<GasketListItem>,
     pub panel_list: Vec<PanelListItem>,
+    pub glaslat_list: Vec<GlaslatListItem>,
     pub bom: Vec<BomItem>,
 }
 
@@ -135,6 +136,21 @@ pub struct PanelListItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GlaslatListItem {
+    pub piece_id: String,
+    pub cell_index: usize,
+    pub position: String, // Binnen / Buiten
+    pub material: String,
+    pub width_mm: f64,
+    pub height_mm: f64,
+    /// Combined cut length of the four beads around the glazing rebate (mm).
+    pub total_length_mm: f64,
+    pub mitered: bool,
+    pub quantity: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BomItem {
     pub category: String,
     pub description: String,
@@ -208,6 +224,7 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
     let mut hardware_list = Vec::new();
     let mut gasket_list = Vec::new();
     let mut panel_list = Vec::new();
+    let mut glaslat_list = Vec::new();
 
     // ── Frame members ──────────────────────────────────────────
 
@@ -404,6 +421,28 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             }
         }
 
+        // Glaslatten (glazing beads) — emit a bead cut entry per glazed cell that has one.
+        if let Some(gl) = cell.glaslat.as_ref() {
+            let (gw, gh) = if cell.panel_type.is_operable() {
+                let sw = cell.sash_width.unwrap_or(67.0);
+                (cell_w - 2.0 * sw, cell_h - 2.0 * sw)
+            } else {
+                (cell_w, cell_h)
+            };
+            let total_length = 2.0 * (gw.max(0.0) + gh.max(0.0));
+            glaslat_list.push(GlaslatListItem {
+                piece_id: cell_id.clone(),
+                cell_index: i,
+                position: gl.position.label_nl().to_string(),
+                material: gl.material.clone(),
+                width_mm: gl.width_mm,
+                height_mm: gl.height_mm,
+                total_length_mm: total_length,
+                mitered: gl.mitered,
+                quantity: 4,
+            });
+        }
+
         // Sash frame for operable cells — use cell.sash_profile if available
         if cell.panel_type.is_operable() {
             let sash_w = cell_w;
@@ -579,6 +618,7 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         hardware_list,
         gasket_list,
         panel_list,
+        glaslat_list,
         bom,
     }
 }

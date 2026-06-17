@@ -630,6 +630,30 @@ pub fn update_cell_panel_filling(
 }
 
 #[tauri::command]
+pub fn update_cell_glaslat(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+    glaslat_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+    let glaslat: ofs_core::glaslat::Glaslat = serde_json::from_str(&glaslat_json)
+        .map_err(|e| format!("Ongeldige glaslat data: {}", e))?;
+    cell.glaslat = Some(glaslat);
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
 pub fn auto_select_hardware(
     state: State<'_, AppState>,
     id: String,

@@ -170,6 +170,24 @@ pub fn update_cell_panel_filling(
 }
 
 #[wasm_bindgen]
+pub fn update_cell_glaslat(
+    id: &str,
+    cell_index: usize,
+    glaslat_json: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        if cell_index < k.cells.len() {
+            if let Ok(glaslat) = serde_json::from_str::<ofs_core::glaslat::Glaslat>(glaslat_json) {
+                k.cells[cell_index].glaslat = Some(glaslat);
+            }
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
