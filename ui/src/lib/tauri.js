@@ -235,6 +235,10 @@ function wasmCommand(cmd, args) {
         return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
       case "remove_combination": return null;
       case "generate_purchase_proposals": return [];
+      case "generate_purchase_orders":
+        return typeof wasm.generate_purchase_orders === "function"
+          ? J(wasm.generate_purchase_orders())
+          : [];
       case "get_cnc_parts": return [];
       case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
       case "validate_project_ids": return { checks: [] };
@@ -293,6 +297,7 @@ function browserFallback(cmd, args) {
       return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
     case "remove_combination": return null;
     case "generate_purchase_proposals": return [];
+    case "generate_purchase_orders": return [];
     case "get_cnc_parts": return [];
     case "get_pricing_config": return defaultPricingConfig();
     case "update_pricing_config": return null;
