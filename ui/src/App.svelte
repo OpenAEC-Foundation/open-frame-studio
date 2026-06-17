@@ -22,6 +22,7 @@
   import PlanningView from "./components/project/PlanningView.svelte";
   import EnergyView from "./components/project/EnergyView.svelte";
   import CircularityView from "./components/project/CircularityView.svelte";
+  import PlausibilityView from "./components/project/PlausibilityView.svelte";
   import CertificationView from "./components/project/CertificationView.svelte";
   import BcfView from "./components/project/BcfView.svelte";
   import CutOptimizationView from "./components/project/CutOptimizationView.svelte";
@@ -195,6 +196,17 @@
       <path d="M7 21a9 9 0 009-9h4l-4-4-4 4h3a8 8 0 01-8 8z"/>
     </svg>
     {$_('tabs.circularity')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "plausibility"}
+    onclick={() => activeWorkspaceView.set("plausibility")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 18l4-6 4 3 5-8 4 6"/>
+      <line x1="3" y1="21" x2="21" y2="21"/>
+    </svg>
+    {$_('tabs.plausibility')}
   </button>
   <button
     class="ws-tab"
@@ -404,6 +416,8 @@
     <EnergyView />
   {:else if workspaceView === "circularity"}
     <CircularityView />
+  {:else if workspaceView === "plausibility"}
+    <PlausibilityView />
   {:else if workspaceView === "quotation"}
     <QuotationView />
   {:else if workspaceView === "bcf"}

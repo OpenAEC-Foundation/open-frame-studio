@@ -114,6 +114,10 @@ function dopStub() {
   };
 }
 
+function plausibilityStub() {
+  return { windPressurePa: 0, limitRatio: 200, kozijnResults: [], overallPass: true };
+}
+
 // ── WASM command dispatch ───────────────────────────────────
 
 // ofs-wasm functions return JSON strings; the Tauri commands return parsed
@@ -210,6 +214,10 @@ function wasmCommand(cmd, args) {
         return typeof wasm.get_project_circularity === "function"
           ? J(wasm.get_project_circularity())
           : circularityStub();
+      case "get_project_plausibility":
+        return typeof wasm.get_project_plausibility === "function"
+          ? J(wasm.get_project_plausibility(args?.windPressurePa ?? 1000))
+          : plausibilityStub();
       case "check_certification": return { ceChecks: [], skhChecks: [] };
       case "generate_dop_for_kozijn":
         return typeof wasm.generate_dop_for_kozijn === "function"
@@ -270,6 +278,7 @@ function browserFallback(cmd, args) {
     case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
     case "get_project_energy": return { items: [] };
     case "get_project_circularity": return circularityStub();
+    case "get_project_plausibility": return plausibilityStub();
     case "check_certification": return { ceChecks: [], skhChecks: [] };
     case "generate_dop_for_kozijn": return dopStub();
     case "get_bcf_topics": return [];
