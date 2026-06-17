@@ -24,6 +24,7 @@
   import HardwarePanel from "./HardwarePanel.svelte";
   import JointPanel from "./JointPanel.svelte";
   import GlazingPanel from "./GlazingPanel.svelte";
+  import PanelFillingPanel from "./PanelFillingPanel.svelte";
   import ProfileSelector from "./ProfileSelector.svelte";
   import ProfileCrossSection from "./ProfileCrossSection.svelte";
   import { RAL_COLORS, ralToHex } from "../../lib/ral-colors.js";
@@ -484,6 +485,7 @@
         {/if}
       </div>
       <GlazingPanel />
+      <PanelFillingPanel visible={true} />
       <HardwarePanel visible={true} />
       <JointPanel visible={true} />
     {:else}
