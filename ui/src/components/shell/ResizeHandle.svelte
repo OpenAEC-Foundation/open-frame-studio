@@ -1,7 +1,7 @@
 <script>
   let { direction = "horizontal", onresize = null } = $props();
 
-  let dragging = false;
+  let dragging = $state(false);
   let startPos = 0;
 
   function onMouseDown(e) {

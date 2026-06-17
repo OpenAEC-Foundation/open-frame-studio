@@ -27,40 +27,40 @@
   }
 
   // === Profile Parameters ===
-  let name = $_('shapeManager.defaultName');
-  let material = "wood";
-  let materialSubtype = "meranti";
-  let kvtType = "A";
-  let profileSeries = "67";
-  let width = 67;
-  let depth = 114;
+  let name = $state($_('shapeManager.defaultName'));
+  let material = $state("wood");
+  let materialSubtype = $state("meranti");
+  let kvtType = $state("A");
+  let profileSeries = $state("67");
+  let width = $state(67);
+  let depth = $state(114);
 
   // Sponning dagzijde (glass side)
-  let sponningType = "binnensponning";
-  let sponningWidth = 12;
-  let sponningDepth = 17;
-  let opdekWidth = 13;
-  let rubberCount = 2;
+  let sponningType = $state("binnensponning");
+  let sponningWidth = $state(12);
+  let sponningDepth = $state(17);
+  let opdekWidth = $state(13);
+  let rubberCount = $state(2);
 
   // Dubbele sponning (2nd)
-  let secondWidth = 12;
-  let secondDepth = 17;
-  let kernhout = 20;
+  let secondWidth = $state(12);
+  let secondDepth = $state(17);
+  let kernhout = $state(20);
 
   // Randsponning (wall side)
-  let hasRandsponning = true;
-  let randWidth = 10;
-  let randDepth = 12;
+  let hasRandsponning = $state(true);
+  let randWidth = $state(10);
+  let randDepth = $state(12);
 
   // Glaslat
-  let glaslatWidth = 15;
-  let glaslatHeight = 17;
+  let glaslatWidth = $state(15);
+  let glaslatHeight = $state(17);
 
   // Thermal
-  let ufValue = 1.8;
+  let ufValue = $state(1.8);
 
   // Applicability
-  let applicableAs = { frame: true, sash: true, divider: true, sill: false };
+  let applicableAs = $state({ frame: true, sash: true, divider: true, sill: false });
 
   // === Freeform Drawing Mode ===
   let drawMode = $state("parametric"); // "parametric" | "freeform"
@@ -165,10 +165,10 @@
   }
 
   // Slope (onderdorpel)
-  let slopeDegrees = 9;
+  let slopeDegrees = $state(9);
 
   // Selected point for editing
-  let selectedPointIdx = -1;
+  let selectedPointIdx = $state(-1);
 
   // === KVT Defaults per Type ===
   let KVT_DEFAULTS = $derived({

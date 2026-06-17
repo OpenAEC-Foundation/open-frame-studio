@@ -10,7 +10,7 @@
 
   let { visible = true } = $props();
 
-  let collapsed = false;
+  let collapsed = $state(false);
 
   let SECURITY_CLASSES = $derived([
     { value: "none", label: $_('hardware.secNone') },

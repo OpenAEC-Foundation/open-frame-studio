@@ -10,7 +10,7 @@
   const HIT_AREA = 20; // hit area width in SVG units (mm)
 
   // Drag state
-  let dragging = null; // { axis: 'v'|'h', index, startPos, origSizes }
+  let dragging = $state(null); // { axis: 'v'|'h', index, startPos, origSizes }
 
   function startDragV(index, e) {
     e.stopPropagation();
