@@ -37,6 +37,21 @@
   const PANEL_COLOR = 0xD0C8B8;
   const DOOR_COLOR = 0xA08060;
 
+  // Operable sash types (mirror PanelType::is_operable in ofs-core).
+  const OPERABLE_TYPES = new Set([
+    "turn_tilt", "turn", "tilt", "sliding", "door",
+    "top_hung", "bottom_hung", "lift_slide", "pivot",
+  ]);
+
+  // Panel-filling tint per FillingType (serde snake_case).
+  const FILLING_COLORS = {
+    sandwich: 0xD0C8B8,
+    solid: 0xB8A888,
+    door_panel: 0xA08060,
+    ventilation: 0x9AA0A8,
+    blind: 0xC0C0C0,
+  };
+
   function getMaterialKey(material) {
     if (!material) return "wood(meranti)";
     if (typeof material === "string") return material.toLowerCase();
@@ -238,13 +253,6 @@
       side: THREE.DoubleSide,
     });
 
-    // Panel material (opaque for door/panel types)
-    const panelMat = new THREE.MeshStandardMaterial({
-      color: PANEL_COLOR,
-      roughness: 0.8,
-      metalness: 0.0,
-    });
-
     // Door material
     const doorMat = new THREE.MeshStandardMaterial({
       color: DOOR_COLOR,
@@ -254,6 +262,20 @@
 
     // Divider material (same as frame)
     const dividerMat = frameMat.clone();
+
+    // Sash frame material (matches the frame; slightly different sheen)
+    const sashMat = new THREE.MeshStandardMaterial({
+      color: frameColor,
+      roughness: isAluminum ? 0.3 : 0.65,
+      metalness: isAluminum ? 0.8 : 0.0,
+    });
+
+    // Glazing-bead material (glaslat) — matches the frame colour
+    const beadMat = new THREE.MeshStandardMaterial({
+      color: frameColor,
+      roughness: isAluminum ? 0.35 : 0.6,
+      metalness: isAluminum ? 0.7 : 0.0,
+    });
 
     // Helper: create a box mesh from a 2D rect, extruded into Z
     function makeBox(rect, depth, material, zOffset = 0) {
@@ -270,6 +292,28 @@
       return mesh;
     }
 
+    // Helper: shrink a rect inwards by `by` mm on every side
+    function insetRectBy(rect, by) {
+      return {
+        x: rect.x + by,
+        y: rect.y + by,
+        width: Math.max(1, rect.width - 2 * by),
+        height: Math.max(1, rect.height - 2 * by),
+      };
+    }
+
+    // Helper: add a 4-member border (top/bottom/left/right) of `memberWidth`
+    // around `rect`, extruded `depth` in Z at `zOffset`. Used for sash frames
+    // and glazing beads.
+    function addBorder(rect, memberWidth, depth, material, zOffset = 0) {
+      const w = Math.min(memberWidth, rect.width / 2, rect.height / 2);
+      const innerH = Math.max(1, rect.height - 2 * w);
+      kozijnGroup.add(makeBox({ x: rect.x, y: rect.y, width: rect.width, height: w }, depth, material, zOffset));
+      kozijnGroup.add(makeBox({ x: rect.x, y: rect.y + rect.height - w, width: rect.width, height: w }, depth, material, zOffset));
+      kozijnGroup.add(makeBox({ x: rect.x, y: rect.y + w, width: w, height: innerH }, depth, material, zOffset));
+      kozijnGroup.add(makeBox({ x: rect.x + rect.width - w, y: rect.y + w, width: w, height: innerH }, depth, material, zOffset));
+    }
+
     // Frame members
     if (geometry.frameRects) {
       for (const rect of geometry.frameRects) {
@@ -277,11 +321,10 @@
       }
     }
 
-    // Cell panels (glass, door, panel)
-    // Glass sits in the sponning (rebate), offset toward the outside
+    // Cell contents: glass, sash frames, panel fillings, glazing beads
+    // Glass sits in the sponning (rebate), offset toward the outside (-Z).
     const GLASS_CLEARANCE = 4; // mm clearance per side
     const glassThickness = kozijn.cells?.[0]?.glazing?.thicknessMm || 24;
-    // Sponning position: glass sits ~30% from the outside face
     const glassZOffset = frameDepth * 0.3 - frameDepth / 2;
 
     if (geometry.cellRects) {
@@ -289,23 +332,64 @@
         const cell = kozijn.cells?.[cellRect.cellIndex];
         const panelType = cell?.panelType || "fixed_glass";
         const rect = cellRect.rect;
+        const cellInset = insetRectBy(rect, GLASS_CLEARANCE);
 
-        // Apply glass clearance — glass/panel is smaller than the cell opening
-        const insetRect = {
-          x: rect.x + GLASS_CLEARANCE,
-          y: rect.y + GLASS_CLEARANCE,
-          width: Math.max(1, rect.width - 2 * GLASS_CLEARANCE),
-          height: Math.max(1, rect.height - 2 * GLASS_CLEARANCE),
-        };
+        // Vakvulling (infill panel / ventilation grille)
+        if (panelType === "panel" || panelType === "ventilation") {
+          const filling = cell?.panelFilling;
+          const thickness = filling?.thicknessMm || frameDepth * 0.6;
+          const tint = FILLING_COLORS[filling?.fillingType] ||
+            (panelType === "ventilation" ? FILLING_COLORS.ventilation : PANEL_COLOR);
+          const fillMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.8, metalness: 0.0 });
+          kozijnGroup.add(makeBox(cellInset, thickness, fillMat, 0));
 
-        if (panelType === "panel") {
-          kozijnGroup.add(makeBox(insetRect, frameDepth * 0.6, panelMat, 0));
-        } else if (panelType === "door") {
-          kozijnGroup.add(makeBox(insetRect, frameDepth * 0.7, doorMat, 0));
+          // Ventilation grille — horizontal louver slats proud of the panel
+          if (panelType === "ventilation") {
+            const slatCount = Math.max(2, Math.min(8, Math.floor(cellInset.height / 90)));
+            const slatMat = new THREE.MeshStandardMaterial({ color: 0x6B7178, roughness: 0.5, metalness: 0.3 });
+            const gap = cellInset.height / (slatCount + 1);
+            for (let s = 1; s <= slatCount; s++) {
+              kozijnGroup.add(makeBox(
+                { x: cellInset.x + 6, y: cellInset.y + gap * s - 4, width: Math.max(1, cellInset.width - 12), height: 8 },
+                6, slatMat, thickness / 2 + 3
+              ));
+            }
+          }
+          continue;
+        }
+
+        // Glazed cell (fixed glass, operable sash, or door)
+        const isOperable = OPERABLE_TYPES.has(panelType);
+        let glassHostRect = cellInset;
+
+        if (isOperable) {
+          // Sash frame: a border of sash_width around the cell opening
+          const sashWidth = cell?.sashWidth || 67;
+          const sashDepth = frameDepth * 0.82;
+          const sashZ = frameDepth * 0.06; // slightly proud on the inside
+          addBorder(cellInset, sashWidth, sashDepth, sashMat, sashZ);
+          glassHostRect = insetRectBy(cellInset, sashWidth);
+        }
+
+        if (panelType === "door") {
+          // Door leaf — opaque infill inside the door sash frame
+          kozijnGroup.add(makeBox(glassHostRect, frameDepth * 0.7, doorMat, 0));
         } else {
-          // Glass types: fixed_glass, turn_tilt, turn, tilt, sliding
+          // Glass pane
           const thisGlassThickness = cell?.glazing?.thicknessMm || glassThickness;
-          kozijnGroup.add(makeBox(insetRect, thisGlassThickness, glassMat, glassZOffset));
+          kozijnGroup.add(makeBox(glassHostRect, thisGlassThickness, glassMat, glassZOffset));
+
+          // Glaslat (glazing beads) — border around the glass, inside or outside
+          const gl = cell?.glaslat;
+          if (gl) {
+            const beadWidth = gl.widthMm || 15;
+            const beadDepth = gl.heightMm || 17;
+            const inside = gl.position !== "buiten"; // default binnen (inside)
+            const dir = inside ? 1 : -1;
+            const glassFace = glassZOffset + dir * (thisGlassThickness / 2);
+            const beadZ = glassFace + dir * (beadDepth / 2);
+            addBorder(glassHostRect, beadWidth, beadDepth, beadMat, beadZ);
+          }
         }
       }
     }
@@ -324,23 +408,26 @@
       }
     }
 
-    // Wall context — gray wall behind the kozijn with an opening cutout
+    // Wall context — gray wall behind the kozijn with an opening cutout.
+    // Centre it on the kozijn's actual bounding box (the members span y∈[-h,0],
+    // so the centre is below the origin — use the measured centre, not 0).
     const preBbox = new THREE.Box3().setFromObject(kozijnGroup);
     const preSize = preBbox.getSize(new THREE.Vector3());
+    const preCenter = preBbox.getCenter(new THREE.Vector3());
     const wallDepth = 300; // 300mm wall
     const wallSize = { x: preSize.x + 600, y: preSize.y + 400 };
     const wallGeo = new THREE.BoxGeometry(wallSize.x, wallSize.y, wallDepth);
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xd0c8b8, roughness: 0.9, metalness: 0.0 });
     const wall = new THREE.Mesh(wallGeo, wallMat);
-    wall.position.set(0, preSize.y / 2, -wallDepth / 2 - frameDepth / 2);
+    wall.position.set(preCenter.x, preCenter.y, -wallDepth / 2 - frameDepth / 2);
     wall.receiveShadow = true;
     kozijnGroup.add(wall);
 
-    // Opening cutout (simple: just place a dark box where the opening is)
+    // Opening cutout (simple: a dark box behind the glass, sized to the opening)
     const openingGeo = new THREE.BoxGeometry(preSize.x + 2, preSize.y + 2, wallDepth + 2);
     const openingMat = new THREE.MeshBasicMaterial({ color: 0x1a1a2e });
     const opening = new THREE.Mesh(openingGeo, openingMat);
-    opening.position.set(0, preSize.y / 2, -wallDepth / 2 - frameDepth / 2);
+    opening.position.set(preCenter.x, preCenter.y, -wallDepth / 2 - frameDepth / 2);
     kozijnGroup.add(opening);
 
     // Center the model
@@ -369,7 +456,15 @@
     const k = $currentKozijn;
     const g = $currentGeometry;
     if (!scene || !k || !g) return;
-    const newJson = JSON.stringify({ id: k.id, w: k.frame?.outerWidth, h: k.frame?.outerHeight, cells: k.cells?.length, shape: k.frame?.shape?.shapeType });
+    // Per-cell signature so type / sash / glaslat / filling / glass changes rebuild the model
+    const cellSig = (k.cells || []).map((c) => [
+      c.panelType,
+      c.sashWidth || "",
+      c.glaslat ? `${c.glaslat.position}${c.glaslat.widthMm}${c.glaslat.heightMm}` : "",
+      c.panelFilling ? `${c.panelFilling.fillingType}${c.panelFilling.thicknessMm}` : "",
+      c.glazing?.thicknessMm || "",
+    ].join(":")).join("|");
+    const newJson = JSON.stringify({ id: k.id, w: k.frame?.outerWidth, h: k.frame?.outerHeight, cells: k.cells?.length, shape: k.frame?.shape?.shapeType, sig: cellSig });
     if (newJson !== prevGeomJson) {
       prevGeomJson = newJson;
       build3DKozijn(scene, k, g);
