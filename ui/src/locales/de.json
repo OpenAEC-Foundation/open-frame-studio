@@ -167,6 +167,10 @@
   "panel.door": "T\u00fcr",
   "panel.panel": "F\u00fcllung",
   "panel.ventilation": "L\u00fcftung",
+  "panel.topHung": "Klappfl\u00fcgel",
+  "panel.bottomHung": "Kippfl\u00fcgel unten",
+  "panel.liftSlide": "Hebe-Schiebe",
+  "panel.pivot": "Schwingfl\u00fcgel",
 
   "member.topRail": "Oberer Riegel",
   "member.bottomRail": "Schwelle",

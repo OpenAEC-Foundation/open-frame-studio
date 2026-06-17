@@ -172,6 +172,10 @@
   "panel.door": "Deur",
   "panel.panel": "Paneel",
   "panel.ventilation": "Ventilatie",
+  "panel.topHung": "Klapraam",
+  "panel.bottomHung": "Tuimelraam",
+  "panel.liftSlide": "Hefschuifpui",
+  "panel.pivot": "Pivotraam",
 
   "member.topRail": "Bovendorpel",
   "member.bottomRail": "Onderdorpel",

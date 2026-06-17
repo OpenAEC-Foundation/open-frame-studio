@@ -167,6 +167,10 @@
   "panel.door": "Door",
   "panel.panel": "Panel",
   "panel.ventilation": "Ventilation",
+  "panel.topHung": "Top-hung",
+  "panel.bottomHung": "Bottom-hung",
+  "panel.liftSlide": "Lift-slide",
+  "panel.pivot": "Pivot",
 
   "member.topRail": "Top rail",
   "member.bottomRail": "Sill",

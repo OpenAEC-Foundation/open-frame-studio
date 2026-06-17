@@ -19,6 +19,8 @@ pub enum ValidationError {
     MissingHardware(usize),
     #[error("Cel {0}: {1} scharnieren, minimaal {2} vereist voor dit gewicht/hoogte")]
     InsufficientHinges(usize, u8, u8),
+    #[error("Cel {0}: glaslat hoogte {1}mm is kleiner dan KVT-minimum {2}mm")]
+    GlaslatTooShallow(usize, f64, f64),
 }
 
 const MIN_WIDTH: f64 = 200.0;
@@ -71,6 +73,12 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
     for (i, cell) in kozijn.cells.iter().enumerate() {
         if cell.panel_type.is_operable() && cell.hardware_set.is_none() {
             errors.push(ValidationError::MissingHardware(i));
+        }
+        // Glaslat fit: KVT requires a bead height of at least 17 mm.
+        if let Some(gl) = cell.glaslat.as_ref() {
+            if gl.height_mm < 17.0 {
+                errors.push(ValidationError::GlaslatTooShallow(i, gl.height_mm, 17.0));
+            }
         }
     }
 
