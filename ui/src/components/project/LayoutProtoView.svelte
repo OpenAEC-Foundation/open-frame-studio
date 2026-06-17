@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
-    melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid,
+    melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid, gridToLayout,
     findNode, setSplitChildSizes, mergeAt, patchVulling,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
@@ -21,7 +21,12 @@
   // If the selected kozijn already has a layout, start from it.
   onMount(() => { if ($currentKozijn?.layout) tree = $currentKozijn.layout; });
   function applyToKozijn() { if ($currentKozijn) setKozijnLayout(tree); }
-  function loadFromKozijn() { if ($currentKozijn?.layout) { tree = $currentKozijn.layout; selectedId = null; } }
+  function loadFromKozijn() {
+    const k = $currentKozijn;
+    if (!k) return;
+    tree = k.layout ? k.layout : gridToLayout(k); // matrix → split tree when no layout yet
+    selectedId = null;
+  }
 
   let inner = $derived({ x: FRAME, y: FRAME, width: OUTER.w - 2 * FRAME, height: OUTER.h - 2 * FRAME });
   let geom = $derived(layoutToRects(tree, inner, DIVIDER));
@@ -110,7 +115,7 @@
         <span class="g-label">Kozijn</span>
         {#if $currentKozijn}
           <button onclick={applyToKozijn}>Toepassen op {$currentKozijn.mark}</button>
-          <button onclick={loadFromKozijn} disabled={!$currentKozijn.layout}>Laad van kozijn</button>
+          <button onclick={loadFromKozijn}>Laad van kozijn (matrix→boom)</button>
         {:else}
           <span class="hint">Selecteer een kozijn om de indeling toe te passen.</span>
         {/if}
