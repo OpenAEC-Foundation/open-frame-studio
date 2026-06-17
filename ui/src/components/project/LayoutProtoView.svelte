@@ -3,7 +3,7 @@
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
     melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid,
-    findNode, setSplitChildSizes, mergeAt,
+    findNode, setSplitChildSizes, mergeAt, patchVulling,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
   import { currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
@@ -78,9 +78,22 @@
     tree = setVulling(tree, selectedLeaf.id, v);
   }
 
+  function patch(p) { if (selectedLeaf) tree = patchVulling(tree, selectedLeaf.id, p); }
+  const isGlazed = (v) => v && (v.type === "glas" || v.type === "raam");
+  const isOperable = (v) => v && (v.type === "raam" || v.type === "deur");
+
   // Centre of a rect for label placement
   const cx = (r) => r.x + r.width / 2;
   const cy = (r) => r.y + r.height / 2;
+
+  // EN 12519-style opening triangle (open V), apex on the handle side.
+  function openingTriangle(l) {
+    const { x, y, width: w, height: h } = l.rect;
+    const left = (l.node.vulling.hingeSide || "links") === "links";
+    return left
+      ? `M${x + w * 0.14},${y + h * 0.14} L${x + w * 0.86},${y + h / 2} L${x + w * 0.14},${y + h * 0.86}`
+      : `M${x + w * 0.86},${y + h * 0.14} L${x + w * 0.14},${y + h / 2} L${x + w * 0.86},${y + h * 0.86}`;
+  }
 </script>
 
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
@@ -137,6 +150,30 @@
               <option value="buiten">Buiten kozijn (trapt)</option>
             </select>
           </label>
+          {#if isGlazed(selectedLeaf.vulling)}
+            <label class="vsel"><span>Glaslat</span>
+              <select value={selectedLeaf.vulling.glaslat || "geen"} onchange={(e) => patch({ glaslat: e.target.value === "geen" ? null : e.target.value })}>
+                <option value="geen">Geen</option>
+                <option value="binnen">Binnen</option>
+                <option value="buiten">Buiten</option>
+              </select>
+            </label>
+          {/if}
+          {#if isOperable(selectedLeaf.vulling)}
+            <label class="vsel"><span>Scharnierzijde</span>
+              <select value={selectedLeaf.vulling.hingeSide || "links"} onchange={(e) => patch({ hingeSide: e.target.value })}>
+                <option value="links">Links</option>
+                <option value="rechts">Rechts</option>
+              </select>
+            </label>
+            <label class="vsel"><span>Draairichting</span>
+              <select value={selectedLeaf.vulling.opensOutward ? "buiten" : "binnen"} onchange={(e) => patch({ opensOutward: e.target.value === "buiten" })}>
+                <option value="binnen">Binnendraaiend</option>
+                <option value="buiten">Buitendraaiend</option>
+              </select>
+            </label>
+            <label class="vcheck"><input type="checkbox" checked={!!selectedLeaf.vulling.hardware} onchange={(e) => patch({ hardware: e.target.checked })} /> Hang- en sluitwerk</label>
+          {/if}
         {:else}
           <span class="hint">Klik een vak in de tekening om te splitsen of een vulling te kiezen.</span>
         {/if}
@@ -171,6 +208,11 @@
               {#if l.node.vulling.type === "raam" || l.node.vulling.type === "deur"}
                 <rect x={l.rect.x + 28} y={l.rect.y + 28} width={Math.max(0, l.rect.width - 56)} height={Math.max(0, l.rect.height - 56)}
                       fill="none" stroke="#caa06a" stroke-width="20" />
+                <path d={openingTriangle(l)} fill="none" stroke="#caa06a" stroke-width="5" opacity="0.75" />
+              {/if}
+              {#if l.node.vulling.glaslat}
+                <rect x={l.rect.x + 55} y={l.rect.y + 55} width={Math.max(0, l.rect.width - 110)} height={Math.max(0, l.rect.height - 110)}
+                      fill="none" stroke="#9ec5d4" stroke-width="6" stroke-dasharray="16 12" />
               {/if}
               <text x={cx(l.rect)} y={cy(l.rect)} text-anchor="middle" dominant-baseline="middle"
                     font-size="74" fill="#e8e8f0">{vullingLabel(l.node.vulling)}</text>
@@ -206,6 +248,7 @@
   .group button:hover { border-color: var(--amber); }
   .vsel { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-muted); }
   .vsel select { padding: var(--sp-1) var(--sp-2); background: var(--bg-surface-alt); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; }
+  .vcheck { display: flex; align-items: center; gap: var(--sp-2); font-size: 12px; color: var(--text-primary); }
   .hint { color: var(--text-muted); font-size: 12px; font-style: italic; }
   .canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg-app); border-radius: var(--radius-sm); overflow: hidden; }
   .frame-svg { max-height: 100%; max-width: 100%; height: 100%; }
