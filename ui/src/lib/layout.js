@@ -25,6 +25,7 @@ export const VULLING_LABELS = {
   deur: "Deur",
   paneel: "Paneel",
   rooster: "Ventilatie",
+  buiten: "Buiten kozijn",
 };
 
 export const RAAM_OPENTYPES = {
@@ -55,6 +56,8 @@ export const raam = (openType = "draai") => leaf({ type: "raam", openType });
 export const deur = (doorKind = "enkel") => leaf({ type: "deur", doorKind });
 export const paneel = () => leaf({ type: "paneel" });
 export const rooster = () => leaf({ type: "rooster" });
+/** Outside the kozijn (wall/masonry) — no vak, no member, makes the outline step. */
+export const buiten = () => leaf({ type: "buiten" });
 
 const child = (size, node) => ({ size, node });
 export const splitRow = (...children) => ({ id: nid(), kind: "split", direction: "row", children });
@@ -69,9 +72,13 @@ export function vullingLabel(v) {
 
 // ── Templates ────────────────────────────────────────────────────
 
-/** Side-light zone: a glass side light on top (starts higher) over a lower panel/borstwering. */
-function zijlichtZone(lightH = 900, panelH = 1000) {
-  return splitCol(child(lightH, glas()), child(panelH, paneel()));
+/**
+ * Side-light zone: a glass side light on top that starts higher; BELOW it is
+ * outside the kozijn (the outline steps up) — no panel, no continuous bottom
+ * transom/stile.
+ */
+function zijlichtZone(lightH = 900, outsideH = 1000) {
+  return splitCol(child(lightH, glas()), child(outsideH, buiten()));
 }
 
 /** Melkmeisje: main full-height casement with a side light that begins higher. */

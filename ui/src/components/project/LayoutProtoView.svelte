@@ -10,7 +10,7 @@
 
   const OUTER = { w: 1800, h: 2100 };
   const FRAME = 90;
-  const DIVIDER = 60;
+  const DIVIDER = 90;
 
   let tree = $state(melkmeisje1());
   let selectedId = $state(null);
@@ -83,6 +83,7 @@
               </optgroup>
               <option value="paneel">Paneel</option>
               <option value="rooster">Ventilatie</option>
+              <option value="buiten">Buiten kozijn (trapt)</option>
             </select>
           </label>
         {:else}
@@ -93,33 +94,41 @@
 
     <div class="canvas-wrap">
       <svg viewBox="0 0 {OUTER.w} {OUTER.h}" class="frame-svg">
-        <!-- outer frame -->
-        <rect x="0" y="0" width={OUTER.w} height={OUTER.h} fill="#6b5b3e" />
-        <rect x={FRAME} y={FRAME} width={OUTER.w - 2 * FRAME} height={OUTER.h - 2 * FRAME} fill="#1a1a2e" />
+        <!-- wall / outside the kozijn -->
+        <rect x="0" y="0" width={OUTER.w} height={OUTER.h} fill="#2a2a38" />
 
-        <!-- leaf vakken -->
+        <!-- frame mass: each real vak expanded by the frame width; 'buiten' = no frame,
+             so the kozijn outline steps (melkmeisje). -->
+        {#each geom.leaves as l (l.node.id + "-f")}
+          {#if l.node.vulling.type !== "buiten"}
+            <rect x={l.rect.x - FRAME} y={l.rect.y - FRAME} width={l.rect.width + 2 * FRAME} height={l.rect.height + 2 * FRAME} fill="#6b5b3e" />
+          {/if}
+        {/each}
+
+        <!-- vak fills + details -->
         {#each geom.leaves as l (l.node.id)}
-          <g class="vak" class:sel={l.node.id === selectedId} role="button" tabindex="0"
+          <g class="vak" role="button" tabindex="0"
              onclick={() => (selectedId = l.node.id)} onkeydown={(e) => e.key === "Enter" && (selectedId = l.node.id)}>
-            <rect x={l.rect.x} y={l.rect.y} width={l.rect.width} height={l.rect.height}
-                  fill={FILL[l.node.vulling.type] || "#888"} stroke="#3a3a52" stroke-width="4" />
-            {#if l.node.vulling.type === "raam" || l.node.vulling.type === "deur"}
-              <!-- sash border -->
-              <rect x={l.rect.x + 30} y={l.rect.y + 30} width={Math.max(0, l.rect.width - 60)} height={Math.max(0, l.rect.height - 60)}
-                    fill="none" stroke="#caa06a" stroke-width="22" />
+            {#if l.node.vulling.type === "buiten"}
+              <rect x={l.rect.x} y={l.rect.y} width={l.rect.width} height={l.rect.height}
+                    fill="none" stroke="#4a4a5a" stroke-width="4" stroke-dasharray="26 20" />
+              <text x={cx(l.rect)} y={cy(l.rect)} text-anchor="middle" dominant-baseline="middle"
+                    font-size="54" fill="#6a6a7a">buiten kozijn</text>
+            {:else}
+              <rect x={l.rect.x} y={l.rect.y} width={l.rect.width} height={l.rect.height}
+                    fill={FILL[l.node.vulling.type] || "#888"} stroke="#3a3a52" stroke-width="3" />
+              {#if l.node.vulling.type === "raam" || l.node.vulling.type === "deur"}
+                <rect x={l.rect.x + 28} y={l.rect.y + 28} width={Math.max(0, l.rect.width - 56)} height={Math.max(0, l.rect.height - 56)}
+                      fill="none" stroke="#caa06a" stroke-width="20" />
+              {/if}
+              <text x={cx(l.rect)} y={cy(l.rect)} text-anchor="middle" dominant-baseline="middle"
+                    font-size="74" fill="#e8e8f0">{vullingLabel(l.node.vulling)}</text>
             {/if}
             {#if l.node.id === selectedId}
               <rect x={l.rect.x + 4} y={l.rect.y + 4} width={Math.max(0, l.rect.width - 8)} height={Math.max(0, l.rect.height - 8)}
-                    fill="none" stroke="#D97706" stroke-width="14" />
+                    fill="none" stroke="#D97706" stroke-width="12" />
             {/if}
-            <text x={cx(l.rect)} y={cy(l.rect)} text-anchor="middle" dominant-baseline="middle"
-                  font-size="78" fill="#e8e8f0">{vullingLabel(l.node.vulling)}</text>
           </g>
-        {/each}
-
-        <!-- dividers (tussenstijlen / tussendorpels) -->
-        {#each geom.dividers as d}
-          <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill="#6b5b3e" />
         {/each}
       </svg>
     </div>
