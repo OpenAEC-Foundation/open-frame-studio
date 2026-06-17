@@ -144,6 +144,10 @@ export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], div
           ? { x: pos, y: rect.y, width: dividerW, height: rect.height }
           : { x: rect.x, y: pos, width: rect.width, height: dividerW },
         direction: horiz ? "v" : "h",
+        splitId: node.id,
+        childIndex: i,
+        avail,
+        sizeSum,
       });
       pos += dividerW;
     }
@@ -188,6 +192,49 @@ export function splitLeaf(root, id, direction) {
 export function setVulling(root, id, vulling) {
   return transformNode(root, id, (node) =>
     node.kind === "leaf" ? { ...node, vulling: { ...vulling } } : node);
+}
+
+/** Patch fields onto a leaf's vulling (e.g. hinge side, glaslat). */
+export function patchVulling(root, id, patch) {
+  return transformNode(root, id, (node) =>
+    node.kind === "leaf" ? { ...node, vulling: { ...node.vulling, ...patch } } : node);
+}
+
+/** Find a node by id (returns the live reference within `root`). */
+export function findNode(root, id) {
+  if (!root) return null;
+  if (root.id === id) return root;
+  if (root.kind === "split") {
+    for (const c of root.children) {
+      const r = findNode(c.node, id);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+/** Set absolute sizes of two adjacent children of a split (used while dragging). */
+export function setSplitChildSizes(root, splitId, childIndex, sizeI, sizeNext) {
+  return transformNode(root, splitId, (node) => {
+    if (node.kind !== "split") return node;
+    const children = node.children.map((c, idx) => {
+      if (idx === childIndex) return { size: sizeI, node: c.node };
+      if (idx === childIndex + 1) return { size: sizeNext, node: c.node };
+      return c;
+    });
+    return { ...node, children };
+  });
+}
+
+/** Merge: collapse the split that directly contains `leafId` back into that single vak. */
+export function mergeAt(root, leafId) {
+  const walk = (node) => {
+    if (node.kind !== "split") return node;
+    const hit = node.children.find((c) => c.node.id === leafId);
+    if (hit && node.children.length >= 2) return clone(hit.node);
+    return { ...node, children: node.children.map((c) => ({ size: c.size, node: walk(c.node) })) };
+  };
+  return walk(clone(root));
 }
 
 /** Count leaves (vakken). */

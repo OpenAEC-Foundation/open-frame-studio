@@ -3,6 +3,7 @@
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
     melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid,
+    findNode, setSplitChildSizes, mergeAt,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
   import { currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
@@ -37,6 +38,36 @@
 
   function setTemplate(fn) { tree = fn(); selectedId = null; }
   function doSplit(dir) { if (selectedId) tree = splitLeaf(tree, selectedId, dir); }
+  function mergeSelected() { if (selectedId) tree = mergeAt(tree, selectedId); }
+
+  // ── Drag-to-resize dividers ────────────────────────────────────
+  let svgEl = $state(null);
+  let drag = $state(null);
+
+  function startDrag(d, e) {
+    const split = findNode(tree, d.splitId);
+    if (!split || split.kind !== "split") return;
+    const r = svgEl?.getBoundingClientRect();
+    const scale = r ? Math.min(r.width / OUTER.w, r.height / OUTER.h) : 1;
+    drag = {
+      splitId: d.splitId, childIndex: d.childIndex, axis: d.direction,
+      avail: d.avail, sizeSum: d.sizeSum, scale,
+      startX: e.clientX, startY: e.clientY,
+      origI: split.children[d.childIndex].size,
+      origNext: split.children[d.childIndex + 1].size,
+    };
+    e.preventDefault();
+  }
+  function onPointerMove(e) {
+    if (!drag) return;
+    const deltaPx = drag.axis === "v" ? e.clientX - drag.startX : e.clientY - drag.startY;
+    const deltaMm = deltaPx / (drag.scale || 1);
+    let deltaSize = deltaMm * drag.sizeSum / Math.max(1, drag.avail);
+    const min = 0.05 * drag.sizeSum;
+    deltaSize = Math.max(-(drag.origI - min), Math.min(drag.origNext - min, deltaSize));
+    tree = setSplitChildSizes(tree, drag.splitId, drag.childIndex, drag.origI + deltaSize, drag.origNext - deltaSize);
+  }
+  function onPointerUp() { drag = null; }
   function changeVulling(e) {
     if (!selectedLeaf) return;
     const val = e.target.value;
@@ -51,6 +82,8 @@
   const cx = (r) => r.x + r.width / 2;
   const cy = (r) => r.y + r.height / 2;
 </script>
+
+<svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
 
 <div class="view">
   <div class="toolbar">
@@ -84,6 +117,7 @@
         {#if selectedLeaf}
           <button onclick={() => doSplit("row")}>Splits ⟷ (tussenstijl)</button>
           <button onclick={() => doSplit("column")}>Splits ↕ (tussendorpel)</button>
+          <button onclick={mergeSelected}>Samenvoegen (splitsing opheffen)</button>
           <label class="vsel">
             <span>Vulling</span>
             <select onchange={changeVulling} value={selectedLeaf.vulling.type === "raam" ? `raam:${selectedLeaf.vulling.openType}` : selectedLeaf.vulling.type === "deur" ? `deur:${selectedLeaf.vulling.doorKind}` : selectedLeaf.vulling.type}>
@@ -110,7 +144,7 @@
     </div>
 
     <div class="canvas-wrap">
-      <svg viewBox="0 0 {OUTER.w} {OUTER.h}" class="frame-svg">
+      <svg viewBox="0 0 {OUTER.w} {OUTER.h}" class="frame-svg" bind:this={svgEl}>
         <!-- wall / outside the kozijn -->
         <rect x="0" y="0" width={OUTER.w} height={OUTER.h} fill="#2a2a38" />
 
@@ -147,6 +181,13 @@
             {/if}
           </g>
         {/each}
+
+        <!-- drag handles on the dividers (tussenstijl/-dorpel) -->
+        {#each geom.dividers as d, i (i)}
+          <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height}
+                class="divider-handle {d.direction}" fill="transparent"
+                onpointerdown={(e) => startDrag(d, e)} role="separator" aria-label="versleep deellijn" tabindex="-1" />
+        {/each}
       </svg>
     </div>
   </div>
@@ -170,4 +211,7 @@
   .frame-svg { max-height: 100%; max-width: 100%; height: 100%; }
   .vak { cursor: default; }
   .vak:hover rect:first-child { fill-opacity: 0.5; }
+  .divider-handle.v { cursor: col-resize; }
+  .divider-handle.h { cursor: row-resize; }
+  .divider-handle:hover { fill: rgba(217, 119, 6, 0.25) !important; }
 </style>
