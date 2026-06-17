@@ -24,6 +24,10 @@ pub struct Kozijn {
     /// Free-form extensions beyond the grid (e.g., extended dorpel, extra stijl)
     #[serde(default)]
     pub extensions: Vec<FrameExtension>,
+    /// Free subdivision tree (additive). When present, supersedes the rectangular
+    /// grid for layout/geometry; old projects (grid only) keep working.
+    #[serde(default)]
+    pub layout: Option<crate::layout::VakNode>,
 }
 
 /// A free-form member extension beyond the rectangular grid
@@ -115,6 +119,7 @@ impl Kozijn {
             placement: Placement::default(),
             series_id: None,
             extensions: vec![],
+            layout: None,
         }
     }
 
@@ -168,6 +173,7 @@ impl Kozijn {
             placement: Placement::default(),
             series_id: None,
             extensions: vec![],
+            layout: None,
         }
     }
 
