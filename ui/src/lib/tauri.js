@@ -120,6 +120,7 @@ function wasmCommand(cmd, args) {
 
       case "update_kozijn_dimensions": return J(wasm.update_kozijn_dimensions(args?.id, args?.width, args?.height));
       case "update_cell_type": return J(wasm.update_cell_type(args?.id, args?.cellIndex, args?.panelType, args?.openingDirection));
+      case "update_cell_panel_filling": return J(wasm.update_cell_panel_filling(args?.id, args?.cellIndex, args?.panelFillingJson));
       case "add_column": return J(wasm.add_column(args?.id, args?.position));
       case "add_row": return J(wasm.add_row(args?.id, args?.position));
 

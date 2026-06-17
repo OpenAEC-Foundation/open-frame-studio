@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::hardware::HardwareSet;
+use crate::panel_filling::PanelFilling;
 use crate::profile::ProfileRef;
 
 /// Complete kozijn (window frame) definition
@@ -397,6 +398,9 @@ pub struct Cell {
     /// Sash wood depth in mm (67/78/90mm typical)
     #[serde(default)]
     pub sash_depth: Option<f64>,
+    /// Infill panel spec for Panel/Ventilation cells (vakvulling). None = use defaults.
+    #[serde(default)]
+    pub panel_filling: Option<PanelFilling>,
 }
 
 impl Default for Cell {
@@ -410,6 +414,7 @@ impl Default for Cell {
             sash_profile: None,
             sash_width: None,
             sash_depth: None,
+            panel_filling: None,
         }
     }
 }

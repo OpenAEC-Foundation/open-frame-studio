@@ -605,6 +605,31 @@ pub fn update_cell_hardware(
 }
 
 #[tauri::command]
+pub fn update_cell_panel_filling(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+    panel_filling_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+    let filling: ofs_core::panel_filling::PanelFilling =
+        serde_json::from_str(&panel_filling_json)
+            .map_err(|e| format!("Ongeldige vakvulling data: {}", e))?;
+    cell.panel_filling = Some(filling);
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
 pub fn auto_select_hardware(
     state: State<'_, AppState>,
     id: String,

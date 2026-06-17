@@ -152,6 +152,24 @@ pub fn update_cell_type(
 }
 
 #[wasm_bindgen]
+pub fn update_cell_panel_filling(
+    id: &str,
+    cell_index: usize,
+    panel_filling_json: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        if cell_index < k.cells.len() {
+            if let Ok(filling) = serde_json::from_str::<ofs_core::panel_filling::PanelFilling>(panel_filling_json) {
+                k.cells[cell_index].panel_filling = Some(filling);
+            }
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;

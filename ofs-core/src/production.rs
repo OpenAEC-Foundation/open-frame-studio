@@ -375,17 +375,32 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             PanelType::Panel => {
                 let panel_w = cell_w - 2.0 * GLASS_CLEARANCE_MM;
                 let panel_h = cell_h - 2.0 * GLASS_CLEARANCE_MM;
+                let panel_label = cell
+                    .panel_filling
+                    .as_ref()
+                    .map(|f| f.filling_type.label_nl().to_string())
+                    .unwrap_or_else(|| "Sandwichpaneel".to_string());
                 panel_list.push(PanelListItem {
                     piece_id: cell_id.clone(),
                     cell_index: i,
                     width_mm: panel_w,
                     height_mm: panel_h,
-                    panel_type: "Sandwichpaneel".into(),
+                    panel_type: panel_label,
                     quantity: 1,
                 });
             }
             PanelType::Ventilation => {
-                // Ventilation grille — no glass or panel
+                // Ventilation grille — emit a panel entry when a grille filling is set.
+                if let Some(filling) = cell.panel_filling.as_ref() {
+                    panel_list.push(PanelListItem {
+                        piece_id: cell_id.clone(),
+                        cell_index: i,
+                        width_mm: cell_w - 2.0 * GLASS_CLEARANCE_MM,
+                        height_mm: cell_h - 2.0 * GLASS_CLEARANCE_MM,
+                        panel_type: filling.filling_type.label_nl().to_string(),
+                        quantity: 1,
+                    });
+                }
             }
         }
 
