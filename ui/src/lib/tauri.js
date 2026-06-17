@@ -97,6 +97,14 @@ function vgProductionStub() {
   return { mark: "VG01", name: "", mullionList: [], transomList: [], glassList: [], gasketList: [], bom: [] };
 }
 
+function circularityStub() {
+  return {
+    kozijnPassports: [], categories: [],
+    totalMassKg: 0, totalRecyclableKg: 0, totalCo2Kg: 0,
+    circularityScore: 0, renewableMassKg: 0, renewablePct: 0,
+  };
+}
+
 // ── WASM command dispatch ───────────────────────────────────
 
 // ofs-wasm functions return JSON strings; the Tauri commands return parsed
@@ -188,6 +196,11 @@ function wasmCommand(cmd, args) {
       case "create_quotation_revision": return quotationStub(args, 2);
       case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
       case "get_project_energy": return { items: [] };
+      case "get_project_circularity":
+        // Real computation once the (rebuilt) wasm exposes it; empty shape otherwise.
+        return typeof wasm.get_project_circularity === "function"
+          ? J(wasm.get_project_circularity())
+          : circularityStub();
       case "check_certification": return { ceChecks: [], skhChecks: [] };
       case "get_bcf_topics": return [];
       case "create_bcf_topic": return bcfTopicStub(args);
@@ -243,6 +256,7 @@ function browserFallback(cmd, args) {
     case "create_quotation_revision": return quotationStub(args, 2);
     case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
     case "get_project_energy": return { items: [] };
+    case "get_project_circularity": return circularityStub();
     case "check_certification": return { ceChecks: [], skhChecks: [] };
     case "get_bcf_topics": return [];
     case "create_bcf_topic": return bcfTopicStub(args);
