@@ -118,6 +118,26 @@ function plausibilityStub() {
   return { windPressurePa: 0, limitRatio: 200, kozijnResults: [], overallPass: true };
 }
 
+function energyStub(args) {
+  const maxUw = args?.maxUw ?? 1.65;
+  return {
+    kozijnContributions: [], totalTransmissionLoss: 0, totalSolarGainFactor: 0,
+    averageUw: 0, bouwbesluitMaxUw: maxUw, compliant: false,
+  };
+}
+
+function certStub() {
+  const empty = (standard) => ({ standard, checks: [], overallPass: false });
+  return {
+    ceMarking: empty("CE EN 14351-1"),
+    skhKomo: empty("SKH/KOMO Houten Kozijnen"),
+    performanceClass: {
+      airPermeability: "", waterTightness: "", windResistance: "",
+      thermalTransmittance: "", soundInsulation: "", burglarResistance: "",
+    },
+  };
+}
+
 // ── WASM command dispatch ───────────────────────────────────
 
 // ofs-wasm functions return JSON strings; the Tauri commands return parsed
@@ -208,7 +228,10 @@ function wasmCommand(cmd, args) {
       case "update_quotation_status": return quotationStub(args);
       case "create_quotation_revision": return quotationStub(args, 2);
       case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
-      case "get_project_energy": return { items: [] };
+      case "get_project_energy":
+        return typeof wasm.get_project_energy === "function"
+          ? J(wasm.get_project_energy(args?.maxUw ?? 1.65))
+          : energyStub(args);
       case "get_project_circularity":
         // Real computation once the (rebuilt) wasm exposes it; empty shape otherwise.
         return typeof wasm.get_project_circularity === "function"
@@ -218,7 +241,10 @@ function wasmCommand(cmd, args) {
         return typeof wasm.get_project_plausibility === "function"
           ? J(wasm.get_project_plausibility(args?.windPressurePa ?? 1000))
           : plausibilityStub();
-      case "check_certification": return { ceChecks: [], skhChecks: [] };
+      case "check_certification":
+        return typeof wasm.check_certification === "function"
+          ? J(wasm.check_certification(args?.id))
+          : certStub();
       case "generate_dop_for_kozijn":
         return typeof wasm.generate_dop_for_kozijn === "function"
           ? J(wasm.generate_dop_for_kozijn(args?.id))
@@ -280,10 +306,10 @@ function browserFallback(cmd, args) {
     case "update_quotation_status": return quotationStub(args);
     case "create_quotation_revision": return quotationStub(args, 2);
     case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
-    case "get_project_energy": return { items: [] };
+    case "get_project_energy": return energyStub(args);
     case "get_project_circularity": return circularityStub();
     case "get_project_plausibility": return plausibilityStub();
-    case "check_certification": return { ceChecks: [], skhChecks: [] };
+    case "check_certification": return certStub();
     case "generate_dop_for_kozijn": return dopStub();
     case "get_bcf_topics": return [];
     case "create_bcf_topic": return bcfTopicStub(args);

@@ -20,11 +20,11 @@
     loading = false;
   }
 
-  $: items = energyData?.items || [];
-  $: avgUw = items.length > 0 ? items.reduce((s, i) => s + (i.uw || 0), 0) / items.length : 0;
-  $: compliant = avgUw > 0 && avgUw <= maxUw;
-  $: totalArea = items.reduce((s, i) => s + (i.area || 0), 0);
-  $: totalLoss = items.reduce((s, i) => s + (i.transmissionLoss || 0), 0);
+  $: items = energyData?.kozijnContributions || [];
+  $: avgUw = energyData?.averageUw ?? 0;
+  $: compliant = (energyData?.compliant ?? false) && avgUw > 0;
+  $: totalArea = items.reduce((s, i) => s + (i.areaM2 || 0), 0);
+  $: totalLoss = energyData?.totalTransmissionLoss ?? 0;
 </script>
 
 <div class="view">
@@ -89,17 +89,17 @@
         <tbody>
           {#each items as item}
             <tr>
-              <td class="mark">{item.mark || "\u2014"}</td>
+              <td class="mark">{item.kozijnMark || "\u2014"}</td>
               <td class="num">
-                <span class="uw-val" class:uw-good={item.uw <= maxUw} class:uw-poor={item.uw > maxUw}>
-                  {(item.uw || 0).toFixed(2)}
+                <span class="uw-val" class:uw-good={item.uwValue <= maxUw} class:uw-poor={item.uwValue > maxUw}>
+                  {(item.uwValue || 0).toFixed(2)}
                 </span>
               </td>
               <td class="num">{(item.gValue || 0).toFixed(2)}</td>
-              <td class="num">{(item.area || 0).toFixed(2)}</td>
-              <td class="num">{(item.transmissionLoss || 0).toFixed(1)}</td>
+              <td class="num">{(item.areaM2 || 0).toFixed(2)}</td>
+              <td class="num">{(item.transmissionLossWPerK || 0).toFixed(1)}</td>
               <td>
-                {#if item.uw <= maxUw}
+                {#if item.uwValue <= maxUw}
                   <span class="badge pass">OK</span>
                 {:else}
                   <span class="badge fail">Te hoog</span>

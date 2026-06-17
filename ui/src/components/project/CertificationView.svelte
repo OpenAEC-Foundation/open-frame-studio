@@ -8,6 +8,7 @@
 
   let ceChecks = [];
   let skhChecks = [];
+  let perfClass = null;
   let loading = false;
   let dop = null;
   let dopLoading = false;
@@ -33,16 +34,17 @@
     loading = true;
     try {
       const result = await invoke("check_certification", { id: k.id });
-      ceChecks = result?.ceChecks || [];
-      skhChecks = result?.skhChecks || [];
+      ceChecks = result?.ceMarking?.checks || [];
+      skhChecks = result?.skhKomo?.checks || [];
+      perfClass = result?.performanceClass || null;
     } catch (e) {
       console.error("Certificatie-check mislukt:", e);
     }
     loading = false;
   }
 
-  $: allCePassed = ceChecks.length > 0 && ceChecks.every(c => c.pass);
-  $: allSkhPassed = skhChecks.length > 0 && skhChecks.every(c => c.pass);
+  $: allCePassed = ceChecks.length > 0 && ceChecks.every(c => c.passed);
+  $: allSkhPassed = skhChecks.length > 0 && skhChecks.every(c => c.passed);
 </script>
 
 <div class="view">
@@ -75,8 +77,8 @@
       {:else}
         <div class="checks-grid">
           {#each ceChecks as check}
-            <div class="check-card" class:check-pass={check.pass} class:check-fail={!check.pass}>
-              <div class="check-icon">{check.pass ? "\u2713" : "\u2717"}</div>
+            <div class="check-card" class:check-pass={check.passed} class:check-fail={!check.passed}>
+              <div class="check-icon">{check.passed ? "\u2713" : "\u2717"}</div>
               <div class="check-content">
                 <span class="check-req">{check.requirement || "\u2014"}</span>
                 <span class="check-detail">Waarde: {check.value ?? "\u2014"} | Vereist: {check.expected ?? "\u2014"}</span>
@@ -101,8 +103,8 @@
       {:else}
         <div class="checks-grid">
           {#each skhChecks as check}
-            <div class="check-card" class:check-pass={check.pass} class:check-fail={!check.pass}>
-              <div class="check-icon">{check.pass ? "\u2713" : "\u2717"}</div>
+            <div class="check-card" class:check-pass={check.passed} class:check-fail={!check.passed}>
+              <div class="check-icon">{check.passed ? "\u2713" : "\u2717"}</div>
               <div class="check-content">
                 <span class="check-req">{check.requirement || "\u2014"}</span>
                 <span class="check-detail">Waarde: {check.value ?? "\u2014"} | Vereist: {check.expected ?? "\u2014"}</span>
@@ -112,6 +114,22 @@
         </div>
       {/if}
     </div>
+
+    {#if perfClass}
+      <div class="cert-section">
+        <div class="section-header">
+          <h3>Prestatieklassen (EN 14351-1)</h3>
+        </div>
+        <div class="perf-grid">
+          <div class="perf-card"><span class="perf-lbl">Luchtdoorlatendheid</span><span class="perf-val">{perfClass.airPermeability || "—"}</span><span class="perf-std">EN 12207</span></div>
+          <div class="perf-card"><span class="perf-lbl">Waterdichtheid</span><span class="perf-val">{perfClass.waterTightness || "—"}</span><span class="perf-std">EN 12208</span></div>
+          <div class="perf-card"><span class="perf-lbl">Windweerstand</span><span class="perf-val">{perfClass.windResistance || "—"}</span><span class="perf-std">EN 12210</span></div>
+          <div class="perf-card"><span class="perf-lbl">Warmtegeleiding</span><span class="perf-val">{perfClass.thermalTransmittance || "—"}</span><span class="perf-std">EN ISO 10077</span></div>
+          <div class="perf-card"><span class="perf-lbl">Geluidsisolatie</span><span class="perf-val">{perfClass.soundInsulation || "—"}</span><span class="perf-std">EN ISO 717-1</span></div>
+          <div class="perf-card"><span class="perf-lbl">Inbraakwerendheid</span><span class="perf-val">{perfClass.burglarResistance || "—"}</span><span class="perf-std">EN 1627</span></div>
+        </div>
+      </div>
+    {/if}
 
     {#if dop && dop.dopNumber}
       <div class="cert-section dop-section">
@@ -187,6 +205,12 @@
 
   .badge.neutral { background: rgba(107, 114, 128, 0.18); color: #9aa0a8; }
   .action-btn:disabled { opacity: 0.5; }
+
+  .perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-2); }
+  .perf-card { display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2) var(--sp-3); background: var(--bg-surface-alt); border-radius: var(--radius-sm); border-left: 3px solid var(--amber); }
+  .perf-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  .perf-val { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+  .perf-std { font-size: 10px; color: var(--text-muted); }
 
   .dop-doc { background: var(--bg-surface-alt); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); padding: var(--sp-4); }
   .dop-head { border-bottom: 2px solid var(--amber); padding-bottom: var(--sp-2); margin-bottom: var(--sp-3); }
