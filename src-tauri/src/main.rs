@@ -53,6 +53,7 @@ fn main() {
             commands::kozijn::update_cell_hardware,
             commands::kozijn::update_cell_panel_filling,
             commands::kozijn::update_cell_glaslat,
+            commands::kozijn::update_cell_escape,
             commands::kozijn::auto_select_hardware,
             commands::kozijn::update_security_class,
             commands::kozijn::update_cell_glazing,

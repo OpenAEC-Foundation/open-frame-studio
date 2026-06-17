@@ -100,6 +100,20 @@ export async function updateCellGlaslat(cellIndex, glaslat) {
   await refreshGeometry(updated.id);
 }
 
+export async function updateCellEscape(cellIndex, isEscape) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_cell_escape", {
+    id: k.id,
+    cellIndex,
+    isEscape,
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
 export async function addColumn(position) {
   const k = get(currentKozijn);
   if (!k) return;

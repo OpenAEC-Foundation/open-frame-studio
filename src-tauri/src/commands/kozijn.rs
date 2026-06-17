@@ -658,6 +658,28 @@ pub fn update_cell_glaslat(
 }
 
 #[tauri::command]
+pub fn update_cell_escape(
+    state: State<'_, AppState>,
+    id: String,
+    cell_index: usize,
+    is_escape: bool,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
+        .ok_or("Cel niet gevonden")?;
+    cell.is_escape = is_escape;
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
 pub fn auto_select_hardware(
     state: State<'_, AppState>,
     id: String,

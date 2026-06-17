@@ -21,7 +21,14 @@ pub enum ValidationError {
     InsufficientHinges(usize, u8, u8),
     #[error("Cel {0}: glaslat hoogte {1}mm is kleiner dan KVT-minimum {2}mm")]
     GlaslatTooShallow(usize, f64, f64),
+    #[error("Cel {0}: vluchtraam moet beweegbaar (te openen) zijn")]
+    EscapeWindowNotOperable(usize),
+    #[error("Cel {0}: vluchtraam vrije opening {1:.0}x{2:.0}mm is kleiner dan minimum {3:.0}mm")]
+    EscapeWindowTooSmall(usize, f64, f64, f64),
 }
+
+/// Minimum free opening (width and height) for an escape window in mm.
+const MIN_ESCAPE_OPENING: f64 = 600.0;
 
 const MIN_WIDTH: f64 = 200.0;
 const MIN_HEIGHT: f64 = 200.0;
@@ -78,6 +85,27 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
         if let Some(gl) = cell.glaslat.as_ref() {
             if gl.height_mm < 17.0 {
                 errors.push(ValidationError::GlaslatTooShallow(i, gl.height_mm, 17.0));
+            }
+        }
+        // Vluchtraam (escape window): must be operable and meet the minimum free opening.
+        if cell.is_escape {
+            if !cell.panel_type.is_operable() {
+                errors.push(ValidationError::EscapeWindowNotOperable(i));
+            } else {
+                let cols = kozijn.grid.columns.len().max(1);
+                let cw = kozijn.grid.columns.get(i % cols).map(|c| c.size).unwrap_or(0.0);
+                let ch = kozijn.grid.rows.get(i / cols).map(|r| r.size).unwrap_or(0.0);
+                let sw = cell.sash_width.unwrap_or(67.0);
+                let free_w = cw - 2.0 * sw;
+                let free_h = ch - 2.0 * sw;
+                if free_w < MIN_ESCAPE_OPENING || free_h < MIN_ESCAPE_OPENING {
+                    errors.push(ValidationError::EscapeWindowTooSmall(
+                        i,
+                        free_w,
+                        free_h,
+                        MIN_ESCAPE_OPENING,
+                    ));
+                }
             }
         }
     }

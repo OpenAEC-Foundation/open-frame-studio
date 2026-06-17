@@ -133,6 +133,7 @@
   "props.grid": "Grid",
   "props.cell": "Cell {index}",
   "props.panelType": "Panel type",
+  "props.escapeWindow": "Escape window",
   "props.openingDirection": "Opening direction",
   "props.left": "Left",
   "props.right": "Right",

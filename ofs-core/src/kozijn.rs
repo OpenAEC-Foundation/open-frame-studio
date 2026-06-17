@@ -405,6 +405,9 @@ pub struct Cell {
     /// Glazing bead spec for glazed cells (glaslat). None = no explicit bead.
     #[serde(default)]
     pub glaslat: Option<Glaslat>,
+    /// Designated as an escape window (vluchtraam) — triggers Bouwbesluit checks.
+    #[serde(default)]
+    pub is_escape: bool,
 }
 
 impl Default for Cell {
@@ -420,6 +423,7 @@ impl Default for Cell {
             sash_depth: None,
             panel_filling: None,
             glaslat: None,
+            is_escape: false,
         }
     }
 }

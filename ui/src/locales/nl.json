@@ -138,6 +138,7 @@
   "props.grid": "Grid",
   "props.cell": "Cel {index}",
   "props.panelType": "Paneel type",
+  "props.escapeWindow": "Vluchtraam",
   "props.openingDirection": "Openingsrichting",
   "props.left": "Links",
   "props.right": "Rechts",

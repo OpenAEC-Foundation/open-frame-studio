@@ -133,6 +133,7 @@
   "props.grid": "Raster",
   "props.cell": "Feld {index}",
   "props.panelType": "Fl\u00fcgeltyp",
+  "props.escapeWindow": "Fluchtfenster",
   "props.openingDirection": "\u00d6ffnungsrichtung",
   "props.left": "Links",
   "props.right": "Rechts",

@@ -127,6 +127,7 @@ function wasmCommand(cmd, args) {
       case "update_cell_type": return J(wasm.update_cell_type(args?.id, args?.cellIndex, args?.panelType, args?.openingDirection));
       case "update_cell_panel_filling": return J(wasm.update_cell_panel_filling(args?.id, args?.cellIndex, args?.panelFillingJson));
       case "update_cell_glaslat": return J(wasm.update_cell_glaslat(args?.id, args?.cellIndex, args?.glaslatJson));
+      case "update_cell_escape": return J(wasm.update_cell_escape(args?.id, args?.cellIndex, args?.isEscape));
       case "add_column": return J(wasm.add_column(args?.id, args?.position));
       case "add_row": return J(wasm.add_row(args?.id, args?.position));
 

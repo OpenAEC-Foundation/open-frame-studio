@@ -217,6 +217,22 @@ pub fn update_cell_glaslat(
 }
 
 #[wasm_bindgen]
+pub fn update_cell_escape(
+    id: &str,
+    cell_index: usize,
+    is_escape: bool,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        if cell_index < k.cells.len() {
+            k.cells[cell_index].is_escape = is_escape;
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;

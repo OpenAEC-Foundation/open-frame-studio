@@ -7,6 +7,7 @@
     selectedMember,
     updateDimensions,
     updateCellType,
+    updateCellEscape,
     updateFrameProfile,
     updateSillProfile,
     updateFrameShape,
@@ -436,6 +437,14 @@
             {/each}
           </select>
         </div>
+
+        {#if !["fixed_glass", "panel", "ventilation"].includes(selectedCell.panelType)}
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0;">
+            <input type="checkbox" checked={selectedCell.isEscape || false}
+              onchange={(e) => updateCellEscape($selectedCellIndex, e.target.checked)} />
+            <span>{$_('props.escapeWindow')}</span>
+          </label>
+        {/if}
 
         {#if ["turn_tilt", "turn", "tilt"].includes(selectedCell.panelType)}
           <div class="field">
