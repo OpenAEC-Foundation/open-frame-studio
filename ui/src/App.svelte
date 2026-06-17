@@ -17,6 +17,7 @@
   import ProductionListsView from "./components/project/ProductionListsView.svelte";
   import CalculationView from "./components/project/CalculationView.svelte";
   import DashboardView from "./components/project/DashboardView.svelte";
+  import LayoutProtoView from "./components/project/LayoutProtoView.svelte";
   import Viewer3D from "./components/viewer3d/Viewer3D.svelte";
   import ProfileEditorView from "./components/profile-editor/ProfileEditorView.svelte";
   import QuotationView from "./components/project/QuotationView.svelte";
@@ -165,6 +166,17 @@
       <rect x="3" y="17" width="8" height="4" rx="1"/>
     </svg>
     {$_('tabs.dashboard')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "layoutProto"}
+    onclick={() => activeWorkspaceView.set("layoutProto")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="1"/>
+      <path d="M3 9h18M9 9v12M14 14h7"/>
+    </svg>
+    {$_('tabs.layoutProto')}
   </button>
   <button
     class="ws-tab"
@@ -424,6 +436,8 @@
     <CalculationView />
   {:else if workspaceView === "dashboard"}
     <DashboardView />
+  {:else if workspaceView === "layoutProto"}
+    <LayoutProtoView />
   {:else if workspaceView === "profiles"}
     <ProfileEditorView />
   {:else if workspaceView === "planning"}

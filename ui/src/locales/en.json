@@ -10,6 +10,7 @@
   "tabs.production": "Production",
   "tabs.calculation": "Calculation",
   "tabs.dashboard": "Analytics",
+  "tabs.layoutProto": "Layout (proto)",
   "tabs.profiles": "Profile editor",
   "tabs.planning": "Production plan",
   "tabs.energy": "Energy",
