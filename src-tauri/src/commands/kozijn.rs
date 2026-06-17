@@ -40,6 +40,10 @@ pub fn create_kozijn_from_template(
         "double_turn_tilt" => grid::template_double_turn_tilt_sj(width, height, &sj),
         "sliding_door" => grid::template_sliding_door_sj(width, height, &sj),
         "front_door" => grid::template_front_door_sj(width, height, &sj),
+        "klapraam" => grid::template_top_hung_sj(width, height, &sj),
+        "hefschuif" => grid::template_lift_slide_sj(width, height, &sj),
+        "pivot" => grid::template_pivot_sj(width, height, &sj),
+        "stolp" => grid::template_stolp_sj(width, height, &sj),
         _ => Kozijn::new_with_sjabloon("Kozijn", "K01", width, height, &sj),
     };
     let mut project = state.project.lock().map_err(|e| e.to_string())?;

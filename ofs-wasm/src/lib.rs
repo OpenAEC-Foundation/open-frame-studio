@@ -74,6 +74,35 @@ pub fn create_kozijn(name: &str, mark: &str, width: f64, height: f64) -> Result<
 }
 
 #[wasm_bindgen]
+pub fn create_kozijn_from_template(
+    template: &str,
+    width: f64,
+    height: f64,
+    sjabloon_id: Option<String>,
+) -> Result<String, String> {
+    let sj = match sjabloon_id {
+        Some(id) => ofs_core::template::get_sjabloon(&id),
+        None => ofs_core::template::default_sjabloon(),
+    };
+    with_project(|p| {
+        let k = match template {
+            "single_turn_tilt" => ofs_core::grid::template_single_turn_tilt_sj(width, height, &sj),
+            "double_turn_tilt" => ofs_core::grid::template_double_turn_tilt_sj(width, height, &sj),
+            "sliding_door" => ofs_core::grid::template_sliding_door_sj(width, height, &sj),
+            "front_door" => ofs_core::grid::template_front_door_sj(width, height, &sj),
+            "klapraam" => ofs_core::grid::template_top_hung_sj(width, height, &sj),
+            "hefschuif" => ofs_core::grid::template_lift_slide_sj(width, height, &sj),
+            "pivot" => ofs_core::grid::template_pivot_sj(width, height, &sj),
+            "stolp" => ofs_core::grid::template_stolp_sj(width, height, &sj),
+            _ => Kozijn::new_with_sjabloon("Kozijn", "K01", width, height, &sj),
+        };
+        let json = serde_json::to_string(&k).unwrap();
+        p.kozijnen.push(k);
+        json
+    })
+}
+
+#[wasm_bindgen]
 pub fn get_kozijn(id: &str) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;

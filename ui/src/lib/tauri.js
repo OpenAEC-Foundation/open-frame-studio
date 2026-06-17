@@ -112,7 +112,12 @@ function wasmCommand(cmd, args) {
       case "save_project": return wasm.save_project_json();
 
       case "create_kozijn": return J(wasm.create_kozijn(args?.name, args?.mark, args?.width, args?.height));
-      case "create_kozijn_from_template": return J(wasm.create_kozijn(args?.name || "Kozijn", args?.mark || "K01", args?.width || 1200, args?.height || 1500));
+      case "create_kozijn_from_template":
+        // Use the template-aware builder when the (rebuilt) wasm exposes it;
+        // gracefully fall back to a plain kozijn on older wasm bundles.
+        return typeof wasm.create_kozijn_from_template === "function"
+          ? J(wasm.create_kozijn_from_template(args?.template || "single_turn_tilt", args?.width || 1200, args?.height || 1500, args?.sjabloonId || null))
+          : J(wasm.create_kozijn(args?.name || "Kozijn", args?.mark || "K01", args?.width || 1200, args?.height || 1500));
       case "get_kozijn": return J(wasm.get_kozijn(args?.id));
       case "get_all_kozijnen": return J(wasm.get_all_kozijnen());
       case "remove_kozijn": return wasm.remove_kozijn(args?.id);
