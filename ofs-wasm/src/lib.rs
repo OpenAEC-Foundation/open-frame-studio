@@ -290,6 +290,16 @@ pub fn get_project_circularity() -> Result<String, String> {
     })
 }
 
+// ── Purchase orders (per-supplier) ──────────────────────────────
+
+#[wasm_bindgen]
+pub fn generate_purchase_orders() -> Result<String, String> {
+    with_project(|p| {
+        let orders = ofs_core::purchase_order::generate_purchase_orders(p);
+        serde_json::to_string(&orders).unwrap()
+    })
+}
+
 // ── Plausibility (indicative static wind-load) ──────────────────
 
 #[wasm_bindgen]

@@ -125,6 +125,7 @@ fn main() {
             commands::quotation::create_quotation_revision,
             // Procurement commands
             commands::procurement::generate_purchase_proposals,
+            commands::purchase_order::generate_purchase_orders,
             // Planning commands
             commands::planning::get_production_plan,
             // Energy commands

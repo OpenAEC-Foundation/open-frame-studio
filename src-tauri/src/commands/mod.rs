@@ -20,6 +20,7 @@ pub mod bcf;
 pub mod ids;
 pub mod quotation;
 pub mod procurement;
+pub mod purchase_order;
 pub mod planning;
 pub mod energy;
 pub mod circularity;
