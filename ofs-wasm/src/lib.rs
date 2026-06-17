@@ -280,6 +280,34 @@ pub fn get_production_data_project() -> Result<String, String> {
     })
 }
 
+// ── Energy (BENG / Bouwbesluit) ─────────────────────────────────
+
+#[wasm_bindgen]
+pub fn get_project_energy(max_uw: f64) -> Result<String, String> {
+    with_project(|p| {
+        let profiles = p.custom_profiles.clone();
+        let result = ofs_core::energy::calculate_project_energy(p, &profiles, max_uw);
+        serde_json::to_string(&result).unwrap()
+    })
+}
+
+// ── Certification (CE / SKH / KOMO) ─────────────────────────────
+
+#[wasm_bindgen]
+pub fn check_certification(id: &str) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &p.kozijnen[idx];
+        let profiles = &p.custom_profiles;
+        let result = serde_json::json!({
+            "ceMarking": ofs_core::certification::check_ce_marking(k, profiles),
+            "skhKomo": ofs_core::certification::check_skh_komo(k),
+            "performanceClass": ofs_core::performance_class::classify_performance(k, profiles),
+        });
+        Ok(serde_json::to_string(&result).unwrap())
+    })?
+}
+
 // ── Circularity / material passport ─────────────────────────────
 
 #[wasm_bindgen]
