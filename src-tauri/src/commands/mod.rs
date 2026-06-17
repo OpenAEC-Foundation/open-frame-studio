@@ -22,6 +22,7 @@ pub mod quotation;
 pub mod procurement;
 pub mod planning;
 pub mod energy;
+pub mod circularity;
 pub mod certification;
 pub mod cnc;
 pub mod import_ifc;

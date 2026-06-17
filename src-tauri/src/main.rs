@@ -129,6 +129,8 @@ fn main() {
             commands::planning::get_production_plan,
             // Energy commands
             commands::energy::get_project_energy,
+            // Circularity / material passport commands
+            commands::circularity::get_project_circularity,
             // Certification commands
             commands::certification::check_certification,
             // CNC commands

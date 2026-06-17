@@ -280,6 +280,16 @@ pub fn get_production_data_project() -> Result<String, String> {
     })
 }
 
+// ── Circularity / material passport ─────────────────────────────
+
+#[wasm_bindgen]
+pub fn get_project_circularity() -> Result<String, String> {
+    with_project(|p| {
+        let result = ofs_core::circularity::calculate_project_circularity(p);
+        serde_json::to_string(&result).unwrap()
+    })
+}
+
 // ── Thermal ────────────────────────────────────────────────────
 
 #[wasm_bindgen]

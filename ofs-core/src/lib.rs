@@ -26,6 +26,7 @@ pub mod quotation;
 pub mod procurement;
 pub mod planning;
 pub mod energy;
+pub mod circularity;
 pub mod certification;
 pub mod performance_class;
 pub mod cnc;
