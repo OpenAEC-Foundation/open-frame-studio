@@ -37,6 +37,7 @@ fn main() {
             commands::kozijn::get_kozijn,
             commands::kozijn::get_all_kozijnen,
             commands::kozijn::update_kozijn_dimensions,
+            commands::kozijn::update_kozijn_layout,
             commands::kozijn::update_grid_sizes,
             commands::kozijn::update_frame_profile,
             commands::kozijn::update_sill_profile,

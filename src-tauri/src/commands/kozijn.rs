@@ -193,6 +193,26 @@ pub fn get_all_kozijnen(state: State<'_, AppState>) -> Result<Vec<Kozijn>, Strin
 }
 
 #[tauri::command]
+pub fn update_kozijn_layout(
+    state: State<'_, AppState>,
+    id: String,
+    layout_json: String,
+) -> Result<Kozijn, String> {
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
+    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
+    let trimmed = layout_json.trim();
+    kozijn.layout = if trimmed.is_empty() || trimmed == "null" {
+        None
+    } else {
+        Some(serde_json::from_str::<ofs_core::layout::VakNode>(trimmed)
+            .map_err(|e| format!("Ongeldig layout JSON: {}", e))?)
+    };
+    Ok(kozijn.clone())
+}
+
+#[tauri::command]
 pub fn update_kozijn_dimensions(
     state: State<'_, AppState>,
     id: String,

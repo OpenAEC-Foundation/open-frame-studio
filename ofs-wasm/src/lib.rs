@@ -217,6 +217,23 @@ pub fn update_cell_glaslat(
 }
 
 #[wasm_bindgen]
+pub fn update_kozijn_layout(
+    id: &str,
+    layout_json: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let trimmed = layout_json.trim();
+        p.kozijnen[idx].layout = if trimmed.is_empty() || trimmed == "null" {
+            None
+        } else {
+            Some(serde_json::from_str::<ofs_core::layout::VakNode>(trimmed).map_err(|e| e.to_string())?)
+        };
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn update_cell_escape(
     id: &str,
     cell_index: usize,
