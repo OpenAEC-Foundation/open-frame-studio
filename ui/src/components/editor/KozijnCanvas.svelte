@@ -553,7 +553,7 @@
   <!-- Sash frame (raamhout/deurhout) with sponning detail -->
   {#each geometry.cellRects as cellRect}
     {@const cell = kozijn.cells?.[cellRect.cellIndex]}
-    {#if cell && cell.sashWidth && cell.sashWidth > 0 && ["turn_tilt", "turn", "tilt", "sliding", "door"].includes(cell.panelType)}
+    {#if cell && cell.sashWidth && cell.sashWidth > 0 && ["turn_tilt", "turn", "tilt", "sliding", "door", "top_hung", "bottom_hung", "lift_slide", "pivot"].includes(cell.panelType)}
       {@const sw = cell.sashWidth || 54}
       {@const sp = 17}
       {@const opdek = 13}
@@ -573,12 +573,15 @@
       <rect x={sx + spInset} y={sy + spInset}
         width={Math.max(1, sashW - spInset * 2)} height={Math.max(1, sashH - spInset * 2)}
         fill="none" stroke="var(--amber)" stroke-width={0.4} opacity="0.4" pointer-events="none" />
-      <!-- Glaslat line (thin strip holding glass, ~5mm inside sponning) -->
+      <!-- Glaslat line (strip holding glass, ~5mm inside sponning) — clearer + position-tinted when configured -->
       {@const glInset = spInset + 5}
+      {@const hasGl = !!cell.glaslat}
+      {@const glColor = cell.glaslat?.position === "buiten" ? "#3B82F6" : "var(--amber)"}
       <rect x={sx + glInset} y={sy + glInset}
         width={Math.max(1, sashW - glInset * 2)} height={Math.max(1, sashH - glInset * 2)}
-        fill="none" stroke="var(--amber)" stroke-width={0.25} opacity="0.25"
-        stroke-dasharray="3 2" pointer-events="none" />
+        fill="none" stroke={hasGl ? glColor : "var(--amber)"}
+        stroke-width={hasGl ? 0.8 : 0.25} opacity={hasGl ? 0.6 : 0.25}
+        stroke-dasharray={hasGl ? "" : "3 2"} pointer-events="none" />
       {#if isDoor}
         <!-- Door: thicker bottom rail (onderdorpel ~150mm) -->
         {@const doorBottomH = Math.min(150, sashH * 0.15)}
