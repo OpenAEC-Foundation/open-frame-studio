@@ -16,6 +16,7 @@
   import KozijnstaatView from "./components/project/KozijnstaatView.svelte";
   import ProductionListsView from "./components/project/ProductionListsView.svelte";
   import CalculationView from "./components/project/CalculationView.svelte";
+  import DashboardView from "./components/project/DashboardView.svelte";
   import Viewer3D from "./components/viewer3d/Viewer3D.svelte";
   import ProfileEditorView from "./components/profile-editor/ProfileEditorView.svelte";
   import QuotationView from "./components/project/QuotationView.svelte";
@@ -151,6 +152,19 @@
       <line x1="8" y1="18" x2="12" y2="18"/>
     </svg>
     {$_('tabs.calculation')}
+  </button>
+  <button
+    class="ws-tab"
+    class:active={workspaceView === "dashboard"}
+    onclick={() => activeWorkspaceView.set("dashboard")}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="8" height="10" rx="1"/>
+      <rect x="13" y="3" width="8" height="6" rx="1"/>
+      <rect x="13" y="13" width="8" height="8" rx="1"/>
+      <rect x="3" y="17" width="8" height="4" rx="1"/>
+    </svg>
+    {$_('tabs.dashboard')}
   </button>
   <button
     class="ws-tab"
@@ -408,6 +422,8 @@
     <ProductionListsView />
   {:else if workspaceView === "calculation"}
     <CalculationView />
+  {:else if workspaceView === "dashboard"}
+    <DashboardView />
   {:else if workspaceView === "profiles"}
     <ProfileEditorView />
   {:else if workspaceView === "planning"}
