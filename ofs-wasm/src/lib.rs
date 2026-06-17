@@ -290,6 +290,17 @@ pub fn get_project_circularity() -> Result<String, String> {
     })
 }
 
+// ── Declaration of Performance (DoP) ────────────────────────────
+
+#[wasm_bindgen]
+pub fn generate_dop_for_kozijn(id: &str) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let dop = ofs_core::dop::generate_dop(&p.kozijnen[idx], &p.custom_profiles);
+        Ok(serde_json::to_string(&dop).unwrap())
+    })?
+}
+
 // ── Thermal ────────────────────────────────────────────────────
 
 #[wasm_bindgen]

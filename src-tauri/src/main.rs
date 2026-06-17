@@ -133,6 +133,8 @@ fn main() {
             commands::circularity::get_project_circularity,
             // Certification commands
             commands::certification::check_certification,
+            // Declaration of Performance (DoP) commands
+            commands::dop::generate_dop_for_kozijn,
             // CNC commands
             commands::cnc::export_cnc_gcode,
             commands::cnc::get_cnc_parts,

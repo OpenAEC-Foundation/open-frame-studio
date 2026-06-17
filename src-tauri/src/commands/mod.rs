@@ -24,6 +24,7 @@ pub mod planning;
 pub mod energy;
 pub mod circularity;
 pub mod certification;
+pub mod dop;
 pub mod cnc;
 pub mod import_ifc;
 pub mod combination;
