@@ -21,6 +21,7 @@
     { id: "beslaglijst", label: $_('production.hardwareList') },
     { id: "rubberlijst", label: $_('production.gasketList') },
     { id: "paneellijst", label: $_('production.panelList') },
+    { id: "glaslatlijst", label: $_('production.glaslatList') },
     { id: "stuklijst", label: $_('production.bomList') },
   ];
 
@@ -68,6 +69,9 @@
   $: allPanel = ($productionDataProject || []).flatMap(p =>
     (p.panelList || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
+  $: allGlaslat = ($productionDataProject || []).flatMap(p =>
+    (p.glaslatList || []).map(i => ({ ...i, mark: p.kozijnMark }))
+  );
   $: allBom = ($productionDataProject || []).flatMap(p =>
     (p.bom || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
@@ -99,6 +103,7 @@
           {:else if tab.id === "beslaglijst"}{allHw.length}
           {:else if tab.id === "rubberlijst"}{allGasket.length}
           {:else if tab.id === "paneellijst"}{allPanel.length}
+          {:else if tab.id === "glaslatlijst"}{allGlaslat.length}
           {:else if tab.id === "stuklijst"}{allBom.length}
           {/if}
         </span>
@@ -210,6 +215,27 @@
               <td class="num">{Math.round(item.widthMm)}</td>
               <td class="num">{Math.round(item.heightMm)}</td>
               <td>{item.panelType}</td>
+              <td class="num">{item.quantity}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+
+    {:else if activeTab === "glaslatlijst"}
+      <table>
+        <thead><tr>
+          <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.material')}</th><th class="num">{$_('production.width')}</th><th class="num">{$_('production.height')}</th><th class="num">{$_('production.totalLength')}</th><th class="num">{$_('production.mitered')}</th><th class="num">{$_('production.quantity')}</th>
+        </tr></thead>
+        <tbody>
+          {#each allGlaslat as item}
+            <tr>
+              <td>{item.mark}</td>
+              <td>{item.position}</td>
+              <td>{item.material}</td>
+              <td class="num">{Math.round(item.widthMm)}</td>
+              <td class="num">{Math.round(item.heightMm)}</td>
+              <td class="num">{Math.round(item.totalLengthMm)}</td>
+              <td class="num">{item.mitered ? "45°" : "90°"}</td>
               <td class="num">{item.quantity}</td>
             </tr>
           {/each}
