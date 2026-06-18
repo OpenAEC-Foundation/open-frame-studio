@@ -113,12 +113,45 @@ De open-bestanden bevatten vooral LINE+ARC+ELLIPSE → ze sluiten niet door **ch
 niet door missende SPLINE (slechts 14 open-bestanden hebben SPLINE, 6 INSERT). De 95 zonder
 contour zijn vrijwel zeker maatlijn-/annotatiebestanden.
 
-**Nog te doen — prioriteit op basis van de meting:**
-1. **Gap-bridging / robuustere chaining** (grootste winst: ~275 bestanden) — bijna-sluitende
-   lussen verbinden via nearest-endpoint binnen ruimere tolerantie; meerdere sub-lussen samenvoegen.
-2. **SPLINE** (14 open) + **INSERT/BLOCK** (6) — kleine winst.
-3. `$INSUNITS`/units.
-4. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.
+## 7. Gap-bridging-onderzoek (18 jun 2026) — diagnose + besluit
+De "open"-bestanden zijn gemeten (`temp/dxf-diag.mjs`, `temp/dxf-bridge.mjs`, `temp/dxf-face.mjs`)
+om de juiste fix te kiezen i.p.v. een tolerantie te gokken. Drie bevindingen:
 
-Validatie op de samples via `temp/dxf-proto.mjs` (Node, lokaal); de echte (Rust) run pas na
-wasm/CI-herbouw (#4481904).
+**a) Ruimere chaining-tolerantie helpt NIET — dood spoor.** Sweep van de join-tolerantie
+(0.05 → 0.2 → 0.5 → 1.0 → 2.0 mm) levert vrijwel vlakke dekking (267→265→259→259→270) en
+op de middenwaarden zelfs *minder*: grotere tolerantie maakt nieuwe fóute joins die eerder-correcte
+sluitingen breken. De gemeten head-tail-gap van de grootste open lus zit bij **214 van de 275**
+bestanden **>5 mm** uit elkaar — het is dus géén bijna-sluitende lus maar een **gefragmenteerde
+keten**. De fragmenten zíjn er wel (nearest-bridge-gap vooral 0.1–0.5 mm), maar het probleem is
+**topologisch, niet gap-grootte**: de greedy keten slaat bij een junction (waar een kamerwand de
+buitencontour raakt) de verkeerde tak in.
+
+**b) Best-match chaining — veilige winst, geïmplementeerd.** I.p.v. *first-match* (eerste endpoint
+binnen tolerantie) kiest de chainer nu de *dichtstbijzijnde* endpoint over alle 4 oriëntaties.
+Dat houdt de wandeling bij junctions op de echte buitencontour. Apples-to-apples op identieke set
+(525 bestanden, cap op 7 hele-raam-tekeningen van 39k–76k segments): **253 → 267 gesloten (+14,
+48,2 % → 50,9 %)**, zonder tolerantie te wijzigen. ✅ Doorgevoerd in `dxf_profile.rs::chain`
+(en gespiegeld in `temp/dxf-proto.mjs`).
+
+**c) Planaire-graaf buitencontour-trace — hoog plafond, nog niet betrouwbaar (uitgesteld).**
+Prototype (`temp/dxf-face.mjs`): knopen snappen (bridget 0.1–0.5 mm gaps op graaf-niveau),
+dangling spurs snoeien, grootste samenhangende component isoleren, alle faces tracen via de
+hoek-next-edge-regel, buitenste face = max |area|. Reproduceert de bekende-goede contouren exact
+(ps1023 230×35, ps100 119×20, ps1036 196×17,5) en levert *een* contour voor ~440 bestanden — maar
+slechts ~180–210 zijn **betrouwbaar**: de trace **degenereert** (vouwt terug, area≈0) op boom-achtige
+componenten waar gaps > snapTol blijven, en **over-collapst kleine profielen** (glaslatten ~2,4 mm)
+bij snapTol 0,3 mm. Wint op grote gefragmenteerde profielen, verliest op kleine schone → netto wash
+t.o.v. best-match. **Aanbevolen vervolg:** hybride — best-match-chaining als primair, face-trace als
+*fallback* met (i) degenerate-rejection (component zonder echte cyclus → falen i.p.v. garbage),
+(ii) adaptieve snapTol per profielgrootte. Groter traject, niet nu.
+
+**Nog te doen — bijgestelde prioriteit:**
+1. ~~Gap-bridging via ruimere tolerantie~~ — **dood spoor (gemeten).** Best-match-chaining ✅ gedaan.
+2. **Hybride face-trace-fallback** met degenerate-rejection + adaptieve snap (zie 7c) — grootste
+   resterende winst voor de ~260 nog-niet-sluitende bestanden, maar substantieel werk.
+3. **SPLINE** (14 open) + **INSERT/BLOCK** (6) — kleine winst.
+4. `$INSUNITS`/units.
+5. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.
+
+Validatie op de samples via de `temp/dxf-*.mjs`-prototypes (Node, lokaal); de echte (Rust) run pas
+na wasm/CI-herbouw (#4481904).

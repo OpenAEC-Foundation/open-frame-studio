@@ -351,52 +351,71 @@ fn ellipse_pts(cx: f64, cy: f64, mx: f64, my: f64, ratio: f64, s: f64, mut e: f6
 
 // ── Segment chaining ───────────────────────────────────────────
 
-fn eq_pt(a: (f64, f64), b: (f64, f64)) -> bool {
-    (a.0 - b.0).abs() < TOL && (a.1 - b.1).abs() < TOL
+fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
+    (a.0 - b.0).hypot(a.1 - b.1)
+}
+
+/// How the nearest segment joins onto the growing chain.
+enum Join {
+    /// tail → s[0]: append s.
+    AppendFwd,
+    /// tail → s[last]: append s reversed.
+    AppendRev,
+    /// head ← s[last]: prepend s.
+    PrependFwd,
+    /// head ← s[0]: prepend s reversed.
+    PrependRev,
 }
 
 /// Chain disjoint point-runs into loops by matching endpoints.
+///
+/// At each step the chain's head and tail look for the *nearest* free segment
+/// endpoint within `TOL` across all candidates (best-match, not first-match).
+/// Best-match matters at junctions — where a chamber wall meets the outer
+/// contour, three+ segments share a node and first-match can route the chain
+/// into a chamber, leaving the outer contour open. Picking the closest endpoint
+/// keeps the walk on the true continuation.
 fn chain(polys: &[Poly]) -> Vec<Vec<(f64, f64)>> {
     let mut remaining: Vec<Vec<(f64, f64)>> =
         polys.iter().filter(|p| p.pts.len() >= 2).map(|p| p.pts.clone()).collect();
     let mut loops = Vec::new();
     while let Some(first) = remaining.pop() {
         let mut chain_pts = first;
-        let mut extended = true;
-        while extended {
-            extended = false;
-            let mut idx = None;
+        loop {
             let head = chain_pts[0];
             let tail = chain_pts[chain_pts.len() - 1];
+            // Nearest endpoint within TOL across all remaining segments.
+            let mut best: Option<(usize, Join, f64)> = None;
             for (i, s) in remaining.iter().enumerate() {
                 let (s0, s1) = (s[0], s[s.len() - 1]);
-                if eq_pt(tail, s0) || eq_pt(tail, s1) || eq_pt(head, s0) || eq_pt(head, s1) {
-                    idx = Some(i);
-                    break;
+                for (d, join) in [
+                    (dist(tail, s0), Join::AppendFwd),
+                    (dist(tail, s1), Join::AppendRev),
+                    (dist(head, s1), Join::PrependFwd),
+                    (dist(head, s0), Join::PrependRev),
+                ] {
+                    if d <= TOL && best.as_ref().map_or(true, |(_, _, bd)| d < *bd) {
+                        best = Some((i, join, d));
+                    }
                 }
             }
-            if let Some(i) = idx {
-                let s = remaining.remove(i);
-                let (s0, s1) = (s[0], s[s.len() - 1]);
-                let tail = chain_pts[chain_pts.len() - 1];
-                let head = chain_pts[0];
-                if eq_pt(tail, s0) {
-                    chain_pts.extend(s.into_iter().skip(1));
-                } else if eq_pt(tail, s1) {
-                    chain_pts.extend(s.into_iter().rev().skip(1));
-                } else if eq_pt(head, s1) {
+            let Some((i, join, _)) = best else { break };
+            let s = remaining.remove(i);
+            match join {
+                Join::AppendFwd => chain_pts.extend(s.into_iter().skip(1)),
+                Join::AppendRev => chain_pts.extend(s.into_iter().rev().skip(1)),
+                Join::PrependFwd => {
                     let mut new_head = s;
                     new_head.pop();
                     new_head.extend(chain_pts.into_iter());
                     chain_pts = new_head;
-                } else {
-                    // head == s0
+                }
+                Join::PrependRev => {
                     let mut new_head: Vec<(f64, f64)> = s.into_iter().rev().collect();
                     new_head.pop();
                     new_head.extend(chain_pts.into_iter());
                     chain_pts = new_head;
                 }
-                extended = true;
             }
         }
         loops.push(chain_pts);
