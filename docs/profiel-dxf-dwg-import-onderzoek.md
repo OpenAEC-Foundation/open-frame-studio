@@ -133,22 +133,27 @@ Dat houdt de wandeling bij junctions op de echte buitencontour. Apples-to-apples
 48,2 % → 50,9 %)**, zonder tolerantie te wijzigen. ✅ Doorgevoerd in `dxf_profile.rs::chain`
 (en gespiegeld in `temp/dxf-proto.mjs`).
 
-**c) Planaire-graaf buitencontour-trace — hoog plafond, nog niet betrouwbaar (uitgesteld).**
-Prototype (`temp/dxf-face.mjs`): knopen snappen (bridget 0.1–0.5 mm gaps op graaf-niveau),
-dangling spurs snoeien, grootste samenhangende component isoleren, alle faces tracen via de
-hoek-next-edge-regel, buitenste face = max |area|. Reproduceert de bekende-goede contouren exact
-(ps1023 230×35, ps100 119×20, ps1036 196×17,5) en levert *een* contour voor ~440 bestanden — maar
-slechts ~180–210 zijn **betrouwbaar**: de trace **degenereert** (vouwt terug, area≈0) op boom-achtige
-componenten waar gaps > snapTol blijven, en **over-collapst kleine profielen** (glaslatten ~2,4 mm)
-bij snapTol 0,3 mm. Wint op grote gefragmenteerde profielen, verliest op kleine schone → netto wash
-t.o.v. best-match. **Aanbevolen vervolg:** hybride — best-match-chaining als primair, face-trace als
-*fallback* met (i) degenerate-rejection (component zonder echte cyclus → falen i.p.v. garbage),
-(ii) adaptieve snapTol per profielgrootte. Groter traject, niet nu.
+**c) Planaire-graaf buitencontour-trace — geïmplementeerd als hybride fallback.** ✅
+Algoritme (`temp/dxf-face.mjs`, gespiegeld in `dxf_profile.rs::outer_contour`): knopen snappen
+(bridget 0.1–0.5 mm gaps op graaf-niveau, snapTol 0,5 mm), dangling spurs snoeien, grootste
+samenhangende component isoleren, alle faces tracen via de hoek-next-edge-regel, buitenste face =
+max |area|. Reproduceert de bekende-goede contouren exact (ps1023 230×35, ps100 119×20, ps1036
+196×17,5). **Cruciaal: het draait als *fallback*, alléén wanneer best-match-chaining de lus niet
+sluit** — zo ziet het nooit de kleine schone profielen die het anders over-collapste, en die blijven
+via chaining correct. **Degenerate-rejection** (fill = area/bbox < 0,12 → falen i.p.v. garbage) vangt
+de teruggevouwen/collineaire traces af.
+
+**Hybride-meting (`temp/dxf-hybrid.mjs`, 525 meetbare bestanden, snapTol 0,5):**
+chaining sluit 267, face-trace herstelt nog **152** → **419 gesloten (79,8 %)** · 106 open · 0 errors.
+(snapTol 0,3 → 404.) De ~152 herstelde zijn bij inspectie overwegend echt (incl. kleine accessoires
+als rubbers/glaslatten en lange stijlen die buiten een naïeve plausibiliteitsband vallen). Dit
+**verdubbelt** de dekking t.o.v. chaining-alleen (267 → 419). Unit-tests dekken spur-pruning +
+gap-bridging.
 
 **Nog te doen — bijgestelde prioriteit:**
 1. ~~Gap-bridging via ruimere tolerantie~~ — **dood spoor (gemeten).** Best-match-chaining ✅ gedaan.
-2. **Hybride face-trace-fallback** met degenerate-rejection + adaptieve snap (zie 7c) — grootste
-   resterende winst voor de ~260 nog-niet-sluitende bestanden, maar substantieel werk.
+2. ~~Hybride face-trace-fallback~~ — ✅ geïmplementeerd (267 → 419, 79,8 %). Mogelijke verfijning:
+   adaptieve snapTol per profielgrootte voor de laatste ~106 open bestanden.
 3. **SPLINE** (14 open) + **INSERT/BLOCK** (6) — kleine winst.
 4. `$INSUNITS`/units.
 5. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.

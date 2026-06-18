@@ -40,6 +40,18 @@ pub struct Sponning {
 /// Endpoint match tolerance (mm) for chaining segments into loops.
 const TOL: f64 = 0.05;
 
+/// Snap tolerance (mm) for the planar-graph fallback — bridges the small
+/// endpoint gaps (mostly 0.1–0.5 mm) between separately drawn entities.
+const SNAP_TOL: f64 = 0.5;
+
+/// Above this segment count the file is a whole-window assembly, not a single
+/// cross-section; skip the (heavier) graph fallback.
+const FACE_SEG_CAP: usize = 20_000;
+
+/// Minimum area/bbox fill for a graph-traced contour to be accepted; a folded
+/// or collinear face nets ~0 area and is rejected so chaining stands.
+const MIN_FILL: f64 = 0.12;
+
 struct Poly {
     layer: String,
     pts: Vec<(f64, f64)>,
@@ -57,21 +69,33 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
         return Err("Geen contour-geometrie gevonden in DXF (alleen maatlijnen/annotaties?)".into());
     }
 
-    // Prefer an explicit closed polyline; otherwise chain the loose segments.
-    let mut loops: Vec<Vec<(f64, f64)>> = polys
+    // Prefer an explicit closed polyline; otherwise chain the loose segments,
+    // and if the chain stays open, fall back to the planar-graph outer-face
+    // trace (recovers fragmented contours that chaining can't close).
+    let closed_loops: Vec<Vec<(f64, f64)>> = polys
         .iter()
         .filter(|p| p.closed && p.pts.len() > 3)
         .map(|p| p.pts.clone())
         .collect();
-    if loops.is_empty() {
-        loops = chain(&polys);
-    }
-    // Largest-area loop is the outer contour.
-    loops.sort_by(|a, b| polygon_area(b).partial_cmp(&polygon_area(a)).unwrap_or(std::cmp::Ordering::Equal));
-    let contour = loops
-        .into_iter()
-        .next()
-        .ok_or("Geen gesloten contour gevonden in DXF")?;
+    let contour = if !closed_loops.is_empty() {
+        closed_loops
+            .into_iter()
+            .max_by(|a, b| polygon_area(a).partial_cmp(&polygon_area(b)).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap()
+    } else {
+        let mut loops = chain(&polys);
+        // Largest-area loop is the outer contour.
+        loops.sort_by(|a, b| polygon_area(b).partial_cmp(&polygon_area(a)).unwrap_or(std::cmp::Ordering::Equal));
+        let primary = loops
+            .into_iter()
+            .next()
+            .ok_or("Geen gesloten contour gevonden in DXF")?;
+        if is_closed_loop(&primary) || polys.len() > FACE_SEG_CAP {
+            primary
+        } else {
+            outer_contour(&polys, SNAP_TOL).unwrap_or(primary)
+        }
+    };
 
     // Bounding box
     let min_x = contour.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
@@ -423,6 +447,238 @@ fn chain(polys: &[Poly]) -> Vec<Vec<(f64, f64)>> {
     loops
 }
 
+/// A chained loop counts as closed when its ends meet within `TOL`.
+fn is_closed_loop(pts: &[(f64, f64)]) -> bool {
+    pts.len() > 3 && dist(pts[0], pts[pts.len() - 1]) <= TOL
+}
+
+// ── Planar-graph outer-contour fallback ────────────────────────
+//
+// Greedy chaining mis-routes at junctions and leaves fragmented contours open.
+// This builds a planar graph from all segments — snapping near-coincident
+// endpoints to bridge sub-millimetre gaps — prunes dangling spurs, keeps the
+// largest connected component, then traces every face via the angular
+// next-edge rule and returns the outer face (most-negative signed area). A
+// folded / collinear trace (fill < MIN_FILL) is rejected so chaining stands.
+// Mirrors `outerContour` in temp/dxf-face.mjs.
+
+fn node_angle(nodes: &[(f64, f64)], a: usize, b: usize) -> f64 {
+    (nodes[b].1 - nodes[a].1).atan2(nodes[b].0 - nodes[a].0)
+}
+
+fn signed_area_ids(nodes: &[(f64, f64)], ids: &[usize]) -> f64 {
+    let n = ids.len();
+    if n < 3 {
+        return 0.0;
+    }
+    let mut a = 0.0;
+    for i in 0..n {
+        let p = nodes[ids[i]];
+        let q = nodes[ids[(i + 1) % n]];
+        a += p.0 * q.1 - q.0 * p.1;
+    }
+    a / 2.0
+}
+
+/// Snap a point to an existing node within `snap_tol` (grid-hashed), else add it.
+fn snap_node(
+    pt: (f64, f64),
+    cell: f64,
+    snap_tol: f64,
+    nodes: &mut Vec<(f64, f64)>,
+    grid: &mut std::collections::HashMap<(i64, i64), Vec<usize>>,
+) -> usize {
+    let gx = (pt.0 / cell).round() as i64;
+    let gy = (pt.1 / cell).round() as i64;
+    for dx in -1..=1 {
+        for dy in -1..=1 {
+            if let Some(bucket) = grid.get(&(gx + dx, gy + dy)) {
+                for &id in bucket {
+                    if dist(nodes[id], pt) <= snap_tol {
+                        return id;
+                    }
+                }
+            }
+        }
+    }
+    let id = nodes.len();
+    nodes.push(pt);
+    grid.entry((gx, gy)).or_default().push(id);
+    id
+}
+
+fn outer_contour(polys: &[Poly], snap_tol: f64) -> Option<Vec<(f64, f64)>> {
+    use std::collections::{HashMap, HashSet};
+
+    // 1. undirected edges from consecutive points of each poly
+    let cell = snap_tol.max(1e-6);
+    let mut nodes: Vec<(f64, f64)> = Vec::new();
+    let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+    let mut adj: HashMap<usize, HashSet<usize>> = HashMap::new();
+    for p in polys {
+        for w in p.pts.windows(2) {
+            let a = snap_node(w[0], cell, snap_tol, &mut nodes, &mut grid);
+            let b = snap_node(w[1], cell, snap_tol, &mut nodes, &mut grid);
+            if a == b {
+                continue;
+            }
+            adj.entry(a).or_default().insert(b);
+            adj.entry(b).or_default().insert(a);
+        }
+    }
+    if adj.is_empty() {
+        return None;
+    }
+
+    // 2. prune dangling spurs (degree ≤ 1) iteratively
+    loop {
+        let leaves: Vec<usize> =
+            adj.iter().filter(|(_, nb)| nb.len() <= 1).map(|(&n, _)| n).collect();
+        if leaves.is_empty() {
+            break;
+        }
+        for n in leaves {
+            if let Some(nb) = adj.remove(&n) {
+                for o in nb {
+                    if let Some(s) = adj.get_mut(&o) {
+                        s.remove(&n);
+                    }
+                }
+            }
+        }
+    }
+    if adj.is_empty() {
+        return None;
+    }
+
+    // 3. keep only the largest connected component (the profile)
+    {
+        let mut seen: HashSet<usize> = HashSet::new();
+        let mut best_comp: Option<HashSet<usize>> = None;
+        let mut best_extent = -1.0_f64;
+        let keys: Vec<usize> = adj.keys().copied().collect();
+        for start in keys {
+            if seen.contains(&start) {
+                continue;
+            }
+            let mut stack = vec![start];
+            seen.insert(start);
+            let mut comp: HashSet<usize> = HashSet::new();
+            let (mut minx, mut maxx, mut miny, mut maxy) =
+                (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+            while let Some(u) = stack.pop() {
+                comp.insert(u);
+                let nn = nodes[u];
+                minx = minx.min(nn.0);
+                maxx = maxx.max(nn.0);
+                miny = miny.min(nn.1);
+                maxy = maxy.max(nn.1);
+                if let Some(nb) = adj.get(&u) {
+                    for &w in nb {
+                        if seen.insert(w) {
+                            stack.push(w);
+                        }
+                    }
+                }
+            }
+            let extent = (maxx - minx) * (maxy - miny);
+            if extent > best_extent {
+                best_extent = extent;
+                best_comp = Some(comp);
+            }
+        }
+        let bc = best_comp?;
+        let drop: Vec<usize> = adj.keys().copied().filter(|u| !bc.contains(u)).collect();
+        for u in drop {
+            adj.remove(&u);
+        }
+    }
+    if adj.is_empty() {
+        return None;
+    }
+
+    // 4. trace every face via the next-edge rule (interior on left, CCW; the
+    //    outer face is traced CW → most-negative signed area).
+    let two_pi = std::f64::consts::TAU;
+    let mut visited: HashSet<(usize, usize)> = HashSet::new();
+    let mut outer: Option<Vec<usize>> = None;
+    let mut outer_area = 0.0_f64;
+    let keys: Vec<usize> = adj.keys().copied().collect();
+    for u in keys {
+        let starts: Vec<usize> = match adj.get(&u) {
+            Some(nb) => nb.iter().copied().collect(),
+            None => continue,
+        };
+        for v in starts {
+            if visited.contains(&(u, v)) {
+                continue;
+            }
+            let mut cycle = vec![u];
+            let (mut pu, mut pv) = (u, v);
+            let mut guard = 0u32;
+            loop {
+                visited.insert((pu, pv));
+                cycle.push(pv);
+                // next half-edge clockwise from the reverse of (pu → pv)
+                let back = node_angle(&nodes, pv, pu);
+                let mut nw: i64 = -1;
+                let mut best_delta = f64::INFINITY;
+                if let Some(nb) = adj.get(&pv) {
+                    for &w in nb {
+                        let aw = node_angle(&nodes, pv, w);
+                        let mut delta = (back - aw) % two_pi;
+                        if delta <= 1e-9 {
+                            delta += two_pi; // never an immediate U-turn unless forced
+                        }
+                        if delta < best_delta {
+                            best_delta = delta;
+                            nw = w as i64;
+                        }
+                    }
+                }
+                if nw < 0 {
+                    break;
+                }
+                pu = pv;
+                pv = nw as usize;
+                if pu == u && pv == v {
+                    break; // closed the face
+                }
+                guard += 1;
+                if guard > 200_000 {
+                    break;
+                }
+            }
+            cycle.pop(); // last == first
+            let sa = signed_area_ids(&nodes, &cycle);
+            if sa < outer_area {
+                outer_area = sa;
+                outer = Some(cycle);
+            }
+        }
+    }
+
+    let outer = outer?;
+    let mut pts: Vec<(f64, f64)> = outer.iter().map(|&id| nodes[id]).collect();
+    pts.reverse(); // CW outer → CCW output
+    if pts.len() < 4 {
+        return None;
+    }
+    let (mut minx, mut maxx, mut miny, mut maxy) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for &(x, y) in &pts {
+        minx = minx.min(x);
+        maxx = maxx.max(x);
+        miny = miny.min(y);
+        maxy = maxy.max(y);
+    }
+    let fill = outer_area.abs() / ((maxx - minx) * (maxy - miny)).max(1e-9);
+    if fill < MIN_FILL {
+        return None;
+    }
+    Some(pts)
+}
+
 fn polygon_area(pts: &[(f64, f64)]) -> f64 {
     if pts.len() < 3 {
         return 0.0;
@@ -513,5 +769,40 @@ mod tests {
         assert!(is_annotation_layer("Maatvoering"));
         assert!(!is_annotation_layer("0"));
         assert!(!is_annotation_layer("CONTOUR"));
+    }
+
+    #[test]
+    fn outer_contour_traces_square_and_prunes_spur() {
+        // Square plus a dangling spur off a corner — the spur is degree-1 and
+        // must be pruned, leaving the square as the outer face (area 100).
+        let polys = vec![
+            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (15.0, 13.0)], closed: false },
+        ];
+        let c = outer_contour(&polys, 0.5).expect("contour");
+        assert!((polygon_area(&c) - 100.0).abs() < 1e-6, "area was {}", polygon_area(&c));
+    }
+
+    #[test]
+    fn outer_contour_bridges_subtolerance_gap() {
+        // A 0.3 mm gap on the bottom edge defeats chaining (TOL 0.05) but is
+        // bridged by snap_tol 0.5, so the graph fallback still closes the loop.
+        let polys = vec![
+            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (4.85, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(5.15, 0.0), (10.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+        ];
+        // Chaining alone leaves the largest loop open (gap > TOL).
+        let mut loops = chain(&polys);
+        loops.sort_by(|a, b| polygon_area(b).partial_cmp(&polygon_area(a)).unwrap());
+        assert!(!is_closed_loop(&loops[0]));
+        // The graph fallback bridges the gap and recovers the square.
+        let c = outer_contour(&polys, 0.5).expect("contour");
+        assert!(polygon_area(&c) > 90.0, "area was {}", polygon_area(&c));
     }
 }
