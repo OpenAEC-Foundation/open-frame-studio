@@ -107,7 +107,18 @@ sponning/aanzicht uit de echte contour. Publieke API ongewijzigd (`parse_dxf_pro
 `ImportedProfile`, `Sponning`); callers (`commands/import_profile.rs`, `catalog.rs`) ongemoeid.
 Review-agent: **compiles clean** (geen lokale cargo; echte gate = CI #4481904).
 
-**Nog te doen:** SPLINE (33 bestanden) en INSERT/BLOCK (7) toevoegen; gap-bridging voor de paar
-contouren die niet sluiten; `$INSUNITS`/units; en **DWG→DXF-conversie** (ODA File Converter)
-voor binaire bronbestanden. Validatie op de 502 samples kan via het Node-prototype
-`temp/dxf-proto.mjs`; de echte (Rust) run pas na wasm/CI-herbouw.
+**Dekkingsmeting (Node-prototype `temp/dxf-proto.mjs --all`, 627 DXF's):**
+**257 gesloten contour (41%) · 275 open (44%) · 95 geen contour (15%) · 0 errors.**
+De open-bestanden bevatten vooral LINE+ARC+ELLIPSE → ze sluiten niet door **chaining-gaps**,
+niet door missende SPLINE (slechts 14 open-bestanden hebben SPLINE, 6 INSERT). De 95 zonder
+contour zijn vrijwel zeker maatlijn-/annotatiebestanden.
+
+**Nog te doen — prioriteit op basis van de meting:**
+1. **Gap-bridging / robuustere chaining** (grootste winst: ~275 bestanden) — bijna-sluitende
+   lussen verbinden via nearest-endpoint binnen ruimere tolerantie; meerdere sub-lussen samenvoegen.
+2. **SPLINE** (14 open) + **INSERT/BLOCK** (6) — kleine winst.
+3. `$INSUNITS`/units.
+4. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.
+
+Validatie op de samples via `temp/dxf-proto.mjs` (Node, lokaal); de echte (Rust) run pas na
+wasm/CI-herbouw (#4481904).
