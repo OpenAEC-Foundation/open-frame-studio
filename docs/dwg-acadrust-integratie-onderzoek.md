@@ -54,12 +54,13 @@ Voer DWG-profieltekeningen in dezelfde pijplijn als onze DXF-profielimport. Onze
 werkt op een lijst **`Poly { pts, closed, layer }`**. We hoeven dus alleen acadrust-entities naar
 `Poly` te mappen, niet de contour-extractie te herschrijven.
 
-**Refactor-stap:** splits in [`dxf_profile.rs`](../ofs-core/src/import/dxf_profile.rs:64) de tweede helft
-(`polys → ImportedProfile`: closed/`chain`/`outer_contour` → bbox → `detect_sponning` → schatten) af
-naar een herbruikbare `fn profile_from_polys(polys: &[Poly]) -> Result<ImportedProfile, String>`.
-- DXF-pad: `parse_dxf_profile` (tekst → `extract_polylines` → polys) → `profile_from_polys`.
-- DWG-pad (nieuw `import/dwg.rs`): `acadrust read` → map LINE/ARC/CIRCLE/ELLIPSE/LWPOLYLINE naar
-  `Poly` (hergebruik `arc_pts`/bulge-tessellatie) → `profile_from_polys`.
+**Refactor-stap — ✅ GEDAAN (commit `eb099d5`).** De tweede helft van `parse_dxf_profile`
+(`polys → ImportedProfile`: closed/`chain`/`outer_contour` → bbox → `detect_sponning` → schatten) is
+afgesplitst naar `pub(crate) fn profile_from_polys(polys: &[Poly], name: &str)`; `Poly` is nu
+`pub(crate)`. De seam staat klaar:
+- DXF-pad: `parse_dxf_profile` (tekst → `extract_polylines` → polys) → `profile_from_polys`. ✅
+- DWG-pad (nieuw `import/dwg.rs`, **nog te bouwen**): `acadrust read` → map LINE/ARC/CIRCLE/ELLIPSE/
+  LWPOLYLINE naar `Poly` (hergebruik `arc_pts`/bulge-tessellatie) → `profile_from_polys`.
 
 ### Niveau 2 — DWG/DXF **heel-kozijn**-tekening → parametrisch Kozijn (groot, nieuw)
 Port van `auto_detect_single_file` + helpers naar Rust, gekoppeld aan OFS's `Kozijn`-model:
@@ -101,8 +102,9 @@ logische opvolger zodra Niveau 1 staat (het hergebruikt dezelfde acadrust-reader
   prebuilt `dwg-reader.exe` op → bewijst dat acadrust ze leest vóór we een dependency toevoegen.
   (Prebuilt exe op onze profiel-DXF's gaf leeg, maar dat is zijn kozijn-filter, geen acadrust-test —
   zie §5.3.) **(b)** licentie-akkoord MPL-2.0 ophalen.
-- **Fase 1 (klein):** `profile_from_polys`-refactor + `import/dwg.rs` (Niveau 1) achter `dwg`-feature;
-  ribbon "Profiel DWG". Hergebruikt de volledige contour-pijplijn. CI-gated.
+- **Fase 1 (klein):** ~~`profile_from_polys`-refactor~~ ✅ (commit `eb099d5`, geen dependency) →
+  resterend: `import/dwg.rs` + `dwg`-feature (acadrust) + ribbon "Profiel DWG". Hergebruikt de
+  volledige contour-pijplijn. Wacht op Fase 0 (DWG-samples + MPL-akkoord). CI-gated.
 - **Fase 2 (groot, apart):** port `auto_detect_single_file` → Rust, gekoppeld aan `Kozijn` (Niveau 2).
 
 **Kernpunt:** de hoogste ROI met de laagste verstoring is **Niveau 1** — native DWG-profielimport,
