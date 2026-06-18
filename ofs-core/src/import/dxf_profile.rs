@@ -40,9 +40,11 @@ pub struct Sponning {
 /// Endpoint match tolerance (mm) for chaining segments into loops.
 const TOL: f64 = 0.05;
 
-/// Snap tolerance (mm) for the planar-graph fallback — bridges the small
-/// endpoint gaps (mostly 0.1–0.5 mm) between separately drawn entities.
-const SNAP_TOL: f64 = 0.5;
+/// Snap tolerances (mm) for the planar-graph fallback, tried tightest-first —
+/// bridges the small endpoint gaps between separately drawn entities. Only
+/// files that fail the tighter snap climb to a wider one, so clean profiles
+/// stay precise and over-collapse is limited to stubborn fragmented files.
+const SNAP_TOLS: [f64; 3] = [0.5, 1.0, 2.0];
 
 /// Above this segment count the file is a whole-window assembly, not a single
 /// cross-section; skip the (heavier) graph fallback.
@@ -93,7 +95,11 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
         if is_closed_loop(&primary) || polys.len() > FACE_SEG_CAP {
             primary
         } else {
-            outer_contour(&polys, SNAP_TOL).unwrap_or(primary)
+            // Escalate the snap tolerance until a non-degenerate face is found.
+            SNAP_TOLS
+                .iter()
+                .find_map(|&snap| outer_contour(&polys, snap))
+                .unwrap_or(primary)
         }
     };
 
@@ -804,5 +810,21 @@ mod tests {
         // The graph fallback bridges the gap and recovers the square.
         let c = outer_contour(&polys, 0.5).expect("contour");
         assert!(polygon_area(&c) > 90.0, "area was {}", polygon_area(&c));
+    }
+
+    #[test]
+    fn outer_contour_escalates_snap_for_wider_gap() {
+        // A 0.8 mm gap is too wide for snap 0.5 (loop stays open → pruned to
+        // nothing → None) but is bridged at snap 1.0 — the premise behind the
+        // escalating SNAP_TOLS fallback.
+        let polys = vec![
+            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (4.6, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(5.4, 0.0), (10.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+        ];
+        assert!(outer_contour(&polys, 0.5).is_none());
+        assert!(outer_contour(&polys, 1.0).is_some());
     }
 }

@@ -143,20 +143,29 @@ sluit** — zo ziet het nooit de kleine schone profielen die het anders over-col
 via chaining correct. **Degenerate-rejection** (fill = area/bbox < 0,12 → falen i.p.v. garbage) vangt
 de teruggevouwen/collineaire traces af.
 
-**Hybride-meting (`temp/dxf-hybrid.mjs`, 525 meetbare bestanden, snapTol 0,5):**
-chaining sluit 267, face-trace herstelt nog **152** → **419 gesloten (79,8 %)** · 106 open · 0 errors.
-(snapTol 0,3 → 404.) De ~152 herstelde zijn bij inspectie overwegend echt (incl. kleine accessoires
-als rubbers/glaslatten en lange stijlen die buiten een naïeve plausibiliteitsband vallen). Dit
-**verdubbelt** de dekking t.o.v. chaining-alleen (267 → 419). Unit-tests dekken spur-pruning +
-gap-bridging.
+De snapTol is **escalerend** (`SNAP_TOLS = [0,5, 1,0, 2,0] mm`, tightest-first): alleen bestanden
+die bij de strakkere snap falen klimmen naar een ruimere, zodat schone profielen precies blijven en
+over-collapse beperkt blijft tot de hardnekkige fragmenten.
+
+**Hybride-meting (`temp/dxf-hybrid.mjs`, 525 meetbare bestanden):** chaining sluit 267, face-trace
+herstelt nog **211** (152 bij snap 0,5 · 45 bij 1,0 · 14 bij 2,0) → **478 gesloten (91 %)** · 47 open
+· 0 errors. De herstelde zijn bij inspectie overwegend echt (incl. kleine accessoires als
+rubbers/glaslatten/spacers en dunne/lange leden die buiten een naïeve plausibiliteitsband vallen).
+Dit **verdrievoudigt bijna** de dekking t.o.v. het uitgangspunt (41 % → 91 %). Unit-tests dekken
+spur-pruning, gap-bridging en snap-escalatie.
+
+**Diagnose van de 47 resterende open (`temp/dxf-residual.mjs`):** SPLINE/INSERT is NIET de blokkade
+(slechts 2 + 2 open bestanden bevatten ze); de rest sluit ook bij snapTol 2,0 niet → ontbrekende
+geometrie / losse deeltekeningen / echte detailtekeningen.
 
 **Nog te doen — bijgestelde prioriteit:**
 1. ~~Gap-bridging via ruimere tolerantie~~ — **dood spoor (gemeten).** Best-match-chaining ✅ gedaan.
-2. ~~Hybride face-trace-fallback~~ — ✅ geïmplementeerd (267 → 419, 79,8 %). Mogelijke verfijning:
-   adaptieve snapTol per profielgrootte voor de laatste ~106 open bestanden.
-3. **SPLINE** (14 open) + **INSERT/BLOCK** (6) — kleine winst.
-4. `$INSUNITS`/units.
+2. ~~Hybride face-trace-fallback~~ ✅ + ~~escalerende snapTol~~ ✅ → **91 %** dekking.
+3. ~~SPLINE/INSERT~~ — gemeten **niet** de blokkade (2+2 open); lage ROI, overgeslagen.
+4. `$INSUNITS`/units — units-normalisatie als bron niet in mm staat.
 5. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.
+6. De laatste 47 open zijn grotendeels niet-profiel/deeltekeningen — UI moet falen netjes melden
+   (bestaat al: `parse_dxf_profile` geeft een NL-foutmelding).
 
 Validatie op de samples via de `temp/dxf-*.mjs`-prototypes (Node, lokaal); de echte (Rust) run pas
 na wasm/CI-herbouw (#4481904).
