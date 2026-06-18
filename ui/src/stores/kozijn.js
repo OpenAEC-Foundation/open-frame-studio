@@ -51,10 +51,14 @@ export async function selectKozijn(id) {
 export async function setKozijnLayout(tree) {
   const k = get(currentKozijn);
   if (!k) return;
+  // Store a plain (deep-cloned) tree — callers may pass a Svelte $state proxy,
+  // which must not leak into the store (it breaks structuredClone-based history
+  // and IPC serialization).
+  const plain = JSON.parse(JSON.stringify(tree));
   pushSnapshot();
-  currentKozijn.set({ ...k, layout: tree });
+  currentKozijn.set({ ...k, layout: plain });
   try {
-    await invoke("update_kozijn_layout", { id: k.id, layoutJson: JSON.stringify(tree) });
+    await invoke("update_kozijn_layout", { id: k.id, layoutJson: JSON.stringify(plain) });
   } catch (e) {
     console.error("Layout opslaan mislukt:", e);
   }

@@ -1,20 +1,85 @@
 <script>
-  import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn } from "../../stores/kozijn.js";
+  import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
-  import { layoutToRects, vullingLabel } from "../../lib/layout.js";
+  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt } from "../../lib/layout.js";
 
   let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
 
-  // Free-subdivision layout (read-only render when a kozijn carries a layout tree).
+  // ── Free-subdivision layout: editable render of the split tree ──────────────
+  // While a divider is being dragged we render a local working copy so the drag
+  // is smooth and history/backend are only touched once, on release.
+  let workingTree = $state(null);
+  let layoutDrag = $state(null);
+  let selectedLeafId = $state(null);
+  let activeTree = $derived(workingTree ?? kozijn?.layout ?? null);
+
   let layoutGeom = $derived.by(() => {
     const k = kozijn;
-    if (!k?.layout || !k.frame) return null;
+    if (!activeTree || !k?.frame) return null;
     const fw = k.frame.frameWidth || 67;
     const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
-    return layoutToRects(k.layout, inner, fw);
+    return layoutToRects(activeTree, inner, fw);
   });
+  let selectedLeafRect = $derived(layoutGeom?.leaves.find((l) => l.node.id === selectedLeafId)?.rect || null);
+
   function vullingFill(t) {
     return t === "deur" ? "#b98b5e" : t === "paneel" ? "#c9c2b2" : t === "rooster" ? "#9aa0a8" : "var(--editor-glass)";
+  }
+
+  // ── Drag a layout divider (tussenstijl/-dorpel) to resize the two vakken ────
+  // Mirrors GridHandles' screen→mm mapping (deltaMm = deltaPx / zoom); the vak
+  // sizes are relative within their split, so a mm delta maps to a size delta
+  // via the divider's avail/sizeSum (carried by layoutToRects).
+  function startLayoutDrag(d, e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const base = kozijn?.layout;
+    const split = findNode(base, d.splitId);
+    if (!split || split.kind !== "split") return;
+    layoutDrag = {
+      splitId: d.splitId, childIndex: d.childIndex, axis: d.direction,
+      avail: d.avail, sizeSum: d.sizeSum,
+      startX: e.clientX, startY: e.clientY,
+      origI: split.children[d.childIndex].size,
+      origNext: split.children[d.childIndex + 1].size,
+    };
+    workingTree = base;
+    window.addEventListener("mousemove", onLayoutDragMove);
+    window.addEventListener("mouseup", onLayoutDragUp);
+  }
+  function onLayoutDragMove(e) {
+    if (!layoutDrag) return;
+    const deltaPx = layoutDrag.axis === "v" ? e.clientX - layoutDrag.startX : e.clientY - layoutDrag.startY;
+    const deltaMm = deltaPx / (zoom || 1);
+    let deltaSize = deltaMm * layoutDrag.sizeSum / Math.max(1, layoutDrag.avail);
+    const min = 0.05 * layoutDrag.sizeSum;
+    deltaSize = Math.max(-(layoutDrag.origI - min), Math.min(layoutDrag.origNext - min, deltaSize));
+    workingTree = setSplitChildSizes(
+      kozijn.layout, layoutDrag.splitId, layoutDrag.childIndex,
+      layoutDrag.origI + deltaSize, layoutDrag.origNext - deltaSize,
+    );
+  }
+  function onLayoutDragUp() {
+    window.removeEventListener("mousemove", onLayoutDragMove);
+    window.removeEventListener("mouseup", onLayoutDragUp);
+    if (workingTree) setKozijnLayout(workingTree);
+    workingTree = null;
+    layoutDrag = null;
+  }
+
+  function selectLeaf(id, e) {
+    e?.stopPropagation();
+    selectedLeafId = id;
+    selectedCellIndex.set(null);
+    selectedMember.set(null);
+  }
+  function doSplitLayout(dir, e) {
+    e?.stopPropagation();
+    if (selectedLeafId && kozijn?.layout) setKozijnLayout(splitLeaf(kozijn.layout, selectedLeafId, dir));
+  }
+  function doMergeLayout(e) {
+    e?.stopPropagation();
+    if (selectedLeafId && kozijn?.layout) setKozijnLayout(mergeAt(kozijn.layout, selectedLeafId));
   }
 
   // Inline dimension editing state
@@ -280,7 +345,7 @@
   {/each}
 
   {#if kozijn?.layout && layoutGeom}
-    <!-- Free-subdivision layout (read-only) -->
+    <!-- Free-subdivision layout (editable: click a vak, drag the dividers) -->
     {#each layoutGeom.dividers as d}
       <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill="var(--editor-frame)" pointer-events="none" />
     {/each}
@@ -301,8 +366,44 @@
         {/if}
         <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
         <text x={lcx} y={lcy + 9 / zoom} text-anchor="middle" dominant-baseline="central" fill="#DC2626" font-size={8 / zoom} opacity="0.7" pointer-events="none">{Math.round(r.width)}×{Math.round(r.height)}</text>
+        <!-- transparent hit layer for selecting the vak -->
+        <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" class="vak-hit"
+              onclick={(e) => selectLeaf(l.node.id, e)} role="button" tabindex="0"
+              aria-label="Selecteer vak" onkeydown={(e) => e.key === "Enter" && selectLeaf(l.node.id, e)} />
+        {#if l.node.id === selectedLeafId}
+          <rect x={r.x + 2} y={r.y + 2} width={Math.max(1, r.width - 4)} height={Math.max(1, r.height - 4)}
+                fill="none" stroke="var(--editor-selected, #D97706)" stroke-width={3 / zoom} pointer-events="none" />
+        {/if}
       {/if}
     {/each}
+
+    <!-- divider drag handles (tussenstijl/-dorpel) -->
+    {#each layoutGeom.dividers as d, i (i)}
+      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height}
+            fill="transparent" class="layout-divider {d.direction}"
+            onmousedown={(e) => startLayoutDrag(d, e)}
+            role="separator" aria-label="Versleep deellijn" tabindex="-1" />
+    {/each}
+
+    <!-- in-canvas split / merge controls for the selected vak -->
+    {#if selectedLeafRect}
+      {@const bs = 30 / zoom}
+      {@const gp = 5 / zoom}
+      {@const tw = bs * 3 + gp * 2}
+      {@const bx = selectedLeafRect.x + selectedLeafRect.width / 2 - tw / 2}
+      {@const by = selectedLeafRect.y + 7 / zoom}
+      {#each [{ k: "row", t: "⟷", title: "Splits met tussenstijl" }, { k: "column", t: "↕", title: "Splits met tussendorpel" }, { k: "merge", t: "⤬", title: "Samenvoegen" }] as b, bi}
+        {@const x0 = bx + bi * (bs + gp)}
+        <g class="lay-btn" role="button" tabindex="0" aria-label={b.title}
+           onclick={(e) => b.k === "merge" ? doMergeLayout(e) : doSplitLayout(b.k, e)}
+           onkeydown={(e) => e.key === "Enter" && (b.k === "merge" ? doMergeLayout(e) : doSplitLayout(b.k, e))}>
+          <rect x={x0} y={by} width={bs} height={bs} rx={5 / zoom}
+                fill="var(--bg-surface-alt, #2a2a38)" stroke="var(--amber, #D97706)" stroke-width={1.4 / zoom} />
+          <text x={x0 + bs / 2} y={by + bs / 2} text-anchor="middle" dominant-baseline="central"
+                font-size={17 / zoom} fill="var(--amber, #D97706)" pointer-events="none">{b.t}</text>
+        </g>
+      {/each}
+    {/if}
   {/if}
 
   {#if !kozijn?.layout}
@@ -826,4 +927,13 @@
     stroke: var(--amber);
     stroke-width: 2;
   }
+
+  /* Free-subdivision layout editing */
+  .vak-hit { cursor: pointer; }
+  .layout-divider.v { cursor: col-resize; }
+  .layout-divider.h { cursor: row-resize; }
+  .layout-divider:hover { fill: rgba(217, 119, 6, 0.18) !important; }
+  .lay-btn { cursor: pointer; }
+  .lay-btn:hover rect { fill: var(--amber); }
+  .lay-btn:hover text { fill: #1a1a1a; }
 </style>

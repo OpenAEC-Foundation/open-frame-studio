@@ -24,6 +24,20 @@ function updateFlags() {
 }
 
 /**
+ * Deep-clone a kozijn snapshot. structuredClone is fast but throws on values it
+ * can't clone (e.g. a Svelte $state proxy that reached `kozijn.layout`); the
+ * JSON fallback reads through proxies and always yields plain data, so taking a
+ * snapshot never crashes a mutation.
+ */
+function snapshot(k) {
+  try {
+    return structuredClone(k);
+  } catch {
+    return JSON.parse(JSON.stringify(k));
+  }
+}
+
+/**
  * Push a snapshot of the current kozijn onto the undo stack.
  * Call this BEFORE making a mutation.
  */
@@ -31,7 +45,7 @@ export function pushSnapshot() {
   const k = get(currentKozijn);
   if (!k) return;
 
-  undoStack.push(structuredClone(k));
+  undoStack.push(snapshot(k));
   if (undoStack.length > MAX_HISTORY) {
     undoStack.shift();
   }
@@ -50,7 +64,7 @@ export async function undo() {
 
   const k = get(currentKozijn);
   if (k) {
-    redoStack.push(structuredClone(k));
+    redoStack.push(snapshot(k));
   }
 
   const prev = undoStack.pop();
@@ -66,7 +80,7 @@ export async function redo() {
 
   const k = get(currentKozijn);
   if (k) {
-    undoStack.push(structuredClone(k));
+    undoStack.push(snapshot(k));
   }
 
   const next = redoStack.pop();
