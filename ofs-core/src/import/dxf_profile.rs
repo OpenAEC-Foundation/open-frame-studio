@@ -54,10 +54,14 @@ const FACE_SEG_CAP: usize = 20_000;
 /// or collinear face nets ~0 area and is rejected so chaining stands.
 const MIN_FILL: f64 = 0.12;
 
-struct Poly {
-    layer: String,
-    pts: Vec<(f64, f64)>,
-    closed: bool,
+/// A tessellated polyline run fed to the shared contour engine
+/// ([`profile_from_polys`]). Built by the DXF tokenizer and (planned) the DWG
+/// reader. `layer` is used only during DXF extraction (annotation filtering);
+/// the contour engine reads only `pts` and `closed`.
+pub(crate) struct Poly {
+    pub(crate) layer: String,
+    pub(crate) pts: Vec<(f64, f64)>,
+    pub(crate) closed: bool,
 }
 
 /// Parse a DXF file and extract a profile cross-section.
@@ -71,6 +75,24 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
         return Err("Geen contour-geometrie gevonden in DXF (alleen maatlijnen/annotaties?)".into());
     }
 
+    let name = std::path::Path::new(filepath)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Profiel")
+        .to_string();
+
+    profile_from_polys(&polys, &name)
+}
+
+/// Build an `ImportedProfile` from already-tessellated contour polylines.
+///
+/// Shared contour engine for both importers: the DXF parser (and the planned
+/// DWG reader via `acadrust`) each turn their source into a `Vec<Poly>` and
+/// hand it here for contour extraction (explicit closed polyline → best-match
+/// chaining → planar-graph outer-face fallback), sponning detection and the
+/// derived profile fields. `name` seeds the profile id/name — the file stem for
+/// DXF, the file or block name for DWG.
+pub(crate) fn profile_from_polys(polys: &[Poly], name: &str) -> Result<ImportedProfile, String> {
     // Prefer an explicit closed polyline; otherwise chain the loose segments,
     // and if the chain stays open, fall back to the planar-graph outer-face
     // trace (recovers fragmented contours that chaining can't close).
@@ -85,20 +107,20 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
             .max_by(|a, b| polygon_area(a).partial_cmp(&polygon_area(b)).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap()
     } else {
-        let mut loops = chain(&polys);
+        let mut loops = chain(polys);
         // Largest-area loop is the outer contour.
         loops.sort_by(|a, b| polygon_area(b).partial_cmp(&polygon_area(a)).unwrap_or(std::cmp::Ordering::Equal));
         let primary = loops
             .into_iter()
             .next()
-            .ok_or("Geen gesloten contour gevonden in DXF")?;
+            .ok_or("Geen gesloten contour gevonden")?;
         if is_closed_loop(&primary) || polys.len() > FACE_SEG_CAP {
             primary
         } else {
             // Escalate the snap tolerance until a non-degenerate face is found.
             SNAP_TOLS
                 .iter()
-                .find_map(|&snap| outer_contour(&polys, snap))
+                .find_map(|&snap| outer_contour(polys, snap))
                 .unwrap_or(primary)
         }
     };
@@ -121,17 +143,11 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
     let sightline = round1(width * 0.8);
     let glazing_rebate = sponning.as_ref().map(|s| s.depth).unwrap_or_else(|| round1(width * 0.36));
 
-    let path = std::path::Path::new(filepath);
-    let name = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Profiel")
-        .to_string();
     let id = format!("imported-{}", name.to_lowercase().replace(' ', "-"));
 
     Ok(ImportedProfile {
         id,
-        name,
+        name: name.to_string(),
         material: "unknown".into(),
         material_subtype: None,
         width,
@@ -810,6 +826,25 @@ mod tests {
         // The graph fallback bridges the gap and recovers the square.
         let c = outer_contour(&polys, 0.5).expect("contour");
         assert!(polygon_area(&c) > 90.0, "area was {}", polygon_area(&c));
+    }
+
+    #[test]
+    fn profile_from_polys_builds_profile() {
+        // The shared contour engine turns a closed run of segments into an
+        // ImportedProfile with the right bbox and a name-seeded id. This is the
+        // seam the DWG reader will reuse.
+        let polys = vec![
+            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 20.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 20.0), (0.0, 20.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(0.0, 20.0), (0.0, 0.0)], closed: false },
+        ];
+        let p = profile_from_polys(&polys, "Test Profiel").expect("profile");
+        assert_eq!(p.name, "Test Profiel");
+        assert_eq!(p.id, "imported-test-profiel");
+        assert!((p.width - 10.0).abs() < 1e-6, "width {}", p.width);
+        assert!((p.depth - 20.0).abs() < 1e-6, "depth {}", p.depth);
+        assert!(p.cross_section.len() >= 4);
     }
 
     #[test]
