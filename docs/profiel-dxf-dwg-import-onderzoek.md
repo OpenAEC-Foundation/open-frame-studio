@@ -99,7 +99,15 @@ Restpunten: een enkel bestand sluit nog niet (gap-bridging/tolerantie nodig); pa
 bestanden bewezen. Route A is haalbaar.
 
 ## Status
-Onderzoek + prototype-validatie vastgelegd. Gekozen route: **A — import herbouwen (DXF, accuraat)**.
-NEXT: het gevalideerde algoritme (layer-filter, tessellatie, chaining, grootste-lus i.p.v. hull,
-sponning/aanzicht uit geometrie) spiegelen naar `ofs-core/src/import/dxf_profile.rs` (via review +
-CI #4481904; geen lokale cargo) + DWG→DXF-conversie documenteren. Samples in `samples/`.
+Route **A — import herbouwd** ✅. `ofs-core/src/import/dxf_profile.rs` is herschreven naar het
+gevalideerde algoritme: DXF-tokenizer, scope op de `ENTITIES`-sectie, **layer-filtering**
+(annotaties/maatlijnen eruit), tessellatie van **LINE / ARC / CIRCLE / ELLIPSE /
+LWPOLYLINE(bulge)**, **segment-chaining → grootste gesloten lus** (convex hull verwijderd), en
+sponning/aanzicht uit de echte contour. Publieke API ongewijzigd (`parse_dxf_profile`,
+`ImportedProfile`, `Sponning`); callers (`commands/import_profile.rs`, `catalog.rs`) ongemoeid.
+Review-agent: **compiles clean** (geen lokale cargo; echte gate = CI #4481904).
+
+**Nog te doen:** SPLINE (33 bestanden) en INSERT/BLOCK (7) toevoegen; gap-bridging voor de paar
+contouren die niet sluiten; `$INSUNITS`/units; en **DWG→DXF-conversie** (ODA File Converter)
+voor binaire bronbestanden. Validatie op de 502 samples kan via het Node-prototype
+`temp/dxf-proto.mjs`; de echte (Rust) run pas na wasm/CI-herbouw.

@@ -1,9 +1,15 @@
 //! Parse a DXF file containing a profile cross-section.
 //!
-//! Reads DXF text format directly — extracts LINE, LWPOLYLINE, and POLYLINE
-//! entities to build a cross-section contour.
-
-use std::io::{BufRead, BufReader};
+//! Reads DXF (ASCII) and extracts the real profile contour: it scopes to the
+//! ENTITIES section, filters out annotation layers (dimensions/text), tessellates
+//! LINE / ARC / CIRCLE / ELLIPSE / LWPOLYLINE(bulge) / POLYLINE+VERTEX(bulge) into
+//! point runs, and chains those runs into closed loops — the largest-area loop is
+//! the outer contour. (The previous convex-hull approach destroyed the concave
+//! multi-chamber shape + glazing rebate.) Algorithm validated against real
+//! supplier samples; see docs/profiel-dxf-dwg-import-onderzoek.md.
+//!
+//! Not yet handled: SPLINE and INSERT/BLOCK (rare in the samples) and DWG (binary,
+//! must be converted to DXF first).
 
 /// Result of parsing a DXF profile cross-section.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,20 +37,41 @@ pub struct Sponning {
     pub position: String,
 }
 
+/// Endpoint match tolerance (mm) for chaining segments into loops.
+const TOL: f64 = 0.05;
+
+struct Poly {
+    layer: String,
+    pts: Vec<(f64, f64)>,
+    closed: bool,
+}
+
 /// Parse a DXF file and extract a profile cross-section.
 pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
-    let file = std::fs::File::open(filepath)
+    let content = std::fs::read_to_string(filepath)
         .map_err(|e| format!("Kan DXF bestand niet openen: {}", e))?;
-    let reader = BufReader::new(file);
+    let pairs = read_pairs(&content);
+    let polys = extract_polylines(&pairs);
 
-    let points = extract_points(reader)?;
-
-    if points.is_empty() {
-        return Err("Geen geometrie gevonden in DXF bestand".into());
+    if polys.is_empty() {
+        return Err("Geen contour-geometrie gevonden in DXF (alleen maatlijnen/annotaties?)".into());
     }
 
-    // Build convex hull contour
-    let contour = convex_hull(&points);
+    // Prefer an explicit closed polyline; otherwise chain the loose segments.
+    let mut loops: Vec<Vec<(f64, f64)>> = polys
+        .iter()
+        .filter(|p| p.closed && p.pts.len() > 3)
+        .map(|p| p.pts.clone())
+        .collect();
+    if loops.is_empty() {
+        loops = chain(&polys);
+    }
+    // Largest-area loop is the outer contour.
+    loops.sort_by(|a, b| polygon_area(b).partial_cmp(&polygon_area(a)).unwrap_or(std::cmp::Ordering::Equal));
+    let contour = loops
+        .into_iter()
+        .next()
+        .ok_or("Geen gesloten contour gevonden in DXF")?;
 
     // Bounding box
     let min_x = contour.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
@@ -55,19 +82,15 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
     let depth = round1(max_y - min_y);
 
     // Normalize to origin
-    let cross_section: Vec<[f64; 2]> = contour
-        .iter()
-        .map(|p| [round2(p.0 - min_x), round2(p.1 - min_y)])
-        .collect();
+    let normalized: Vec<(f64, f64)> = contour.iter().map(|p| (p.0 - min_x, p.1 - min_y)).collect();
+    let cross_section: Vec<[f64; 2]> = normalized.iter().map(|p| [round2(p.0), round2(p.1)]).collect();
 
-    // Detect sponning
-    let sponning = detect_sponning(&contour, width, depth);
+    let sponning = detect_sponning(&normalized, width, depth);
 
-    // Estimates
+    // Estimates where geometry doesn't give it directly.
     let sightline = round1(width * 0.8);
-    let glazing_rebate = round1(width * 0.36);
+    let glazing_rebate = sponning.as_ref().map(|s| s.depth).unwrap_or_else(|| round1(width * 0.36));
 
-    // Name from filepath
     let path = std::path::Path::new(filepath);
     let name = path
         .file_stem()
@@ -92,192 +115,306 @@ pub fn parse_dxf_profile(filepath: &str) -> Result<ImportedProfile, String> {
     })
 }
 
-// ── DXF text parser ────────────────────────────────────────────
+// ── DXF tokenizer ──────────────────────────────────────────────
 
-fn extract_points(reader: BufReader<std::fs::File>) -> Result<Vec<(f64, f64)>, String> {
-    let mut points = Vec::new();
-    let lines: Vec<String> = reader
-        .lines()
-        .map(|l| l.unwrap_or_default().trim().to_string())
-        .collect();
-
+/// Read DXF into (group code, value) pairs (trimmed).
+fn read_pairs(content: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut pairs = Vec::with_capacity(lines.len() / 2);
     let mut i = 0;
-    while i < lines.len() {
-        // Look for entity type markers (group code 0)
-        if lines[i] == "0" && i + 1 < lines.len() {
-            let entity_type = &lines[i + 1];
-            match entity_type.as_str() {
-                "LINE" => {
-                    // Extract start (10/20) and end (11/21) points
-                    let (start, end, next) = parse_line_entity(&lines, i + 2);
-                    if let Some(s) = start {
-                        points.push(s);
-                    }
-                    if let Some(e) = end {
-                        points.push(e);
-                    }
-                    i = next;
-                    continue;
-                }
-                "LWPOLYLINE" => {
-                    let (pts, next) = parse_lwpolyline_entity(&lines, i + 2);
-                    points.extend(pts);
-                    i = next;
-                    continue;
-                }
-                "POLYLINE" => {
-                    // POLYLINE entities have VERTEX sub-entities
-                    i += 2;
-                    continue;
-                }
-                "VERTEX" => {
-                    let (pt, next) = parse_vertex_entity(&lines, i + 2);
-                    if let Some(p) = pt {
-                        points.push(p);
-                    }
-                    i = next;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        i += 1;
-    }
-
-    Ok(points)
-}
-
-fn parse_line_entity(lines: &[String], start: usize) -> (Option<(f64, f64)>, Option<(f64, f64)>, usize) {
-    let mut x1 = None;
-    let mut y1 = None;
-    let mut x2 = None;
-    let mut y2 = None;
-    let mut i = start;
-
     while i + 1 < lines.len() {
-        if lines[i] == "0" {
-            break; // Next entity
-        }
-        match lines[i].as_str() {
-            "10" => x1 = lines[i + 1].parse().ok(),
-            "20" => y1 = lines[i + 1].parse().ok(),
-            "11" => x2 = lines[i + 1].parse().ok(),
-            "21" => y2 = lines[i + 1].parse().ok(),
-            _ => {}
-        }
+        pairs.push((lines[i].trim().to_string(), lines[i + 1].trim().to_string()));
         i += 2;
     }
-
-    let p1 = match (x1, y1) {
-        (Some(x), Some(y)) => Some((x, y)),
-        _ => None,
-    };
-    let p2 = match (x2, y2) {
-        (Some(x), Some(y)) => Some((x, y)),
-        _ => None,
-    };
-    (p1, p2, i)
+    pairs
 }
 
-fn parse_lwpolyline_entity(lines: &[String], start: usize) -> (Vec<(f64, f64)>, usize) {
-    let mut points = Vec::new();
-    let mut current_x: Option<f64> = None;
-    let mut i = start;
+/// Annotation layers whose geometry is not part of the profile contour.
+fn is_annotation_layer(layer: &str) -> bool {
+    let l = layer.to_lowercase();
+    ["dim", "maat", "text", "tekst", "hatch", "arcering", "center", "as-", "-as", "hidden"]
+        .iter()
+        .any(|k| l.contains(k))
+        || l == "as"
+}
 
-    while i + 1 < lines.len() {
-        if lines[i] == "0" {
-            break;
+/// Extract geometry as point-runs, scoped to the ENTITIES section, layer-filtered.
+fn extract_polylines(pairs: &[(String, String)]) -> Vec<Poly> {
+    // Scope to ENTITIES section if present.
+    let start = pairs
+        .iter()
+        .position(|(c, v)| c == "2" && v == "ENTITIES")
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let end = pairs[start..]
+        .iter()
+        .position(|(c, v)| c == "0" && v == "ENDSEC")
+        .map(|i| start + i)
+        .unwrap_or(pairs.len());
+
+    let mut polys = Vec::new();
+    let mut i = start;
+    while i < end {
+        if pairs[i].0 == "0" {
+            let etype = pairs[i].1.clone();
+            // Gather attributes until the next code-0 (or section end).
+            let mut j = i + 1;
+            while j < end && pairs[j].0 != "0" {
+                j += 1;
+            }
+            handle_entity(&etype, &pairs[i + 1..j], &mut polys);
+            i = j;
+        } else {
+            i += 1;
         }
-        match lines[i].as_str() {
+    }
+    polys
+}
+
+fn attr_f(attrs: &[(String, String)], code: &str) -> Option<f64> {
+    attrs.iter().find(|(c, _)| c == code).and_then(|(_, v)| v.parse().ok())
+}
+fn attr_layer(attrs: &[(String, String)]) -> String {
+    attrs.iter().find(|(c, _)| c == "8").map(|(_, v)| v.clone()).unwrap_or_else(|| "0".into())
+}
+
+fn handle_entity(etype: &str, attrs: &[(String, String)], polys: &mut Vec<Poly>) {
+    let layer = attr_layer(attrs);
+    if is_annotation_layer(&layer) {
+        return;
+    }
+    let mut push = |pts: Vec<(f64, f64)>, closed: bool| {
+        if pts.len() >= 2 {
+            polys.push(Poly { layer: layer.clone(), pts, closed });
+        }
+    };
+    match etype {
+        "LINE" => {
+            if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
+                (attr_f(attrs, "10"), attr_f(attrs, "20"), attr_f(attrs, "11"), attr_f(attrs, "21"))
+            {
+                push(vec![(x1, y1), (x2, y2)], false);
+            }
+        }
+        "ARC" => {
+            if let (Some(cx), Some(cy), Some(r), Some(a0), Some(a1)) = (
+                attr_f(attrs, "10"), attr_f(attrs, "20"), attr_f(attrs, "40"),
+                attr_f(attrs, "50"), attr_f(attrs, "51"),
+            ) {
+                push(arc_pts(cx, cy, r, a0, a1), false);
+            }
+        }
+        "CIRCLE" => {
+            if let (Some(cx), Some(cy), Some(r)) = (attr_f(attrs, "10"), attr_f(attrs, "20"), attr_f(attrs, "40")) {
+                push(arc_pts(cx, cy, r, 0.0, 360.0), true);
+            }
+        }
+        "ELLIPSE" => {
+            if let (Some(cx), Some(cy), Some(mx), Some(my), Some(ratio)) = (
+                attr_f(attrs, "10"), attr_f(attrs, "20"), attr_f(attrs, "11"),
+                attr_f(attrs, "21"), attr_f(attrs, "40"),
+            ) {
+                let s = attr_f(attrs, "41").unwrap_or(0.0);
+                let e = attr_f(attrs, "42").unwrap_or(std::f64::consts::TAU);
+                let pts = ellipse_pts(cx, cy, mx, my, ratio, s, e);
+                let closed = (e - s - std::f64::consts::TAU).abs() < 1e-3;
+                push(pts, closed);
+            }
+        }
+        "LWPOLYLINE" => {
+            let closed = (attr_f(attrs, "70").unwrap_or(0.0) as i64) & 1 == 1;
+            let verts = collect_vertices(attrs);
+            push(poly_with_bulge(&verts, closed), closed);
+        }
+        _ => {}
+    }
+}
+
+/// LWPOLYLINE vertices in order, each with its optional bulge (code 42).
+fn collect_vertices(attrs: &[(String, String)]) -> Vec<(f64, f64, f64)> {
+    let mut verts: Vec<(f64, f64, f64)> = Vec::new();
+    let mut cur: Option<(f64, Option<f64>, f64)> = None; // (x, y, bulge)
+    for (c, v) in attrs {
+        match c.as_str() {
             "10" => {
-                current_x = lines[i + 1].parse().ok();
+                if let Some((x, Some(y), b)) = cur.take() {
+                    verts.push((x, y, b));
+                }
+                cur = v.parse().ok().map(|x| (x, None, 0.0));
             }
             "20" => {
-                if let (Some(x), Some(y)) = (current_x, lines[i + 1].parse::<f64>().ok()) {
-                    points.push((x, y));
-                    current_x = None;
+                if let (Some(slot), Ok(y)) = (cur.as_mut(), v.parse::<f64>()) {
+                    slot.1 = Some(y);
+                }
+            }
+            "42" => {
+                if let (Some(slot), Ok(b)) = (cur.as_mut(), v.parse::<f64>()) {
+                    slot.2 = b;
                 }
             }
             _ => {}
         }
-        i += 2;
     }
-    (points, i)
+    if let Some((x, Some(y), b)) = cur {
+        verts.push((x, y, b));
+    }
+    verts
 }
 
-fn parse_vertex_entity(lines: &[String], start: usize) -> (Option<(f64, f64)>, usize) {
-    let mut x = None;
-    let mut y = None;
-    let mut i = start;
-
-    while i + 1 < lines.len() {
-        if lines[i] == "0" {
-            break;
-        }
-        match lines[i].as_str() {
-            "10" => x = lines[i + 1].parse().ok(),
-            "20" => y = lines[i + 1].parse().ok(),
-            _ => {}
-        }
-        i += 2;
+fn poly_with_bulge(verts: &[(f64, f64, f64)], closed: bool) -> Vec<(f64, f64)> {
+    let n = verts.len();
+    if n < 2 {
+        return verts.iter().map(|v| (v.0, v.1)).collect();
     }
-
-    let pt = match (x, y) {
-        (Some(x), Some(y)) => Some((x, y)),
-        _ => None,
-    };
-    (pt, i)
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    let limit = if closed { n } else { n - 1 };
+    for k in 0..limit {
+        let a = verts[k];
+        let b = verts[(k + 1) % n];
+        let seg = bulge_pts((a.0, a.1), (b.0, b.1), a.2);
+        if k == 0 {
+            out.extend(seg);
+        } else {
+            out.extend(seg.into_iter().skip(1));
+        }
+    }
+    out
 }
 
-// ── Convex hull (Graham scan) ──────────────────────────────────
+// ── Tessellation ───────────────────────────────────────────────
 
-fn convex_hull(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
-    if points.len() < 3 {
-        return points.to_vec();
+fn arc_pts(cx: f64, cy: f64, r: f64, a0_deg: f64, a1_deg: f64) -> Vec<(f64, f64)> {
+    let s = a0_deg;
+    let mut e = a1_deg;
+    while e < s {
+        e += 360.0;
     }
+    let sweep = e - s;
+    let n = (sweep / 8.0).ceil().max(2.0) as usize;
+    (0..=n)
+        .map(|i| {
+            let a = (s + sweep * i as f64 / n as f64).to_radians();
+            (cx + r * a.cos(), cy + r * a.sin())
+        })
+        .collect()
+}
 
-    // Deduplicate
-    let mut pts: Vec<(f64, f64)> = Vec::new();
-    for p in points {
-        let dup = pts.iter().any(|q| (q.0 - p.0).abs() < 1e-9 && (q.1 - p.1).abs() < 1e-9);
-        if !dup {
-            pts.push(*p);
+fn bulge_pts(p0: (f64, f64), p1: (f64, f64), bulge: f64) -> Vec<(f64, f64)> {
+    if bulge.abs() < 1e-9 {
+        return vec![p0, p1];
+    }
+    let theta = 4.0 * bulge.atan();
+    let dx = p1.0 - p0.0;
+    let dy = p1.1 - p0.1;
+    let chord = (dx * dx + dy * dy).sqrt();
+    if chord < 1e-9 {
+        return vec![p0, p1];
+    }
+    let r = chord / (2.0 * (theta.abs() / 2.0).sin());
+    let mx = (p0.0 + p1.0) / 2.0;
+    let my = (p0.1 + p1.1) / 2.0;
+    let h = r * (theta / 2.0).cos();
+    let nx = -dy / chord;
+    let ny = dx / chord;
+    let sign = if bulge > 0.0 { 1.0 } else { -1.0 };
+    let cx = mx + sign * h * nx;
+    let cy = my + sign * h * ny;
+    let a0 = (p0.1 - cy).atan2(p0.0 - cx).to_degrees();
+    let a1 = (p1.1 - cy).atan2(p1.0 - cx).to_degrees();
+    if bulge > 0.0 {
+        arc_pts(cx, cy, r, a0, a1)
+    } else {
+        let mut v = arc_pts(cx, cy, r, a1, a0);
+        v.reverse();
+        v
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ellipse_pts(cx: f64, cy: f64, mx: f64, my: f64, ratio: f64, s: f64, mut e: f64) -> Vec<(f64, f64)> {
+    let major = (mx * mx + my * my).sqrt();
+    let rot = my.atan2(mx);
+    let minor = major * ratio;
+    while e < s {
+        e += std::f64::consts::TAU;
+    }
+    let n = 48usize;
+    (0..=n)
+        .map(|k| {
+            let t = s + (e - s) * k as f64 / n as f64;
+            let ex = major * t.cos();
+            let ey = minor * t.sin();
+            (cx + ex * rot.cos() - ey * rot.sin(), cy + ex * rot.sin() + ey * rot.cos())
+        })
+        .collect()
+}
+
+// ── Segment chaining ───────────────────────────────────────────
+
+fn eq_pt(a: (f64, f64), b: (f64, f64)) -> bool {
+    (a.0 - b.0).abs() < TOL && (a.1 - b.1).abs() < TOL
+}
+
+/// Chain disjoint point-runs into loops by matching endpoints.
+fn chain(polys: &[Poly]) -> Vec<Vec<(f64, f64)>> {
+    let mut remaining: Vec<Vec<(f64, f64)>> =
+        polys.iter().filter(|p| p.pts.len() >= 2).map(|p| p.pts.clone()).collect();
+    let mut loops = Vec::new();
+    while let Some(first) = remaining.pop() {
+        let mut chain_pts = first;
+        let mut extended = true;
+        while extended {
+            extended = false;
+            let mut idx = None;
+            let head = chain_pts[0];
+            let tail = chain_pts[chain_pts.len() - 1];
+            for (i, s) in remaining.iter().enumerate() {
+                let (s0, s1) = (s[0], s[s.len() - 1]);
+                if eq_pt(tail, s0) || eq_pt(tail, s1) || eq_pt(head, s0) || eq_pt(head, s1) {
+                    idx = Some(i);
+                    break;
+                }
+            }
+            if let Some(i) = idx {
+                let s = remaining.remove(i);
+                let (s0, s1) = (s[0], s[s.len() - 1]);
+                let tail = chain_pts[chain_pts.len() - 1];
+                let head = chain_pts[0];
+                if eq_pt(tail, s0) {
+                    chain_pts.extend(s.into_iter().skip(1));
+                } else if eq_pt(tail, s1) {
+                    chain_pts.extend(s.into_iter().rev().skip(1));
+                } else if eq_pt(head, s1) {
+                    let mut new_head = s;
+                    new_head.pop();
+                    new_head.extend(chain_pts.into_iter());
+                    chain_pts = new_head;
+                } else {
+                    // head == s0
+                    let mut new_head: Vec<(f64, f64)> = s.into_iter().rev().collect();
+                    new_head.pop();
+                    new_head.extend(chain_pts.into_iter());
+                    chain_pts = new_head;
+                }
+                extended = true;
+            }
         }
+        loops.push(chain_pts);
     }
+    loops
+}
 
+fn polygon_area(pts: &[(f64, f64)]) -> f64 {
     if pts.len() < 3 {
-        return pts;
+        return 0.0;
     }
-
-    // Find lowest-leftmost point
-    let start_idx = pts
-        .iter()
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.1.partial_cmp(&b.1).unwrap().then(a.0.partial_cmp(&b.0).unwrap()))
-        .unwrap()
-        .0;
-    let start = pts.remove(start_idx);
-
-    // Sort by polar angle
-    pts.sort_by(|a, b| {
-        let angle_a = (a.1 - start.1).atan2(a.0 - start.0);
-        let angle_b = (b.1 - start.1).atan2(b.0 - start.0);
-        angle_a.partial_cmp(&angle_b).unwrap()
-    });
-
-    let mut hull = vec![start];
-    for p in pts {
-        while hull.len() > 1 && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0 {
-            hull.pop();
-        }
-        hull.push(p);
+    let mut a = 0.0;
+    for i in 0..pts.len() {
+        let p = pts[i];
+        let q = pts[(i + 1) % pts.len()];
+        a += p.0 * q.1 - q.0 * p.1;
     }
-
-    hull
-}
-
-fn cross(o: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
-    (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+    a.abs() / 2.0
 }
 
 // ── Sponning detection ─────────────────────────────────────────
@@ -286,56 +423,76 @@ fn detect_sponning(contour: &[(f64, f64)], width: f64, depth: f64) -> Option<Spo
     if contour.len() < 6 {
         return None;
     }
-
     let n = contour.len();
     for i in 0..n {
         let p0 = contour[i];
         let p1 = contour[(i + 1) % n];
         let p2 = contour[(i + 2) % n];
-
         let dx1 = (p1.0 - p0.0).abs();
         let dy1 = (p1.1 - p0.1).abs();
         let dx2 = (p2.0 - p1.0).abs();
         let dy2 = (p2.1 - p1.1).abs();
 
-        // Horizontal then vertical step
         if dx1 > 2.0 && dy1 < 1.0 && dx2 < 1.0 && dy2 > 2.0 {
             let sp_w = round1(dx1);
             let sp_d = round1(dy2);
             if (5.0..=30.0).contains(&sp_w) && (5.0..=40.0).contains(&sp_d) {
                 let mid_x = (p0.0 + p1.0) / 2.0;
                 let position = if mid_x > width / 2.0 { "buiten" } else { "binnen" };
-                return Some(Sponning {
-                    width: sp_w,
-                    depth: sp_d,
-                    position: position.into(),
-                });
+                return Some(Sponning { width: sp_w, depth: sp_d, position: position.into() });
             }
         }
-
-        // Vertical then horizontal step
         if dy1 > 2.0 && dx1 < 1.0 && dy2 < 1.0 && dx2 > 2.0 {
             let sp_w = round1(dx2);
             let sp_d = round1(dy1);
             if (5.0..=30.0).contains(&sp_w) && (5.0..=40.0).contains(&sp_d) {
                 let mid_y = (p0.1 + p1.1) / 2.0;
                 let position = if mid_y > depth / 2.0 { "buiten" } else { "binnen" };
-                return Some(Sponning {
-                    width: sp_w,
-                    depth: sp_d,
-                    position: position.into(),
-                });
+                return Some(Sponning { width: sp_w, depth: sp_d, position: position.into() });
             }
         }
     }
-
     None
 }
 
 fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
-
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arc_tessellation_spans_endpoints() {
+        let pts = arc_pts(0.0, 0.0, 10.0, 0.0, 90.0);
+        assert!(pts.len() >= 3);
+        assert!((pts[0].0 - 10.0).abs() < 1e-6 && pts[0].1.abs() < 1e-6);
+        let last = pts[pts.len() - 1];
+        assert!(last.0.abs() < 1e-6 && (last.1 - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn chains_lines_into_closed_square() {
+        let polys = vec![
+            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+        ];
+        let loops = chain(&polys);
+        assert_eq!(loops.len(), 1);
+        assert!((polygon_area(&loops[0]) - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn annotation_layers_are_skipped() {
+        assert!(is_annotation_layer("DIMENSIONS"));
+        assert!(is_annotation_layer("Maatvoering"));
+        assert!(!is_annotation_layer("0"));
+        assert!(!is_annotation_layer("CONTOUR"));
+    }
 }
