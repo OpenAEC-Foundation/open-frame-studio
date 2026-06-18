@@ -74,6 +74,32 @@ controleren; geen DWG/DXF-afhankelijkheid.
 genereren (correcte aanzicht×bouwdiepte, glassponning-stap, frame↔raam-overdek, N kamers,
 Gealan-15°-schuinte) — benadering, maar veel beter dan de placeholder en consistent.
 
+## 6. Bevindingen op echte sample-DXF's + prototype-validatie
+Map `samples/` bevat **502 DXF-bestanden** (een "ps…"-systeem, ASCII DXF, AC1027/AutoCAD 2013).
+Geanalyseerd + getest met een Node-prototype (`temp/dxf-proto.mjs`).
+
+**Structuur (essentieel):**
+- **Layer-gebaseerd.** In veel bestanden staan LINE/ARC op layer **`DIMENSIONS`** = maatlijnen,
+  niet de contour. De doorsnede staat op layer **`0`** (of een contour-layer). → **layer-filtering verplicht.**
+- **Contour = geketende LINE+ARC** (bv. `ps1023_Default`: 24 LINE + 16 ARC op layer 0), of een
+  gesloten **LWPOLYLINE/POLYLINE** (met bulge-arcs), of **ELLIPSE**.
+- Sommige bestanden (bv. `ps1013`) zijn **alleen maatlijn-/detailtekeningen** → geen contour.
+- **HATCH** = vulling (te negeren of als boundary-bron).
+- Entity-woordenschat over 502: LINE 462 · ARC 367 · LWPOLYLINE 207 · HATCH 187 · ELLIPSE 92 ·
+  POLYLINE 45 · SPLINE 33 · INSERT 7 · SOLID/CIRCLE 4.
+
+**Prototype-resultaat (aanpak gevalideerd):** layer-filter + arc/bulge/ellipse-tessellatie +
+**segment-chaining → grootste gesloten lus** levert echte concave contouren:
+`ps1023` 89 pt (gesloten, 230×35), `ps100` 317 pt (119×20), `ps1036` 225 pt (196×17,5).
+Dimensie-only bestanden worden correct als "geen contour" gemarkeerd. **De convex-hull vervalt.**
+Restpunten: een enkel bestand sluit nog niet (gap-bridging/tolerantie nodig); parser moet tot de
+`ENTITIES`-sectie scopen (HEADER/TABLES/BLOCKS overslaan); SPLINE/INSERT nog toevoegen.
+
+→ **Verdict bijgesteld: JA, de import kán dit aan na herbouw** — de aanpak is op de echte
+bestanden bewezen. Route A is haalbaar.
+
 ## Status
-Onderzoek vastgelegd; geen code gewijzigd. Keuze A/B/C ligt bij gebruiker (domein-expert).
-Backend-werk (nieuwe parser) is niet lokaal te compileren → via review + CI (#4481904).
+Onderzoek + prototype-validatie vastgelegd. Gekozen route: **A — import herbouwen (DXF, accuraat)**.
+NEXT: het gevalideerde algoritme (layer-filter, tessellatie, chaining, grootste-lus i.p.v. hull,
+sponning/aanzicht uit geometrie) spiegelen naar `ofs-core/src/import/dxf_profile.rs` (via review +
+CI #4481904; geen lokale cargo) + DWG→DXF-conversie documenteren. Samples in `samples/`.
