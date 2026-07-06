@@ -250,6 +250,62 @@ pub fn update_cell_escape(
 }
 
 #[wasm_bindgen]
+pub fn update_cell_sash_profile(
+    id: &str,
+    cell_index: usize,
+    profile_id: &str,
+    profile_name: &str,
+    sash_width: f64,
+    sash_depth: f64,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        let cell = k.cells.get_mut(cell_index).ok_or("Cel niet gevonden")?;
+        cell.sash_profile = Some(ofs_core::profile::ProfileRef {
+            id: profile_id.to_string(),
+            name: profile_name.to_string(),
+        });
+        cell.sash_width = Some(sash_width);
+        cell.sash_depth = Some(sash_depth);
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_edge_config(
+    id: &str,
+    edge_index: usize,
+    edge_json: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let edge: ofs_core::edge::EdgeConfig = serde_json::from_str(edge_json)
+            .map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
+        let k = &mut p.kozijnen[idx];
+        // Ensure edges vector has 4 entries (left, right, top, bottom)
+        while k.frame.edges.len() < 4 {
+            k.frame.edges.push(ofs_core::edge::EdgeConfig::default());
+        }
+        if edge_index < 4 {
+            k.frame.edges[edge_index] = edge;
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_corner_joints(id: &str, joints_json: &str) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let joints: Vec<ofs_core::joint::Joint> = serde_json::from_str(joints_json)
+            .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
+        p.kozijnen[idx].frame.corner_joints = joints;
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;

@@ -423,6 +423,9 @@
   "alert.sjabloonDeleted": "Vorlage gel\u00f6scht",
   "alert.blenderConnected": "Blender verbunden (Port 9876)",
   "alert.blenderNotConnected": "Keine Verbindung zu Blender. Starten Sie Blender mit dem Bonsai-Add-on.",
+  "alert.exportDesktopOnly": "Der Export ist nur in der Desktop-App verfügbar",
+  "alert.importDesktopOnly": "Der Import ist nur in der Desktop-App verfügbar",
+  "alert.vliesgevelWebUnavailable": "Vorhangfassaden sind in der Webversion noch nicht verfügbar",
 
   "dialog.unsavedTitle": "Ungespeicherte \u00c4nderungen",
   "dialog.unsavedMessage": "Das Projekt enth\u00e4lt ungespeicherte \u00c4nderungen. M\u00f6chten Sie zuerst speichern?",

@@ -4,10 +4,25 @@
  */
 import { get } from "svelte/store";
 import { _ } from "svelte-i18n";
-import { isTauri } from "./tauri.js";
+import { isTauri, isWeb } from "./tauri.js";
 import { api } from "./api.js";
 import { toast } from "../stores/toast.js";
 import { currentKozijn } from "../stores/kozijn.js";
+
+// In web mode file export/import commands resolve to null (no filesystem);
+// be honest about it instead of showing a success toast. In Tauri mode
+// failures throw, so a null result never means this there.
+function exportUnavailable(result) {
+  if (!isWeb || result !== null) return false;
+  toast.warning(get(_)("alert.exportDesktopOnly"));
+  return true;
+}
+
+function importUnavailable(result) {
+  if (!isWeb || result !== null) return false;
+  toast.warning(get(_)("alert.importDesktopOnly"));
+  return true;
+}
 
 async function getSaveDialog() {
   if (isTauri) return await import("@tauri-apps/plugin-dialog");
@@ -30,7 +45,8 @@ export async function exportIfc() {
     defaultPath: `${k.mark}.ifc`,
   });
   if (!path) return;
-  await api("export_ifc", { id: k.id, outputPath: path });
+  const result = await api("export_ifc", { id: k.id, outputPath: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "IFC", path } }));
 }
 
@@ -43,7 +59,8 @@ export async function exportDxf() {
     defaultPath: `${k.mark}.dxf`,
   });
   if (!path) return;
-  await api("export_dxf", { id: k.id, outputPath: path });
+  const result = await api("export_dxf", { id: k.id, outputPath: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "DXF", path } }));
 }
 
@@ -55,7 +72,8 @@ export async function exportKozijnstaat(format) {
     defaultPath: `kozijnstaat.${ext}`,
   });
   if (!path) return;
-  await api("export_kozijnstaat", { outputPath: path, format });
+  const result = await api("export_kozijnstaat", { outputPath: path, format });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: `Kozijnstaat ${format.toUpperCase()}`, path } }));
 }
 
@@ -68,7 +86,8 @@ export async function exportWorkshop() {
     defaultPath: `${k.mark}_werkplaats.pdf`,
   });
   if (!path) return;
-  await api("export_workshop_drawing", { id: k.id, outputPath: path });
+  const result = await api("export_workshop_drawing", { id: k.id, outputPath: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "PDF", path } }));
 }
 
@@ -81,7 +100,8 @@ export async function exportGltf() {
     defaultPath: `${k.mark}.glb`,
   });
   if (!path) return;
-  await api("export_gltf", { id: k.id, outputPath: path });
+  const result = await api("export_gltf", { id: k.id, outputPath: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "glTF", path } }));
 }
 
@@ -95,7 +115,8 @@ export async function exportProduction(format) {
     defaultPath: defaultName,
   });
   if (!path) return;
-  await api("export_production_lists", { outputPath: path, format });
+  const result = await api("export_production_lists", { outputPath: path, format });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: `Production ${format.toUpperCase()}`, path } }));
 }
 
@@ -117,7 +138,8 @@ export async function exportCncGcode() {
     defaultPath: `${k.mark}_cnc`,
   });
   if (!path) return;
-  await api("export_cnc_gcode", { id: k.id, outputDir: path });
+  const result = await api("export_cnc_gcode", { id: k.id, outputDir: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "CNC G-code", path } }));
 }
 
@@ -128,7 +150,8 @@ export async function exportLabels() {
     defaultPath: "labels.pdf",
   });
   if (!path) return;
-  await api("export_labels_pdf", { outputPath: path });
+  const result = await api("export_labels_pdf", { outputPath: path });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: "Labels PDF", path } }));
 }
 
@@ -142,7 +165,8 @@ export async function exportIfcWithLod(lod) {
   });
   if (!path) return;
   // Rust expects lod as Option<String> — always pass a string.
-  await api("export_ifc", { id: k.id, outputPath: path, lod: String(lod) });
+  const result = await api("export_ifc", { id: k.id, outputPath: path, lod: String(lod) });
+  if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: `IFC LOD${lod}`, path } }));
 }
 
@@ -156,6 +180,7 @@ export async function importIfcFile() {
   });
   if (!path) return;
   const result = await api("import_ifc_file", { filePath: path });
+  if (importUnavailable(result)) return;
   toast.success(`IFC bestand geimporteerd: ${path}`);
   return result;
 }
@@ -224,6 +249,7 @@ export async function importDxfProfile() {
   });
   if (!path) return;
   const result = await api("import_dxf_profile", { filePath: path });
+  if (importUnavailable(result)) return;
   const profile = JSON.parse(result);
   await api("add_custom_profile", { profileJson: JSON.stringify(profile) });
   toast.success(
@@ -241,6 +267,7 @@ export async function importCatalog() {
   });
   if (!path) return;
   const result = await api("import_catalog", { filePath: path, supplier: null });
+  if (importUnavailable(result)) return;
   const profiles = JSON.parse(result);
   for (const profile of profiles) {
     await api("add_custom_profile", { profileJson: JSON.stringify(profile) });

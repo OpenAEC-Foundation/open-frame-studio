@@ -539,6 +539,9 @@
   "alert.sjabloonDeleted": "Sjabloon verwijderd",
   "alert.blenderConnected": "Blender verbonden (poort 9876)",
   "alert.blenderNotConnected": "Geen verbinding met Blender. Start Blender met de Bonsai add-on.",
+  "alert.exportDesktopOnly": "Exporteren is alleen beschikbaar in de desktop-app",
+  "alert.importDesktopOnly": "Importeren is alleen beschikbaar in de desktop-app",
+  "alert.vliesgevelWebUnavailable": "Vliesgevels zijn nog niet beschikbaar in de webversie",
 
   "dialog.unsavedTitle": "Niet-opgeslagen wijzigingen",
   "dialog.unsavedMessage": "Het project bevat niet-opgeslagen wijzigingen. Wilt u eerst opslaan?",

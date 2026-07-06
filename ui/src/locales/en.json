@@ -423,6 +423,9 @@
   "alert.sjabloonDeleted": "Template deleted",
   "alert.blenderConnected": "Blender connected (port 9876)",
   "alert.blenderNotConnected": "No connection to Blender. Start Blender with the Bonsai add-on.",
+  "alert.exportDesktopOnly": "Export is only available in the desktop app",
+  "alert.importDesktopOnly": "Import is only available in the desktop app",
+  "alert.vliesgevelWebUnavailable": "Curtain walls are not yet available in the web version",
 
   "dialog.unsavedTitle": "Unsaved changes",
   "dialog.unsavedMessage": "The project has unsaved changes. Do you want to save first?",

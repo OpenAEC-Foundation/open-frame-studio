@@ -579,7 +579,7 @@
                     folieBuiten: edge?.folieBuiten || "geen",
                     anchorSpacingMm: edge?.anchorSpacingMm || 500,
                   })
-                }).then(k => currentKozijn.set(k));
+                }).then(k => k && currentKozijn.set(k));
               }}
             >
               <option value="haaks">Haaks</option>
@@ -605,7 +605,7 @@
                     folieBuiten: edge?.folieBuiten || "geen",
                     anchorSpacingMm: edge?.anchorSpacingMm || 500,
                   })
-                }).then(k => currentKozijn.set(k));
+                }).then(k => k && currentKozijn.set(k));
               }}
             >
               <option value="100">SL 100</option>

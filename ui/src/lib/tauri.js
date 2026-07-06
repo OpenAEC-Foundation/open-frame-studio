@@ -138,6 +138,37 @@ function certStub() {
   };
 }
 
+// ── Custom sjablonen (web mode) ─────────────────────────────
+// The Tauri backend stores custom sjablonen in the project state; in web
+// mode we persist them in localStorage so save/delete actually stick.
+
+const WEB_SJABLONEN_KEY = "ofs-custom-sjablonen";
+
+function loadWebSjablonen() {
+  try {
+    const list = JSON.parse(localStorage.getItem(WEB_SJABLONEN_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveWebSjabloon(sjabloonJson) {
+  const sjabloon = JSON.parse(sjabloonJson || "{}");
+  const list = loadWebSjablonen();
+  const idx = list.findIndex((s) => s.id === sjabloon.id);
+  if (idx >= 0) list[idx] = sjabloon;
+  else list.push(sjabloon);
+  localStorage.setItem(WEB_SJABLONEN_KEY, JSON.stringify(list));
+  return null;
+}
+
+function deleteWebSjabloon(sjabloonId) {
+  const list = loadWebSjablonen().filter((s) => s.id !== sjabloonId);
+  localStorage.setItem(WEB_SJABLONEN_KEY, JSON.stringify(list));
+  return null;
+}
+
 // ── WASM command dispatch ───────────────────────────────────
 
 // ofs-wasm functions return JSON strings; the Tauri commands return parsed
@@ -166,9 +197,30 @@ function wasmCommand(cmd, args) {
 
       case "update_kozijn_dimensions": return J(wasm.update_kozijn_dimensions(args?.id, args?.width, args?.height));
       case "update_cell_type": return J(wasm.update_cell_type(args?.id, args?.cellIndex, args?.panelType, args?.openingDirection));
-      case "update_cell_panel_filling": return J(wasm.update_cell_panel_filling(args?.id, args?.cellIndex, args?.panelFillingJson));
-      case "update_cell_glaslat": return J(wasm.update_cell_glaslat(args?.id, args?.cellIndex, args?.glaslatJson));
-      case "update_cell_escape": return J(wasm.update_cell_escape(args?.id, args?.cellIndex, args?.isEscape));
+      case "update_cell_panel_filling":
+        return typeof wasm.update_cell_panel_filling === "function"
+          ? J(wasm.update_cell_panel_filling(args?.id, args?.cellIndex, args?.panelFillingJson))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_cell_glaslat":
+        return typeof wasm.update_cell_glaslat === "function"
+          ? J(wasm.update_cell_glaslat(args?.id, args?.cellIndex, args?.glaslatJson))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_cell_escape":
+        return typeof wasm.update_cell_escape === "function"
+          ? J(wasm.update_cell_escape(args?.id, args?.cellIndex, args?.isEscape))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_cell_sash_profile":
+        return typeof wasm.update_cell_sash_profile === "function"
+          ? J(wasm.update_cell_sash_profile(args?.id, args?.cellIndex, args?.profileId, args?.profileName, args?.sashWidth, args?.sashDepth))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_edge_config":
+        return typeof wasm.update_edge_config === "function"
+          ? J(wasm.update_edge_config(args?.id, args?.edgeIndex, args?.edgeJson))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_corner_joints":
+        return typeof wasm.update_corner_joints === "function"
+          ? J(wasm.update_corner_joints(args?.id, args?.jointsJson))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_kozijn_layout":
         return typeof wasm.update_kozijn_layout === "function"
           ? J(wasm.update_kozijn_layout(args?.id, args?.layoutJson))
@@ -202,10 +254,27 @@ function wasmCommand(cmd, args) {
       case "load_profile_library":
       case "add_custom_profile":
         return "[]";
-      case "get_sjablonen": return [];
+      case "get_sjablonen": return loadWebSjablonen();
+      case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
+      case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);
 
       case "get_all_vliesgevels": return [];
       case "get_vliesgevel_production": return vgProductionStub();
+
+      // Vliesgevel state does not exist in the wasm build yet — return null
+      // so callers can tell the user honestly instead of pretending.
+      case "create_vliesgevel":
+      case "create_vliesgevel_from_template":
+      case "get_vliesgevel":
+      case "get_vliesgevel_geometry":
+      case "remove_vliesgevel":
+      case "vliesgevel_add_mullion":
+      case "vliesgevel_add_transom":
+      case "vliesgevel_remove_mullion":
+      case "vliesgevel_remove_transom":
+      case "vliesgevel_update_panel":
+        console.warn(`[web] vliesgevel command not available in web mode: ${cmd}`);
+        return null;
       case "get_cost_estimate": return emptyCostEstimate();
       case "get_cost_estimate_project": return [];
       case "get_pricing_config": return defaultPricingConfig();
@@ -273,8 +342,9 @@ function wasmCommand(cmd, args) {
       case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
       case "validate_project_ids": return { checks: [] };
       case "get_glass_library": return [];
-      case "export_cnc_gcode": return "ok";
-      case "export_labels_pdf": return "ok";
+      // File exports/imports need the filesystem — desktop only.
+      case "export_cnc_gcode": return null;
+      case "export_labels_pdf": return null;
       case "import_ifc_file": return null;
       case "compare_ifc_roundtrip":
       case "compare_ifc_files":
@@ -304,7 +374,9 @@ function browserFallback(cmd, args) {
     case "get_all_kozijnen": return [];
     case "get_all_vliesgevels": return [];
     case "load_profile_library": return [];
-    case "get_sjablonen": return [];
+    case "get_sjablonen": return loadWebSjablonen();
+    case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
+    case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);
     case "get_quotations": return [];
     case "create_quotation": return quotationStub(args);
     case "update_quotation_status": return quotationStub(args);
@@ -338,8 +410,9 @@ function browserFallback(cmd, args) {
     case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
     case "validate_project_ids": return { checks: [] };
     case "get_glass_library": return [];
-    case "export_cnc_gcode": return "ok";
-    case "export_labels_pdf": return "ok";
+    // File exports/imports need the filesystem — desktop only.
+    case "export_cnc_gcode": return null;
+    case "export_labels_pdf": return null;
     case "import_ifc_file": return null;
     case "compare_ifc_roundtrip":
     case "compare_ifc_files":
