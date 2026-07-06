@@ -3,7 +3,7 @@
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
     melkmeisje1, melkmeisje2, deurMetBovenlicht, freeGrid, gridToLayout,
-    findNode, setSplitChildSizes, mergeAt, patchVulling,
+    findNode, setSplitChildSizes, mergeAt, patchVulling, ensureIds,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
   import { currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
@@ -18,13 +18,14 @@
   let tree = $state(melkmeisje1());
   let selectedId = $state(null);
 
-  // If the selected kozijn already has a layout, start from it.
-  onMount(() => { if ($currentKozijn?.layout) tree = $currentKozijn.layout; });
+  // If the selected kozijn already has a layout, start from it (ensureIds is
+  // defensive: old .ofs files / stale wasm bundles may strip the node ids).
+  onMount(() => { if ($currentKozijn?.layout) tree = ensureIds($currentKozijn.layout); });
   function applyToKozijn() { if ($currentKozijn) setKozijnLayout(tree); }
   function loadFromKozijn() {
     const k = $currentKozijn;
     if (!k) return;
-    tree = k.layout ? k.layout : gridToLayout(k); // matrix → split tree when no layout yet
+    tree = k.layout ? ensureIds(k.layout) : gridToLayout(k); // matrix → split tree when no layout yet
     selectedId = null;
   }
 

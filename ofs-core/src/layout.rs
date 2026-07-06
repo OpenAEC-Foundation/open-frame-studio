@@ -9,7 +9,8 @@
 //!
 //! Additive: attached to `Kozijn` via `layout: Option<VakNode>` (`#[serde(default)]`);
 //! when present it supersedes the rectangular grid for geometry/production. JSON
-//! is identical to the frontend tree (an extra `id` field is ignored on parse).
+//! is identical to the frontend tree; node `id`s are preserved on the roundtrip
+//! (the canvas editor selects/splits/merges by id) but omitted when absent.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,10 +58,16 @@ pub struct VakChild {
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum VakNode {
     Split {
+        /// Frontend node id (canvas editing is id-based); preserved verbatim.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
         direction: SplitDirection,
         children: Vec<VakChild>,
     },
     Leaf {
+        /// Frontend node id (canvas editing is id-based); preserved verbatim.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
         vulling: Vakvulling,
     },
 }
@@ -107,10 +114,10 @@ pub fn compute_layout_geometry(node: &VakNode, rect: LayoutRect, divider_w: f64)
 
 fn layout_rec(node: &VakNode, rect: LayoutRect, divider_w: f64, out: &mut LayoutGeometry) {
     match node {
-        VakNode::Leaf { vulling } => {
+        VakNode::Leaf { vulling, .. } => {
             out.leaves.push(LayoutLeaf { rect, vulling: vulling.clone() });
         }
-        VakNode::Split { direction, children } => {
+        VakNode::Split { direction, children, .. } => {
             let horiz = matches!(direction, SplitDirection::Row);
             let total = if horiz { rect.width } else { rect.height };
             let n = children.len();
@@ -147,7 +154,7 @@ fn layout_rec(node: &VakNode, rect: LayoutRect, divider_w: f64, out: &mut Layout
 /// Number of real (non-buiten) vakken.
 pub fn count_vakken(node: &VakNode) -> usize {
     match node {
-        VakNode::Leaf { vulling } => if vulling.is_buiten() { 0 } else { 1 },
+        VakNode::Leaf { vulling, .. } => if vulling.is_buiten() { 0 } else { 1 },
         VakNode::Split { children, .. } => children.iter().map(|c| count_vakken(&c.node)).sum(),
     }
 }
@@ -155,7 +162,7 @@ pub fn count_vakken(node: &VakNode) -> usize {
 // ── Builders / templates ────────────────────────────────────────
 
 pub fn leaf(vulling: Vakvulling) -> VakNode {
-    VakNode::Leaf { vulling }
+    VakNode::Leaf { id: None, vulling }
 }
 pub fn glas() -> VakNode {
     leaf(Vakvulling::Glas)
@@ -176,10 +183,10 @@ fn child(size: f64, node: VakNode) -> VakChild {
     VakChild { size, node }
 }
 pub fn split_row(children: Vec<VakChild>) -> VakNode {
-    VakNode::Split { direction: SplitDirection::Row, children }
+    VakNode::Split { id: None, direction: SplitDirection::Row, children }
 }
 pub fn split_col(children: Vec<VakChild>) -> VakNode {
-    VakNode::Split { direction: SplitDirection::Column, children }
+    VakNode::Split { id: None, direction: SplitDirection::Column, children }
 }
 
 /// Side-light zone: glass side light on top (starts higher) over outside-the-kozijn.

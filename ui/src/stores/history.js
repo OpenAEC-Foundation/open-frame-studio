@@ -111,6 +111,13 @@ async function restoreKozijn(snapshot) {
       });
     }
 
+    // Restore the free-subdivision layout tree ("null" clears it, so undoing
+    // the very first split also works)
+    await invoke("update_kozijn_layout", {
+      id: snapshot.id,
+      layoutJson: JSON.stringify(snapshot.layout ?? null),
+    });
+
     // Re-fetch the current state
     const final = await invoke("get_kozijn", { id: snapshot.id });
     currentKozijn.set(final);

@@ -1,7 +1,7 @@
 <script>
   import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
-  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt } from "../../lib/layout.js";
+  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, ensureIds } from "../../lib/layout.js";
 
   let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
 
@@ -11,7 +11,10 @@
   let workingTree = $state(null);
   let layoutDrag = $state(null);
   let selectedLeafId = $state(null);
-  let activeTree = $derived(workingTree ?? kozijn?.layout ?? null);
+  // ensureIds is defensive: old .ofs files or a stale wasm bundle may hand us a
+  // tree without node ids, while all canvas editing is id-based. It is memoized
+  // so the same input yields the same object (stable selection).
+  let activeTree = $derived(workingTree ?? ensureIds(kozijn?.layout ?? null));
 
   let layoutGeom = $derived.by(() => {
     const k = kozijn;
@@ -33,10 +36,11 @@
   function startLayoutDrag(d, e) {
     e.stopPropagation();
     e.preventDefault();
-    const base = kozijn?.layout;
+    const base = ensureIds(kozijn?.layout ?? null);
     const split = findNode(base, d.splitId);
     if (!split || split.kind !== "split") return;
     layoutDrag = {
+      base, moved: false,
       splitId: d.splitId, childIndex: d.childIndex, axis: d.direction,
       avail: d.avail, sizeSum: d.sizeSum,
       startX: e.clientX, startY: e.clientY,
@@ -50,19 +54,22 @@
   function onLayoutDragMove(e) {
     if (!layoutDrag) return;
     const deltaPx = layoutDrag.axis === "v" ? e.clientX - layoutDrag.startX : e.clientY - layoutDrag.startY;
+    if (deltaPx !== 0) layoutDrag.moved = true;
     const deltaMm = deltaPx / (zoom || 1);
     let deltaSize = deltaMm * layoutDrag.sizeSum / Math.max(1, layoutDrag.avail);
     const min = 0.05 * layoutDrag.sizeSum;
     deltaSize = Math.max(-(layoutDrag.origI - min), Math.min(layoutDrag.origNext - min, deltaSize));
     workingTree = setSplitChildSizes(
-      kozijn.layout, layoutDrag.splitId, layoutDrag.childIndex,
+      layoutDrag.base, layoutDrag.splitId, layoutDrag.childIndex,
       layoutDrag.origI + deltaSize, layoutDrag.origNext - deltaSize,
     );
   }
   function onLayoutDragUp() {
     window.removeEventListener("mousemove", onLayoutDragMove);
     window.removeEventListener("mouseup", onLayoutDragUp);
-    if (workingTree) setKozijnLayout(workingTree);
+    // Only commit when the divider actually moved — a bare mousedown/mouseup
+    // would otherwise push a no-op history entry and a redundant IPC roundtrip.
+    if (workingTree && layoutDrag?.moved) setKozijnLayout(workingTree);
     workingTree = null;
     layoutDrag = null;
   }
@@ -75,11 +82,11 @@
   }
   function doSplitLayout(dir, e) {
     e?.stopPropagation();
-    if (selectedLeafId && kozijn?.layout) setKozijnLayout(splitLeaf(kozijn.layout, selectedLeafId, dir));
+    if (selectedLeafId && activeTree) setKozijnLayout(splitLeaf(activeTree, selectedLeafId, dir));
   }
   function doMergeLayout(e) {
     e?.stopPropagation();
-    if (selectedLeafId && kozijn?.layout) setKozijnLayout(mergeAt(kozijn.layout, selectedLeafId));
+    if (selectedLeafId && activeTree) setKozijnLayout(mergeAt(activeTree, selectedLeafId));
   }
 
   // Inline dimension editing state

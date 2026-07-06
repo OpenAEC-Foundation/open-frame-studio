@@ -281,3 +281,37 @@ export function countLeaves(node) {
   if (node.kind === "leaf") return 1;
   return node.children.reduce((s, c) => s + countLeaves(c.node), 0);
 }
+
+// ── Id hygiene ────────────────────────────────────────────────────
+
+/** True when every node in the tree carries an id. */
+function hasAllIds(node) {
+  if (!node?.id) return false;
+  if (node.kind === "split") return node.children.every((c) => hasAllIds(c.node));
+  return true;
+}
+
+const _ensureIdsCache = new WeakMap();
+
+/**
+ * Return a tree in which every node has an id (missing ones get a fresh nid()).
+ * Defensive against trees that lost their ids on a roundtrip (old .ofs files,
+ * stale wasm bundles). A tree that already has ids everywhere is returned
+ * as-is; otherwise the result is memoized per input object (WeakMap) so
+ * repeated calls with the same tree yield the identical object — this keeps
+ * id-based selection stable across re-renders.
+ */
+export function ensureIds(tree) {
+  if (!tree) return tree;
+  if (hasAllIds(tree)) return tree;
+  const cached = _ensureIdsCache.get(tree);
+  if (cached) return cached;
+  const fill = (node) => {
+    const n = { ...node, id: node.id || nid() };
+    if (n.kind === "split") n.children = node.children.map((c) => ({ size: c.size, node: fill(c.node) }));
+    return n;
+  };
+  const out = fill(tree);
+  _ensureIdsCache.set(tree, out);
+  return out;
+}
