@@ -7,29 +7,23 @@
   let checks = [];
   let loading = false;
 
-  const defaultReqs = [
-    { property: "Uw", operator: "<=", value: 1.65, description: "Max. Uw-waarde conform Bouwbesluit" },
-    { property: "frameWidth", operator: ">=", value: 50, description: "Min. profielbreedte (mm)" },
-    { property: "glazingThickness", operator: ">=", value: 20, description: "Min. glasdikte (mm)" },
-  ];
-
   onMount(validate);
 
   async function validate() {
     loading = true;
     try {
-      const result = await invoke("validate_project_ids", {
-        requirementsJson: JSON.stringify(defaultReqs),
-      });
-      checks = result?.checks || [];
+      // No requirementsJson → the backend uses its default IDS requirements
+      // and adds the geometric (KVT) checks per kozijn and vliesgevel.
+      const result = await invoke("validate_project_ids", {});
+      checks = Array.isArray(result) ? result : [];
     } catch (e) {
       console.error("IDS validatie mislukt:", e);
     }
     loading = false;
   }
 
-  $: passCount = checks.filter(c => c.pass).length;
-  $: failCount = checks.filter(c => !c.pass).length;
+  $: passCount = checks.filter(c => c.passed).length;
+  $: failCount = checks.filter(c => !c.passed).length;
 </script>
 
 <div class="view">
@@ -65,21 +59,21 @@
         <thead>
           <tr>
             <th>Eis</th>
-            <th>Kozijn</th>
+            <th>Merk</th>
             <th class="num-head">Waarde</th>
-            <th class="num-head">Vereist</th>
+            <th>Melding</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {#each checks as check}
-            <tr class:row-fail={!check.pass}>
-              <td>{check.description || check.requirement || "\u2014"}</td>
+            <tr class:row-fail={!check.passed}>
+              <td>{check.requirement || "\u2014"}</td>
               <td class="mark">{check.kozijnMark || "\u2014"}</td>
               <td class="num">{check.actualValue ?? "\u2014"}</td>
-              <td class="num">{check.operator || ""} {check.expectedValue ?? "\u2014"}</td>
+              <td>{check.message || "\u2014"}</td>
               <td>
-                {#if check.pass}
+                {#if check.passed}
                   <span class="badge pass">OK</span>
                 {:else}
                   <span class="badge fail">Niet-conform</span>

@@ -120,6 +120,18 @@ export async function exportProduction(format) {
   toast.success(get(_)("alert.exportSuccess", { values: { type: `Production ${format.toUpperCase()}`, path } }));
 }
 
+export async function exportQuotationPdf() {
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+    defaultPath: "offerte.pdf",
+  });
+  if (!path) return;
+  const result = await api("export_quotation_pdf", { outputPath: path });
+  if (exportUnavailable(result)) return;
+  toast.success(get(_)("alert.exportSuccess", { values: { type: "Offerte PDF", path } }));
+}
+
 export async function sendToBlender() {
   const k = get(currentKozijn);
   if (!k) return;

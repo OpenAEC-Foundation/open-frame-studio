@@ -332,6 +332,8 @@ function wasmCommand(cmd, args) {
         return { id: `demo-${Date.now()}`, name: args?.name || "", mark: args?.mark || "", members: [], couplings: [] };
       case "add_to_combination":
         return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
+      case "add_coupling":
+        return { id: args?.combinationId, name: "", mark: "", members: [], couplings: [{ memberAId: args?.memberAId, memberBId: args?.memberBId, couplingType: args?.couplingType, couplingWidth: args?.couplingWidth || 0 }] };
       case "remove_combination": return null;
       case "generate_purchase_proposals": return [];
       case "generate_purchase_orders":
@@ -340,11 +342,12 @@ function wasmCommand(cmd, args) {
           : [];
       case "get_cnc_parts": return [];
       case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
-      case "validate_project_ids": return { checks: [] };
+      case "validate_project_ids": return [];
       case "get_glass_library": return [];
       // File exports/imports need the filesystem — desktop only.
       case "export_cnc_gcode": return null;
       case "export_labels_pdf": return null;
+      case "export_quotation_pdf": return null;
       case "import_ifc_file": return null;
       case "compare_ifc_roundtrip":
       case "compare_ifc_files":
@@ -398,6 +401,8 @@ function browserFallback(cmd, args) {
       return { id: `demo-${Date.now()}`, name: args?.name || "", mark: args?.mark || "", members: [], couplings: [] };
     case "add_to_combination":
       return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
+    case "add_coupling":
+      return { id: args?.combinationId, name: "", mark: "", members: [], couplings: [{ memberAId: args?.memberAId, memberBId: args?.memberBId, couplingType: args?.couplingType, couplingWidth: args?.couplingWidth || 0 }] };
     case "remove_combination": return null;
     case "generate_purchase_proposals": return [];
     case "generate_purchase_orders": return [];
@@ -408,11 +413,12 @@ function browserFallback(cmd, args) {
     case "get_cost_estimate_project": return [];
     case "get_vliesgevel_production": return vgProductionStub();
     case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
-    case "validate_project_ids": return { checks: [] };
+    case "validate_project_ids": return [];
     case "get_glass_library": return [];
     // File exports/imports need the filesystem — desktop only.
     case "export_cnc_gcode": return null;
     case "export_labels_pdf": return null;
+    case "export_quotation_pdf": return null;
     case "import_ifc_file": return null;
     case "compare_ifc_roundtrip":
     case "compare_ifc_files":

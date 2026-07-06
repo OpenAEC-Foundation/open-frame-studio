@@ -597,6 +597,7 @@
   "quotation.statusUpdateFailed": "Status bijwerken mislukt",
   "quotation.revisionCreated": "Revisie aangemaakt",
   "quotation.revisionFailed": "Revisie aanmaken mislukt",
+  "quotation.exportPdf": "Exporteer PDF",
 
   "bcf.title": "BCF Issues",
   "bcf.refresh": "Vernieuwen",
@@ -659,6 +660,10 @@
   "combination.couplingType.side_to_side": "Stijlkoppeling",
   "combination.couplingType.top_to_bottom": "Dorpelkoppeling",
   "combination.couplingType.corner": "Hoekkoppeling",
+  "combination.addCoupling": "+ Koppeling toevoegen",
+  "combination.couplingAdded": "Koppeling toegevoegd",
+  "combination.couplingAddError": "Fout bij toevoegen koppeling",
+  "combination.couplingMembersInvalid": "Kies twee verschillende kozijnen",
 
   "procurement.title": "Inkoop",
   "procurement.generate": "Genereer inkoopvoorstel",

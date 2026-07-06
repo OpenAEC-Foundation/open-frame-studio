@@ -481,6 +481,7 @@
   "quotation.statusUpdateFailed": "Status-Aktualisierung fehlgeschlagen",
   "quotation.revisionCreated": "Revision erstellt",
   "quotation.revisionFailed": "Revisionserstellung fehlgeschlagen",
+  "quotation.exportPdf": "PDF exportieren",
 
   "bcf.title": "BCF-Issues",
   "bcf.refresh": "Aktualisieren",
@@ -543,6 +544,10 @@
   "combination.couplingType.side_to_side": "Pfostenkopplung",
   "combination.couplingType.top_to_bottom": "Riegelkopplung",
   "combination.couplingType.corner": "Eckkopplung",
+  "combination.addCoupling": "+ Kopplung hinzufügen",
+  "combination.couplingAdded": "Kopplung hinzugefügt",
+  "combination.couplingAddError": "Fehler beim Hinzufügen der Kopplung",
+  "combination.couplingMembersInvalid": "Wählen Sie zwei verschiedene Fenster",
 
   "procurement.title": "Einkauf",
   "procurement.generate": "Bestellvorschlag erstellen",

@@ -2,7 +2,7 @@ use crate::vliesgevel::Vliesgevel;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum VliesgevalValidationError {
+pub enum VliesgevelValidationError {
     #[error("Stijlafstand {0:.0}mm overschrijdt maximum {1:.0}mm")]
     MullionSpacingTooLarge(f64, f64),
     #[error("Stijlafstand {0:.0}mm is kleiner dan minimum {1:.0}mm")]
@@ -20,7 +20,7 @@ const MIN_MULLION_SPACING: f64 = 300.0;
 const MAX_TRANSOM_SPACING: f64 = 4000.0;
 const MAX_PANEL_AREA_M2: f64 = 6.0;
 
-pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevalValidationError> {
+pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevelValidationError> {
     let mut errors = Vec::new();
 
     // Check mullion spacings
@@ -28,16 +28,16 @@ pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevalValidationError> {
     for m in &vg.mullions {
         let spacing = m.x_position - prev_x;
         if spacing > MAX_MULLION_SPACING {
-            errors.push(VliesgevalValidationError::MullionSpacingTooLarge(spacing, MAX_MULLION_SPACING));
+            errors.push(VliesgevelValidationError::MullionSpacingTooLarge(spacing, MAX_MULLION_SPACING));
         }
         if spacing < MIN_MULLION_SPACING {
-            errors.push(VliesgevalValidationError::MullionSpacingTooSmall(spacing, MIN_MULLION_SPACING));
+            errors.push(VliesgevelValidationError::MullionSpacingTooSmall(spacing, MIN_MULLION_SPACING));
         }
         prev_x = m.x_position;
     }
     let last_spacing = vg.overall_width - prev_x;
     if last_spacing > MAX_MULLION_SPACING {
-        errors.push(VliesgevalValidationError::MullionSpacingTooLarge(last_spacing, MAX_MULLION_SPACING));
+        errors.push(VliesgevelValidationError::MullionSpacingTooLarge(last_spacing, MAX_MULLION_SPACING));
     }
 
     // Check transom spacings
@@ -45,13 +45,13 @@ pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevalValidationError> {
     for t in &vg.transoms {
         let spacing = t.y_position - prev_y;
         if spacing > MAX_TRANSOM_SPACING {
-            errors.push(VliesgevalValidationError::TransomSpacingTooLarge(spacing, MAX_TRANSOM_SPACING));
+            errors.push(VliesgevelValidationError::TransomSpacingTooLarge(spacing, MAX_TRANSOM_SPACING));
         }
         prev_y = t.y_position;
     }
     let last_y_spacing = vg.overall_height - prev_y;
     if last_y_spacing > MAX_TRANSOM_SPACING {
-        errors.push(VliesgevalValidationError::TransomSpacingTooLarge(last_y_spacing, MAX_TRANSOM_SPACING));
+        errors.push(VliesgevelValidationError::TransomSpacingTooLarge(last_y_spacing, MAX_TRANSOM_SPACING));
     }
 
     // Check panel sizes
@@ -63,7 +63,7 @@ pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevalValidationError> {
             let (y1, y2) = row_zones[panel.row];
             let area_m2 = ((x2 - x1) * (y2 - y1)) / 1e6;
             if area_m2 > MAX_PANEL_AREA_M2 {
-                errors.push(VliesgevalValidationError::PanelTooLarge(
+                errors.push(VliesgevelValidationError::PanelTooLarge(
                     panel.col, panel.row, area_m2, MAX_PANEL_AREA_M2,
                 ));
             }
@@ -73,7 +73,7 @@ pub fn validate_vliesgevel(vg: &Vliesgevel) -> Vec<VliesgevalValidationError> {
     // Check panel count
     let expected = vg.num_cols() * vg.num_rows();
     if vg.panels.len() != expected {
-        errors.push(VliesgevalValidationError::PanelCountMismatch(
+        errors.push(VliesgevelValidationError::PanelCountMismatch(
             vg.panels.len(), vg.num_cols(), vg.num_rows(), expected,
         ));
     }

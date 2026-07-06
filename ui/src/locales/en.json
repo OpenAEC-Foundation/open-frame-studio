@@ -481,6 +481,7 @@
   "quotation.statusUpdateFailed": "Failed to update status",
   "quotation.revisionCreated": "Revision created",
   "quotation.revisionFailed": "Failed to create revision",
+  "quotation.exportPdf": "Export PDF",
 
   "bcf.title": "BCF Issues",
   "bcf.refresh": "Refresh",
@@ -543,6 +544,10 @@
   "combination.couplingType.side_to_side": "Mullion coupling",
   "combination.couplingType.top_to_bottom": "Transom coupling",
   "combination.couplingType.corner": "Corner coupling",
+  "combination.addCoupling": "+ Add coupling",
+  "combination.couplingAdded": "Coupling added",
+  "combination.couplingAddError": "Error adding coupling",
+  "combination.couplingMembersInvalid": "Choose two different frames",
 
   "procurement.title": "Procurement",
   "procurement.generate": "Generate purchase proposal",

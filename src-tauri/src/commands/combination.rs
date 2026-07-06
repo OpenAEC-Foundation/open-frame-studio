@@ -39,6 +39,39 @@ pub fn add_to_combination(
 }
 
 #[tauri::command]
+pub fn add_coupling(
+    state: State<'_, AppState>,
+    combination_id: String,
+    member_a_id: String,
+    member_b_id: String,
+    coupling_type: CouplingType,
+    coupling_width: f64,
+) -> Result<CombinationKozijn, String> {
+    let combo_id: uuid::Uuid = combination_id
+        .parse()
+        .map_err(|e: uuid::Error| e.to_string())?;
+    let a_id: uuid::Uuid = member_a_id
+        .parse()
+        .map_err(|e: uuid::Error| e.to_string())?;
+    let b_id: uuid::Uuid = member_b_id
+        .parse()
+        .map_err(|e: uuid::Error| e.to_string())?;
+    let mut project = state.project.lock().map_err(|e| e.to_string())?;
+    let combo = project
+        .combinations
+        .iter_mut()
+        .find(|c| c.id == combo_id)
+        .ok_or("Combinatie niet gevonden")?;
+    if !combo.members.iter().any(|m| m.kozijn_id == a_id)
+        || !combo.members.iter().any(|m| m.kozijn_id == b_id)
+    {
+        return Err("Kozijn maakt geen deel uit van deze combinatie".into());
+    }
+    combo.add_coupling(a_id, b_id, coupling_type, coupling_width);
+    Ok(combo.clone())
+}
+
+#[tauri::command]
 pub fn get_combinations(state: State<'_, AppState>) -> Vec<CombinationKozijn> {
     state
         .project

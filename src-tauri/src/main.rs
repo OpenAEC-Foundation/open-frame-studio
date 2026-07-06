@@ -70,6 +70,7 @@ fn main() {
             commands::export_ifc::export_ifc,
             commands::export_dxf::export_dxf,
             commands::export_pdf::export_kozijnstaat,
+            commands::export_pdf::export_quotation_pdf,
             commands::export_workshop::export_workshop_drawing,
             commands::export_gltf::export_gltf,
             // Production commands
@@ -145,6 +146,7 @@ fn main() {
             // Combination commands
             commands::combination::create_combination,
             commands::combination::add_to_combination,
+            commands::combination::add_coupling,
             commands::combination::get_combinations,
             commands::combination::remove_combination,
             // IFC roundtrip commands

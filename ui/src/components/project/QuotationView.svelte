@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { invoke } from "../../lib/tauri.js";
   import { toast } from "../../stores/toast.js";
+  import { exportQuotationPdf } from "../../lib/export.js";
 
   // QuotationStatus enum values as serialized by the backend (snake_case serde)
   const STATUSES = ["draft", "sent", "accepted", "rejected", "expired"];
@@ -69,6 +70,7 @@
     <h2>{$_("quotation.title")}</h2>
     <div class="toolbar-actions">
       <button class="action-btn" onclick={loadQuotations}>{$_("quotation.refresh")}</button>
+      <button class="action-btn" onclick={exportQuotationPdf}>{$_("quotation.exportPdf")}</button>
       <button class="action-btn primary" onclick={createQuotation}>{$_("quotation.new")}</button>
     </div>
   </div>

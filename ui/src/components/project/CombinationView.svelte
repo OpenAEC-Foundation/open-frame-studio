@@ -6,11 +6,21 @@
   import { currentKozijn } from "../../stores/kozijn.js";
   import { kozijnen } from "../../stores/project.js";
 
+  // CouplingType enum values as serialized by the backend (snake_case serde)
+  const COUPLING_TYPES = ["side_to_side", "top_to_bottom", "corner"];
+
   let combinations = $state([]);
   let loading = $state(false);
   let showCreate = $state(false);
   let newName = $state("");
   let newMark = $state("");
+
+  // Coupling form (one combination at a time, like the create form)
+  let couplingFormCombo = $state(null);
+  let cplA = $state("");
+  let cplB = $state("");
+  let cplType = $state("side_to_side");
+  let cplWidth = $state(100);
 
   onMount(loadCombinations);
 
@@ -88,6 +98,40 @@
     const k = $kozijnen.find((k) => k.id === id);
     if (k) return `${k.mark} — ${k.name}`;
     return id ? id.slice(0, 8) : "—";
+  }
+
+  function toggleCouplingForm(combo) {
+    if (couplingFormCombo === combo.id) {
+      couplingFormCombo = null;
+      return;
+    }
+    const members = combo.members || [];
+    cplA = members[0]?.kozijnId || "";
+    cplB = members[1]?.kozijnId || "";
+    cplType = "side_to_side";
+    cplWidth = 100;
+    couplingFormCombo = combo.id;
+  }
+
+  async function addCoupling(combo) {
+    if (!cplA || !cplB || cplA === cplB) {
+      toast.error($_("combination.couplingMembersInvalid"));
+      return;
+    }
+    try {
+      await invoke("add_coupling", {
+        combinationId: combo.id,
+        memberAId: cplA,
+        memberBId: cplB,
+        couplingType: cplType,
+        couplingWidth: Number(cplWidth) || 0,
+      });
+      couplingFormCombo = null;
+      await loadCombinations();
+      toast.success($_("combination.couplingAdded"));
+    } catch (e) {
+      toast.error($_("combination.couplingAddError") + ": " + e);
+    }
   }
 </script>
 
@@ -193,6 +237,42 @@
               </tbody>
             </table>
           {/if}
+
+          {#if (combo.members || []).length >= 2}
+            {#if couplingFormCombo === combo.id}
+              <div class="coupling-form">
+                <select bind:value={cplA} title={$_("combination.memberA")}>
+                  {#each combo.members as m}
+                    <option value={m.kozijnId}>{kozijnLabel(m.kozijnId)}</option>
+                  {/each}
+                </select>
+                <select bind:value={cplB} title={$_("combination.memberB")}>
+                  {#each combo.members as m}
+                    <option value={m.kozijnId}>{kozijnLabel(m.kozijnId)}</option>
+                  {/each}
+                </select>
+                <select bind:value={cplType} title={$_("combination.couplingTypeLabel")}>
+                  {#each COUPLING_TYPES as t}
+                    <option value={t}>{$_(`combination.couplingType.${t}`)}</option>
+                  {/each}
+                </select>
+                <input
+                  type="number"
+                  class="width-input"
+                  bind:value={cplWidth}
+                  min="0"
+                  step="1"
+                  title={$_("combination.width")}
+                />
+                <button class="action-btn primary" onclick={() => addCoupling(combo)}>{$_("combination.create")}</button>
+                <button class="action-btn" onclick={() => (couplingFormCombo = null)}>{$_("combination.cancel")}</button>
+              </div>
+            {:else}
+              <button class="action-btn coupling-add-btn" onclick={() => toggleCouplingForm(combo)}>
+                {$_("combination.addCoupling")}
+              </button>
+            {/if}
+          {/if}
         </div>
       {/each}
     </div>
@@ -227,6 +307,10 @@
   tbody tr:hover { background: rgba(217, 119, 6, 0.04); }
   td { padding: var(--sp-2) var(--sp-3); color: var(--text-primary); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .coupling-form { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2); }
+  .coupling-form select { flex: 1; min-width: 0; padding: var(--sp-2); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 12px; }
+  .coupling-form input.width-input { flex: 0 0 90px; padding: var(--sp-2); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 12px; }
+  .coupling-add-btn { margin-top: var(--sp-2); }
   .coupling-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; background: #333; color: #ccc; }
   .coupling-badge.side_to_side { background: #3b82f6; color: #fff; }
   .coupling-badge.top_to_bottom { background: #22c55e; color: #111; }
