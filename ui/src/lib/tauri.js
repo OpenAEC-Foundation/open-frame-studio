@@ -229,7 +229,6 @@ function wasmCommand(cmd, args) {
       case "add_row": return J(wasm.add_row(args?.id, args?.position));
 
       case "get_kozijn_geometry": return J(wasm.get_kozijn_geometry(args?.id));
-      case "get_production_data": return J(wasm.get_production_data(args?.id));
       case "get_production_data_project": return J(wasm.get_production_data_project());
       case "calculate_thermal": return J(wasm.calculate_thermal(args?.id));
       case "get_export_data": return J(wasm.get_export_data(args?.id));
@@ -239,7 +238,6 @@ function wasmCommand(cmd, args) {
       case "update_grid_sizes":
       case "update_frame_profile":
       case "update_sill_profile":
-      case "update_divider_profile":
       case "update_member_profile":
       case "update_frame_shape":
       case "update_cell_hardware":

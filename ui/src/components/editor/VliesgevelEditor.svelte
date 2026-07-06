@@ -1,6 +1,6 @@
 <script>
   import VliesgevelCanvas from "./VliesgevelCanvas.svelte";
-  import { currentVliesgevel, currentVgGeometry } from "../../stores/vliesgevel.js";
+  import { currentVliesgevel, currentVgGeometry, addMullion, addTransom, removeMullion, removeTransom } from "../../stores/vliesgevel.js";
   import { zoom, editorPan } from "../../stores/ui.js";
   import { _ } from "svelte-i18n";
 
@@ -37,6 +37,13 @@
 
 <div class="vliesgevel-editor" onwheel={handleWheel}>
   {#if $currentVliesgevel && geom}
+    <div class="vg-toolbar">
+      <button onclick={addMullion} title={$_('editor.vgAddMullionHint')}>{$_('editor.vgAddMullion')}</button>
+      <button onclick={removeMullion} disabled={!$currentVliesgevel.mullions.length} title={$_('editor.vgRemoveMullionHint')}>{$_('editor.vgRemoveMullion')}</button>
+      <span class="sep"></span>
+      <button onclick={addTransom} title={$_('editor.vgAddTransomHint')}>{$_('editor.vgAddTransom')}</button>
+      <button onclick={removeTransom} disabled={!$currentVliesgevel.transoms.length} title={$_('editor.vgRemoveTransomHint')}>{$_('editor.vgRemoveTransom')}</button>
+    </div>
     <svg
       bind:this={svgEl}
       class="vg-svg"
@@ -60,6 +67,41 @@
     overflow: hidden;
     background: var(--bg-canvas, #1a1a2e);
     position: relative;
+  }
+
+  .vg-toolbar {
+    position: absolute;
+    top: var(--sp-3, 12px);
+    left: var(--sp-3, 12px);
+    z-index: 5;
+    display: flex;
+    gap: var(--sp-2, 8px);
+    align-items: center;
+  }
+
+  .vg-toolbar button {
+    padding: var(--sp-1, 4px) var(--sp-3, 12px);
+    background: var(--bg-surface-alt, #2a2a38);
+    color: var(--text-primary, #e8e8f0);
+    border: 1px solid var(--border-color, #333);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: default;
+  }
+
+  .vg-toolbar button:hover:not(:disabled) {
+    border-color: var(--amber, #d97706);
+  }
+
+  .vg-toolbar button:disabled {
+    opacity: 0.4;
+  }
+
+  .vg-toolbar .sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border-color, #333);
   }
 
   .vg-svg {

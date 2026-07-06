@@ -57,6 +57,96 @@ export async function createVgFromTemplate(template, width, height) {
   return vg;
 }
 
+/** Next free VG-mark (VG01, VG02, ...) based on the project's vliesgevels. */
+function nextVgMark() {
+  const used = get(vliesgevels)
+    .map((v) => /^VG(\d+)$/.exec(v.mark || ""))
+    .filter(Boolean)
+    .map((m) => parseInt(m[1], 10));
+  const n = (used.length ? Math.max(...used) : 0) + 1;
+  return `VG${String(n).padStart(2, "0")}`;
+}
+
+/** Create a blank vliesgevel (one open bay; add stijlen/regels in the editor). */
+export async function createVliesgevel(width = 6000, height = 3600) {
+  const vg = await invoke("create_vliesgevel", {
+    name: "Vliesgevel",
+    mark: nextVgMark(),
+    width,
+    height,
+    // spacing >= size → no interior members: a single empty bay
+    mullionSpacing: width,
+    transomSpacing: height,
+  });
+  if (unavailableInWeb(vg)) return null;
+  await refreshProject();
+  currentVliesgevel.set(vg);
+  selectedPanelIndex.set(null);
+  await refreshVgGeometry(vg.id);
+  return vg;
+}
+
+/** Midpoint of the largest gap between existing positions within [0, total]. */
+function largestGapMidpoint(positions, total) {
+  const sorted = [0, ...positions.slice().sort((a, b) => a - b), total];
+  let bestMid = total / 2;
+  let bestGap = -1;
+  for (let i = 0; i + 1 < sorted.length; i++) {
+    const gap = sorted[i + 1] - sorted[i];
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestMid = sorted[i] + gap / 2;
+    }
+  }
+  return Math.round(bestMid);
+}
+
+/** Add a mullion (tussenstijl) in the middle of the widest bay. */
+export async function addMullion() {
+  const vg = get(currentVliesgevel);
+  if (!vg) return;
+  const x = largestGapMidpoint(vg.mullions.map((m) => m.xPosition), vg.overallWidth);
+  const updated = await invoke("vliesgevel_add_mullion", { id: vg.id, xPosition: x });
+  if (unavailableInWeb(updated)) return;
+  currentVliesgevel.set(updated);
+  await refreshProject();
+  await refreshVgGeometry(updated.id);
+}
+
+/** Add a transom (regel) in the middle of the tallest bay. */
+export async function addTransom() {
+  const vg = get(currentVliesgevel);
+  if (!vg) return;
+  const y = largestGapMidpoint(vg.transoms.map((t) => t.yPosition), vg.overallHeight);
+  const updated = await invoke("vliesgevel_add_transom", { id: vg.id, yPosition: y });
+  if (unavailableInWeb(updated)) return;
+  currentVliesgevel.set(updated);
+  await refreshProject();
+  await refreshVgGeometry(updated.id);
+}
+
+/** Remove the last (rightmost) mullion. */
+export async function removeMullion() {
+  const vg = get(currentVliesgevel);
+  if (!vg || !vg.mullions.length) return;
+  const updated = await invoke("vliesgevel_remove_mullion", { id: vg.id, mullionIndex: vg.mullions.length - 1 });
+  if (unavailableInWeb(updated)) return;
+  currentVliesgevel.set(updated);
+  await refreshProject();
+  await refreshVgGeometry(updated.id);
+}
+
+/** Remove the last (topmost) transom. */
+export async function removeTransom() {
+  const vg = get(currentVliesgevel);
+  if (!vg || !vg.transoms.length) return;
+  const updated = await invoke("vliesgevel_remove_transom", { id: vg.id, transomIndex: vg.transoms.length - 1 });
+  if (unavailableInWeb(updated)) return;
+  currentVliesgevel.set(updated);
+  await refreshProject();
+  await refreshVgGeometry(updated.id);
+}
+
 export async function selectVliesgevel(id) {
   const vg = await invoke("get_vliesgevel", { id });
   if (unavailableInWeb(vg)) return;

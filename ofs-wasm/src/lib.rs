@@ -337,15 +337,6 @@ pub fn get_kozijn_geometry(id: &str) -> Result<String, String> {
 // ── Production ─────────────────────────────────────────────────
 
 #[wasm_bindgen]
-pub fn get_production_data(id: &str) -> Result<String, String> {
-    with_project(|p| {
-        let idx = find_kozijn(p, id)?;
-        let prod = compute_production_data(&p.kozijnen[idx]);
-        Ok(serde_json::to_string(&prod).unwrap())
-    })?
-}
-
-#[wasm_bindgen]
 pub fn get_production_data_project() -> Result<String, String> {
     with_project(|p| {
         let data: Vec<_> = p.kozijnen.iter().map(|k| compute_production_data(k)).collect();

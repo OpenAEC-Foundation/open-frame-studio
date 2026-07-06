@@ -12,7 +12,7 @@
     duplicateKozijn,
     removeKozijn,
   } from "../../stores/kozijn.js";
-  import { createVgFromTemplate } from "../../stores/vliesgevel.js";
+  import { createVgFromTemplate, createVliesgevel } from "../../stores/vliesgevel.js";
   import { onMount } from "svelte";
   import { registerShortcuts } from "../../lib/shortcuts.js";
   import { fileNew, fileOpen, fileSave, fileSaveAs } from "../../lib/project-actions.js";
@@ -406,6 +406,12 @@
       <div class="ribbon-group">
         <span class="group-label">{$_('ribbon.curtainWall')}</span>
         <div class="group-buttons">
+          <button class="ribbon-btn" onclick={() => createVliesgevel()}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="0"/>
+            </svg>
+            <span>{$_('ribbon.empty')}</span>
+          </button>
           <button class="ribbon-btn" onclick={() => createVgFromTemplate("stick_system", 9000, 3600)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="2" width="20" height="20" rx="0"/>

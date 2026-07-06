@@ -39,7 +39,6 @@ fn main() {
             commands::kozijn::update_grid_sizes,
             commands::kozijn::update_frame_profile,
             commands::kozijn::update_sill_profile,
-            commands::kozijn::update_divider_profile,
             commands::kozijn::update_member_profile,
             commands::kozijn::update_frame_shape,
             commands::kozijn::update_corner_joints,
@@ -74,7 +73,6 @@ fn main() {
             commands::export_workshop::export_workshop_drawing,
             commands::export_gltf::export_gltf,
             // Production commands
-            commands::production::get_production_data,
             commands::production::get_production_data_project,
             // Calculation commands
             commands::calculation::get_cost_estimate,

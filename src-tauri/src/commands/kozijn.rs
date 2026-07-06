@@ -335,33 +335,6 @@ pub fn update_sill_profile(
 }
 
 #[tauri::command]
-pub fn update_divider_profile(
-    state: State<'_, AppState>,
-    id: String,
-    divider_index: usize,
-    is_column: bool,
-    profile_id: String,
-    profile_name: String,
-) -> Result<Kozijn, String> {
-    let mut project = state.project.lock().map_err(|e| e.to_string())?;
-    let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
-        .ok_or("Kozijn niet gevonden")?;
-
-    let profile = ProfileRef { id: profile_id, name: profile_name };
-    if is_column {
-        let col = kozijn.grid.columns.get_mut(divider_index)
-            .ok_or("Kolom niet gevonden")?;
-        col.divider_profile = Some(profile);
-    } else {
-        let row = kozijn.grid.rows.get_mut(divider_index)
-            .ok_or("Rij niet gevonden")?;
-        row.divider_profile = Some(profile);
-    }
-    Ok(kozijn.clone())
-}
-
-#[tauri::command]
 pub fn update_member_profile(
     state: State<'_, AppState>,
     id: String,
