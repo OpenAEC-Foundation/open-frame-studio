@@ -38,8 +38,6 @@ ui/                Svelte frontend (desktop + web)
   src/locales/     svelte-i18n translations (nl, en, de)
   src/styles/      CSS tokens + app styles (OpenAEC Design System)
 profiles/          Kozijnprofiel JSON data (wood, pvc, aluminum, wood-aluminum)
-python/            Legacy Python sidecar — replaced by native Rust export/import in ofs-core,
-                   no longer referenced anywhere
 ```
 
 ## Conventions

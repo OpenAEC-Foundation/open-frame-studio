@@ -89,9 +89,7 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 | Core logic | Rust (`ofs-core` crate) |
 | 2D Editor | SVG (reactive Svelte bindings) |
 | 3D Viewer | [Three.js](https://threejs.org/) |
-| IFC Export | Python sidecar ([IfcOpenShell](https://ifcopenshell.org/)) |
-| DXF Export | Python sidecar ([ezdxf](https://ezdxf.readthedocs.io/)) |
-| PDF Export | Python sidecar ([ReportLab](https://www.reportlab.com/)) |
+| Export / Import | Native Rust in `ofs-core` (IFC, DXF, PDF, glTF, XLSX, CSV) |
 | Styling | OpenAEC Design System (CSS custom properties + Tailwind) |
 
 ---
@@ -102,7 +100,6 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 
 - [Node.js](https://nodejs.org/) 20+
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable)
-- [Python](https://www.python.org/) 3.10+ (for export features)
 
 ### Build from Source
 
@@ -113,9 +110,6 @@ cd Open-Frame-Studio
 
 # Install frontend dependencies
 cd ui && npm install && cd ..
-
-# Install Python dependencies (optional, for export)
-cd python && pip install -r requirements.txt && cd ..
 
 # Run in development mode
 cd ui && npm run tauri dev
@@ -145,7 +139,9 @@ Open-Frame-Studio/
 │       ├── geometry.rs     # 2D/3D geometry computation
 │       ├── grid.rs         # Grid subdivision + templates
 │       ├── profile.rs      # Profile definitions
-│       └── validation.rs   # Business rules
+│       ├── validation.rs   # Business rules
+│       ├── export/         # Native export — IFC, DXF, PDF, glTF, XLSX, CSV
+│       └── import/         # Native import — IFC, DXF profiles, supplier catalogs
 ├── src-tauri/              # Tauri application
 │   └── src/
 │       ├── main.rs         # Entry point + command registration
@@ -158,10 +154,6 @@ Open-Frame-Studio/
 │       ├── stores/         # Svelte stores (project, kozijn, profiles, AI assistant, history)
 │       ├── styles/         # OpenAEC design tokens & themes
 │       └── lib/            # Tauri invoke wrapper, AI tools & system prompt, browser mocks
-├── python/                 # Python sidecar for exports
-│   ├── ofs_ifc/            # IFC generation (IfcOpenShell)
-│   ├── ofs_dxf/            # DXF generation (ezdxf)
-│   └── ofs_pdf/            # PDF kozijnstaat + werkplaatstekening
 └── profiles/               # Profile library (JSON)
     ├── wood/               # Houten profielen
     ├── aluminum/           # Aluminium profielen

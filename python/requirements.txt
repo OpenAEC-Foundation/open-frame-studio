@@ -1,4 +1,0 @@
-ifcopenshell>=0.8.0
-ezdxf>=1.0.0
-reportlab>=4.0
-openpyxl>=3.1.0

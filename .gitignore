@@ -2,20 +2,13 @@
 /target/
 **/*.rs.bk
 Cargo.lock
-!src-tauri/Cargo.lock
+!/Cargo.lock
 
 # Node / Vite
 ui/node_modules/
 ui/dist/
 ui/.vite/
 ui/.svelte-kit/
-
-# Python
-python/__pycache__/
-python/*.pyc
-python/.venv/
-python/venv/
-python/*.egg-info/
 
 # Tauri
 src-tauri/target/
@@ -40,6 +33,11 @@ desktop.ini
 .env.*
 *.pem
 *.key
+
+# Local data / scratch (never commit)
+/samples/
+/temp/
+.claude/settings.local.json
 
 # Build artifacts
 *.exe
