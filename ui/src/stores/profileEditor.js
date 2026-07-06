@@ -279,8 +279,6 @@ export const profileEditor = createProfileEditorStore();
 
 // Derived stores for convenience
 export const editorVertices = derived(profileEditor, ($s) => $s.vertices);
-export const editorZoom = derived(profileEditor, ($s) => $s.zoom);
-export const editorPan = derived(profileEditor, ($s) => $s.pan);
 export const editorTool = derived(profileEditor, ($s) => $s.tool);
 export const editorSnap = derived(profileEditor, ($s) => $s.snap);
 export const editorSelectedVertex = derived(profileEditor, ($s) => $s.selectedVertex);

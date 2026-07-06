@@ -9,7 +9,7 @@
   import Toast from "./components/shell/Toast.svelte";
   import ResizeHandle from "./components/shell/ResizeHandle.svelte";
   import KozijnEditor from "./components/editor/KozijnEditor.svelte";
-  import VliesgevalEditor from "./components/editor/VliesgevalEditor.svelte";
+  import VliesgevelEditor from "./components/editor/VliesgevelEditor.svelte";
   import { currentVliesgevel } from "./stores/vliesgevel.js";
   import PropertiesPanel from "./components/panels/PropertiesPanel.svelte";
   import ProjectOverview from "./components/project/ProjectOverview.svelte";
@@ -352,7 +352,7 @@
       </div>
     {/if}
     {#if $currentVliesgevel}
-      <VliesgevalEditor />
+      <VliesgevelEditor />
     {:else}
       <KozijnEditor />
     {/if}

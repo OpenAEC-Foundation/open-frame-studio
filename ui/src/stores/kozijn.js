@@ -203,17 +203,6 @@ export async function updateSillProfile(profileId, profileName) {
   await refreshProject();
 }
 
-export async function updateDividerProfile(dividerIndex, isColumn, profileId, profileName) {
-  const k = get(currentKozijn);
-  if (!k) return;
-  pushSnapshot();
-  const updated = await invoke("update_divider_profile", {
-    id: k.id, dividerIndex, isColumn, profileId, profileName,
-  });
-  currentKozijn.set(updated);
-  await refreshProject();
-}
-
 export async function updateMemberProfile(memberType, memberIndex, profileId, profileName, profileWidth, profileDepth) {
   const k = get(currentKozijn);
   if (!k) return;
@@ -283,11 +272,6 @@ export async function updateCornerJoints(joints) {
   await refreshProject();
 }
 
-export async function addCustomProfile(profileJson) {
-  await invoke("add_custom_profile", { profileJson: JSON.stringify(profileJson) });
-  await refreshProject();
-}
-
 export async function updateGridSizes(columnSizes, rowSizes) {
   const k = get(currentKozijn);
   if (!k) return;
@@ -310,19 +294,6 @@ export async function updateSecurityClass(cellIndex, securityClass) {
     id: k.id,
     cellIndex,
     securityClass,
-  });
-  currentKozijn.set(updated);
-  await refreshProject();
-}
-
-export async function updateCellGlazing(cellIndex, glazing) {
-  const k = get(currentKozijn);
-  if (!k) return;
-  pushSnapshot();
-  const updated = await invoke("update_cell_glazing", {
-    id: k.id,
-    cellIndex,
-    glazingJson: JSON.stringify(glazing),
   });
   currentKozijn.set(updated);
   await refreshProject();

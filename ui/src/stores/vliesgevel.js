@@ -21,7 +21,7 @@ export const selectedPanelIndex = writable(null);
 export const vliesgevels = writable([]);
 
 // Keep the list in sync with the project store. Every mutation (create from
-// template, add/remove mullion, remove, ...) calls refreshProject(), and
+// template, panel update, remove, ...) calls refreshProject(), and
 // open/new project replace the project store — so newly created vliesgevels
 // show up here automatically.
 project.subscribe(($project) => {
@@ -47,18 +47,6 @@ export function clearVliesgevelSelection() {
   selectedPanelIndex.set(null);
 }
 
-export async function createVliesgevel(name, mark, width, height, mullionSpacing, transomSpacing) {
-  const vg = await invoke("create_vliesgevel", {
-    name, mark, width, height, mullionSpacing, transomSpacing,
-  });
-  if (unavailableInWeb(vg)) return null;
-  await refreshProject();
-  currentVliesgevel.set(vg);
-  selectedPanelIndex.set(null);
-  await refreshVgGeometry(vg.id);
-  return vg;
-}
-
 export async function createVgFromTemplate(template, width, height) {
   const vg = await invoke("create_vliesgevel_from_template", { template, width, height });
   if (unavailableInWeb(vg)) return null;
@@ -75,46 +63,6 @@ export async function selectVliesgevel(id) {
   currentVliesgevel.set(vg);
   selectedPanelIndex.set(null);
   await refreshVgGeometry(id);
-}
-
-export async function addMullion(xPosition) {
-  const vg = get(currentVliesgevel);
-  if (!vg) return;
-  const updated = await invoke("vliesgevel_add_mullion", { id: vg.id, xPosition });
-  if (unavailableInWeb(updated)) return;
-  currentVliesgevel.set(updated);
-  await refreshProject();
-  await refreshVgGeometry(updated.id);
-}
-
-export async function addTransom(yPosition) {
-  const vg = get(currentVliesgevel);
-  if (!vg) return;
-  const updated = await invoke("vliesgevel_add_transom", { id: vg.id, yPosition });
-  if (unavailableInWeb(updated)) return;
-  currentVliesgevel.set(updated);
-  await refreshProject();
-  await refreshVgGeometry(updated.id);
-}
-
-export async function removeMullion(mullionIndex) {
-  const vg = get(currentVliesgevel);
-  if (!vg) return;
-  const updated = await invoke("vliesgevel_remove_mullion", { id: vg.id, mullionIndex });
-  if (unavailableInWeb(updated)) return;
-  currentVliesgevel.set(updated);
-  await refreshProject();
-  await refreshVgGeometry(updated.id);
-}
-
-export async function removeTransom(transomIndex) {
-  const vg = get(currentVliesgevel);
-  if (!vg) return;
-  const updated = await invoke("vliesgevel_remove_transom", { id: vg.id, transomIndex });
-  if (unavailableInWeb(updated)) return;
-  currentVliesgevel.set(updated);
-  await refreshProject();
-  await refreshVgGeometry(updated.id);
 }
 
 export async function updatePanel(col, row, panelType) {

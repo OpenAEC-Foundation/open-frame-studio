@@ -18,7 +18,7 @@ export const PANEL_TYPE_KEYS = {
   ventilation: "panel.ventilation",
 };
 
-export const MEMBER_TYPE_KEYS = {
+const MEMBER_TYPE_KEYS = {
   frame_top: "member.topRail",
   frame_bottom: "member.bottomRail",
   frame_left: "member.leftStile",
@@ -31,7 +31,7 @@ export const MEMBER_TYPE_KEYS = {
   sash_right: "member.sashRight",
 };
 
-export const GASKET_TYPE_KEYS = {
+const GASKET_TYPE_KEYS = {
   glazing_inner: "production.gasketInner",
   glazing_outer: "production.gasketOuter",
   sash_seal: "production.gasketSash",

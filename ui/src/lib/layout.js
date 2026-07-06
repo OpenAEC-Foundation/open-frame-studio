@@ -19,7 +19,7 @@ const nid = () => `n${++_idCounter}`;
 
 // ── Vakvulling (cell filling) ────────────────────────────────────
 
-export const VULLING_LABELS = {
+const VULLING_LABELS = {
   glas: "Vast glas",
   raam: "Raam",
   deur: "Deur",
@@ -48,20 +48,18 @@ export const DEUR_SOORTEN = {
   taats: "Taatsdeur",
 };
 
-export function leaf(vulling) {
+function leaf(vulling) {
   return { id: nid(), kind: "leaf", vulling };
 }
-export const glas = () => leaf({ type: "glas" });
-export const raam = (openType = "draai") => leaf({ type: "raam", openType });
-export const deur = (doorKind = "enkel") => leaf({ type: "deur", doorKind });
-export const paneel = () => leaf({ type: "paneel" });
-export const rooster = () => leaf({ type: "rooster" });
+const glas = () => leaf({ type: "glas" });
+const raam = (openType = "draai") => leaf({ type: "raam", openType });
+const deur = (doorKind = "enkel") => leaf({ type: "deur", doorKind });
 /** Outside the kozijn (wall/masonry) — no vak, no member, makes the outline step. */
-export const buiten = () => leaf({ type: "buiten" });
+const buiten = () => leaf({ type: "buiten" });
 
 const child = (size, node) => ({ size, node });
-export const splitRow = (...children) => ({ id: nid(), kind: "split", direction: "row", children });
-export const splitCol = (...children) => ({ id: nid(), kind: "split", direction: "column", children });
+const splitRow = (...children) => ({ id: nid(), kind: "split", direction: "row", children });
+const splitCol = (...children) => ({ id: nid(), kind: "split", direction: "column", children });
 
 export function vullingLabel(v) {
   if (!v) return "—";
@@ -201,7 +199,7 @@ function clone(node) {
 }
 
 /** Replace the node with id `id` using transform `fn(node) -> node`. */
-export function transformNode(root, id, fn) {
+function transformNode(root, id, fn) {
   const r = clone(root);
   const walk = (node) => {
     if (node.id === id) return fn(node);

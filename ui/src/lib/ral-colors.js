@@ -28,8 +28,3 @@ export function ralToHex(code) {
   const color = RAL_COLORS.find(c => c.code === code);
   return color ? color.hex : "#CCCCCC";
 }
-
-export function ralName(code) {
-  const color = RAL_COLORS.find(c => c.code === code);
-  return color ? `${color.code} — ${color.name}` : code;
-}

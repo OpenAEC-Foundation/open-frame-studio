@@ -1,5 +1,5 @@
 <script>
-  import VliesgevalCanvas from "./VliesgevalCanvas.svelte";
+  import VliesgevelCanvas from "./VliesgevelCanvas.svelte";
   import { currentVliesgevel, currentVgGeometry } from "../../stores/vliesgevel.js";
   import { zoom, editorPan } from "../../stores/ui.js";
   import { _ } from "svelte-i18n";
@@ -44,7 +44,7 @@
       preserveAspectRatio="xMidYMid meet"
     >
       <g transform="translate({$editorPan.x / $zoom}, {$editorPan.y / $zoom}) scale({$zoom})">
-        <VliesgevalCanvas />
+        <VliesgevelCanvas />
       </g>
     </svg>
   {:else}
