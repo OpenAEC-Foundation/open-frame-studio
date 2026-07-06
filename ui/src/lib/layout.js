@@ -14,8 +14,13 @@
  * ofs-core mirrors it for the backend/production once the wasm bundle is rebuilt.
  */
 
+// Node ids persist through the Rust roundtrip and into .ofs files, so a bare
+// sequential counter would collide with ids loaded from an earlier session
+// (every session would regenerate n1, n2, ...). A session-unique prefix keeps
+// fresh ids disjoint from any previously persisted ones.
 let _idCounter = 0;
-const nid = () => `n${++_idCounter}`;
+const _idSession = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const nid = () => `n${_idSession}-${++_idCounter}`;
 
 // ── Vakvulling (cell filling) ────────────────────────────────────
 
