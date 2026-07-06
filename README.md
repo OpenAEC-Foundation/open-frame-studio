@@ -124,7 +124,9 @@ cd ui && npm run tauri build
 cd ui && npm run dev
 ```
 
-The app includes a full browser mock layer, so you can develop and preview the UI without the Tauri runtime.
+The app includes a full browser mock layer, so you can develop and preview the UI without the Tauri runtime. There is also a real web build (`npm run build:web`, backed by the `ofs-wasm` crate).
+
+**Web mode limitations:** the browser version does not yet match the desktop app. Vliesgevel (curtain wall) editing and file export/import (IFC, DXF, PDF, XLSX, CNC) are desktop-only until the wasm module is rebuilt against the current `ofs-core`. Custom templates do work in web mode — they are persisted in `localStorage`.
 
 ---
 

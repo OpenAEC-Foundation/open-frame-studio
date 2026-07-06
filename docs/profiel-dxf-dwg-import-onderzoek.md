@@ -29,9 +29,10 @@ kiezen) of door zelf DWG→DXF te converteren (bv. ODA File Converter, gratis).
   rechtstreeks. Vereist conversie naar DXF (ODA File Converter / export uit CAD / 3Dfindit).
 - **DXF = ASCII** (group-code/value-paren) → in principe leesbaar, maar zie §4.
 
-## 3. Huidige import (`ofs-core/src/import/dxf_profile.rs`)
+## 3. Oorspronkelijke import (`ofs-core/src/import/dxf_profile.rs`, vóór de herbouw — zie Status)
 - Leest DXF-tekst, herkent entities: **LINE** (10/20/11/21), **LWPOLYLINE** (10/20),
-  **POLYLINE+VERTEX** (10/20).
+  **POLYLINE+VERTEX** (10/20 — alleen als losse punten voor de hull; dit pad verviel bij de
+  herbouw en is pas op 6 jul 2026 echt teruggebracht, zie §8).
 - Verzamelt alle punten → **`convex_hull(points)`** → bounding-box → `width`/`depth`;
   `sightline = width*0.8`, `glazingRebate = width*0.36` (geschat, niet uit geometrie).
 - UI-pad: ribbon **"Profiel DXF"** → command `import_profile` → `parse_dxf_profile`.
@@ -102,12 +103,15 @@ bestanden bewezen. Route A is haalbaar.
 Route **A — import herbouwd** ✅. `ofs-core/src/import/dxf_profile.rs` is herschreven naar het
 gevalideerde algoritme: DXF-tokenizer, scope op de `ENTITIES`-sectie, **layer-filtering**
 (annotaties/maatlijnen eruit), tessellatie van **LINE / ARC / CIRCLE / ELLIPSE /
-LWPOLYLINE(bulge)**, **segment-chaining → grootste gesloten lus** (convex hull verwijderd), en
+LWPOLYLINE(bulge)** — R12 **POLYLINE+VERTEX** verviel bij deze herbouw aanvankelijk en is op
+6 jul 2026 alsnog toegevoegd (zie §8) —, **segment-chaining → grootste gesloten lus** (convex
+hull verwijderd), en
 sponning/aanzicht uit de echte contour. Publieke API ongewijzigd (`parse_dxf_profile`,
 `ImportedProfile`, `Sponning`); callers (`commands/import_profile.rs`, `catalog.rs`) ongemoeid.
 Review-agent: **compiles clean** (geen lokale cargo; echte gate = CI #4481904).
 
-**Dekkingsmeting (Node-prototype `temp/dxf-proto.mjs --all`, 627 DXF's):**
+**Dekkingsmeting (Node-prototype `temp/dxf-proto.mjs --all`, 627 DXF's — eerste meting,
+first-match chaining; actuele cijfers in §8):**
 **257 gesloten contour (41%) · 275 open (44%) · 95 geen contour (15%) · 0 errors.**
 De open-bestanden bevatten vooral LINE+ARC+ELLIPSE → ze sluiten niet door **chaining-gaps**,
 niet door missende SPLINE (slechts 14 open-bestanden hebben SPLINE, 6 INSERT). De 95 zonder
@@ -162,10 +166,41 @@ geometrie / losse deeltekeningen / echte detailtekeningen.
 1. ~~Gap-bridging via ruimere tolerantie~~ — **dood spoor (gemeten).** Best-match-chaining ✅ gedaan.
 2. ~~Hybride face-trace-fallback~~ ✅ + ~~escalerende snapTol~~ ✅ → **91 %** dekking.
 3. ~~SPLINE/INSERT~~ — gemeten **niet** de blokkade (2+2 open); lage ROI, overgeslagen.
+   ~~R12 POLYLINE+VERTEX~~ ✅ alsnog toegevoegd (§8).
 4. `$INSUNITS`/units — units-normalisatie als bron niet in mm staat.
 5. **DWG→DXF-conversie** (ODA File Converter) voor binaire bronnen.
-6. De laatste 47 open zijn grotendeels niet-profiel/deeltekeningen — UI moet falen netjes melden
-   (bestaat al: `parse_dxf_profile` geeft een NL-foutmelding).
+6. De laatste **38** open (was 47, zie §8) zijn grotendeels niet-profiel/deeltekeningen — UI moet
+   falen netjes melden (bestaat al: `parse_dxf_profile` geeft een NL-foutmelding).
 
 Validatie op de samples via de `temp/dxf-*.mjs`-prototypes (Node, lokaal); de echte (Rust) run pas
 na wasm/CI-herbouw (#4481904).
+
+## 8. POLYLINE+VERTEX (6 jul 2026) — geïmplementeerd
+
+De herbouwde parser (zie Status) liet R12-stijl **POLYLINE+VERTEX** aanvankelijk vallen: de
+"POLYLINE-ondersteuning" uit §3 gold alleen voor de oude convex-hull-parser (losse punten,
+geen segmenten) en dat pad is bij de herbouw geschrapt zonder vervanging. 56 van de 627
+samples bevatten POLYLINE-entities volgens de tokenizer (45 via exacte LF-grep; 11 extra met
+CRLF/whitespace-varianten) — die geometrie werd tot nu toe genegeerd.
+
+Nu geïmplementeerd in Rust (`dxf_profile.rs`) én prototype (`temp/dxf-proto.mjs`), in sync:
+- **POLYLINE → VERTEX… → SEQEND**: header gevolgd door losse VERTEX-entities; **impliciete
+  finalize** van een onafgesloten POLYLINE bij elk ander entity-type en aan het sectie-einde.
+- **VERTEX-skipregel**: skip bij `(flags & 16)` of `(flags & 128 && !(flags & 64))` —
+  polyface-face-records (flags 128, coördinaten zijn nullen) vallen af; 3D-polyline-vertices
+  (flags 32) en polyface-mesh-vertices (flags 192) tellen mee. POLYLINE-flags in het wild:
+  1/129 = gesloten, 8 = 3D-polyline, 64 = polyface mesh, 128 = continuous linetype.
+- POLYLINEs op annotatie-layers worden nooit pending → hun VERTEX-en vervallen mee.
+- `analyze()` in het prototype kreeg een optionele `segCap`-parameter (default ∞ voor
+  single-file-modus; alleen `--all` geeft SEG_CAP mee). Geen ander temp-script importeert
+  `analyze`.
+
+**Nieuwe dekking (627 samples, SEG_CAP 16000, snaps 0,5/1,0/2,0 mm):**
+- `dxf-proto.mjs --all` (alleen chaining): **275 gesloten** · 252 open · 93 geen contour ·
+  7 te groot (hele-raam-tekeningen) · 0 errors.
+- `dxf-hybrid.mjs`: 527 meetbaar · chaining sluit 275 · face-trace herstelt **214**
+  (155 bij snap 0,5 · 44 bij 1,0 · 15 bij 2,0) → **489 gesloten = 92,8 %** · 38 open.
+
+T.o.v. de vorige meting (chaining 267, hybride 478/525 = 91,0 %): **+8 chain-sluitingen en
++11 hybride sluitingen**, 2 bestanden van "geen geometrie" naar meetbaar (525 → 527), en
+open daalde van 47 naar 38.
