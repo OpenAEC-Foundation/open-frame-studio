@@ -2,11 +2,13 @@
 //!
 //! Reads DXF (ASCII) and extracts the real profile contour: it scopes to the
 //! ENTITIES section, filters out annotation layers (dimensions/text), tessellates
-//! LINE / ARC / CIRCLE / ELLIPSE / LWPOLYLINE(bulge) / POLYLINE+VERTEX(bulge) into
-//! point runs, and chains those runs into closed loops — the largest-area loop is
-//! the outer contour. (The previous convex-hull approach destroyed the concave
-//! multi-chamber shape + glazing rebate.) Algorithm validated against real
-//! supplier samples; see docs/profiel-dxf-dwg-import-onderzoek.md.
+//! LINE / ARC / CIRCLE / ELLIPSE / LWPOLYLINE(bulge) into point runs — plus
+//! R12-style POLYLINE, whose points arrive as separate follow-on VERTEX entities
+//! (codes 10/20 = point, 42 = bulge) terminated by SEQEND — and chains those
+//! runs into closed loops; the largest-area loop is the outer contour. (The
+//! previous convex-hull approach destroyed the concave multi-chamber shape +
+//! glazing rebate.) Algorithm validated against real supplier samples; see
+//! docs/profiel-dxf-dwg-import-onderzoek.md.
 //!
 //! Not yet handled: SPLINE and INSERT/BLOCK (rare in the samples) and DWG (binary,
 //! must be converted to DXF first).
@@ -56,10 +58,9 @@ const MIN_FILL: f64 = 0.12;
 
 /// A tessellated polyline run fed to the shared contour engine
 /// ([`profile_from_polys`]). Built by the DXF tokenizer and (planned) the DWG
-/// reader. `layer` is used only during DXF extraction (annotation filtering);
-/// the contour engine reads only `pts` and `closed`.
+/// reader. Annotation-layer filtering happens during extraction, before a
+/// `Poly` is built; the contour engine reads only `pts` and `closed`.
 pub(crate) struct Poly {
-    pub(crate) layer: String,
     pub(crate) pts: Vec<(f64, f64)>,
     pub(crate) closed: bool,
 }
@@ -199,6 +200,7 @@ fn extract_polylines(pairs: &[(String, String)]) -> Vec<Poly> {
         .unwrap_or(pairs.len());
 
     let mut polys = Vec::new();
+    let mut pending: Option<PendingPolyline> = None;
     let mut i = start;
     while i < end {
         if pairs[i].0 == "0" {
@@ -208,13 +210,35 @@ fn extract_polylines(pairs: &[(String, String)]) -> Vec<Poly> {
             while j < end && pairs[j].0 != "0" {
                 j += 1;
             }
-            handle_entity(&etype, &pairs[i + 1..j], &mut polys);
+            handle_entity(&etype, &pairs[i + 1..j], &mut polys, &mut pending);
             i = j;
         } else {
             i += 1;
         }
     }
+    // A POLYLINE cut off by the section end still yields its vertices.
+    finalize_polyline(pending, &mut polys);
     polys
+}
+
+/// An R12-style POLYLINE header whose points are still being collected from
+/// the follow-on VERTEX entities (POLYLINE → VERTEX… → SEQEND). Polylines on
+/// annotation layers never become pending, so their vertices are dropped too.
+struct PendingPolyline {
+    closed: bool,
+    /// (x, y, bulge) per vertex, as fed to [`poly_with_bulge`].
+    verts: Vec<(f64, f64, f64)>,
+}
+
+/// Close out a pending R12 POLYLINE: tessellate the collected vertices
+/// (honouring bulges) and push the resulting run.
+fn finalize_polyline(pending: Option<PendingPolyline>, polys: &mut Vec<Poly>) {
+    if let Some(p) = pending {
+        let pts = poly_with_bulge(&p.verts, p.closed);
+        if pts.len() >= 2 {
+            polys.push(Poly { pts, closed: p.closed });
+        }
+    }
 }
 
 fn attr_f(attrs: &[(String, String)], code: &str) -> Option<f64> {
@@ -224,14 +248,43 @@ fn attr_layer(attrs: &[(String, String)]) -> String {
     attrs.iter().find(|(c, _)| c == "8").map(|(_, v)| v.clone()).unwrap_or_else(|| "0".into())
 }
 
-fn handle_entity(etype: &str, attrs: &[(String, String)], polys: &mut Vec<Poly>) {
+fn handle_entity(
+    etype: &str,
+    attrs: &[(String, String)],
+    polys: &mut Vec<Poly>,
+    pending: &mut Option<PendingPolyline>,
+) {
+    match etype {
+        "VERTEX" => {
+            if let Some(p) = pending.as_mut() {
+                let flags = attr_f(attrs, "70").unwrap_or(0.0) as i64;
+                // Skip spline-frame control points (16) and polyface face
+                // records (128 without 64) — those carry no contour geometry.
+                if flags & 16 != 0 || (flags & 128 != 0 && flags & 64 == 0) {
+                    return;
+                }
+                if let (Some(x), Some(y)) = (attr_f(attrs, "10"), attr_f(attrs, "20")) {
+                    p.verts.push((x, y, attr_f(attrs, "42").unwrap_or(0.0)));
+                }
+            }
+            return;
+        }
+        "SEQEND" => {
+            finalize_polyline(pending.take(), polys);
+            return;
+        }
+        // Any other entity implicitly terminates an open vertex sequence
+        // (malformed file with a missing SEQEND).
+        _ => finalize_polyline(pending.take(), polys),
+    }
+
     let layer = attr_layer(attrs);
     if is_annotation_layer(&layer) {
         return;
     }
     let mut push = |pts: Vec<(f64, f64)>, closed: bool| {
         if pts.len() >= 2 {
-            polys.push(Poly { layer: layer.clone(), pts, closed });
+            polys.push(Poly { pts, closed });
         }
     };
     match etype {
@@ -271,6 +324,12 @@ fn handle_entity(etype: &str, attrs: &[(String, String)], polys: &mut Vec<Poly>)
             let closed = (attr_f(attrs, "70").unwrap_or(0.0) as i64) & 1 == 1;
             let verts = collect_vertices(attrs);
             push(poly_with_bulge(&verts, closed), closed);
+        }
+        "POLYLINE" => {
+            // R12 polyline: the points follow as separate VERTEX entities,
+            // collected until SEQEND. Code 70 bit 1 = closed.
+            let closed = (attr_f(attrs, "70").unwrap_or(0.0) as i64) & 1 == 1;
+            *pending = Some(PendingPolyline { closed, verts: Vec::new() });
         }
         _ => {}
     }
@@ -775,14 +834,38 @@ mod tests {
     #[test]
     fn chains_lines_into_closed_square() {
         let polys = vec![
-            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+            Poly { pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
         ];
         let loops = chain(&polys);
         assert_eq!(loops.len(), 1);
         assert!((polygon_area(&loops[0]) - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn polyline_vertex_square_closes() {
+        // R12-style POLYLINE: header (code 70 bit 1 = closed) followed by
+        // VERTEX entities carrying the points, terminated by SEQEND. The
+        // stateful collector must assemble them into one closed square.
+        let dxf = "0\nSECTION\n2\nENTITIES\n\
+                   0\nPOLYLINE\n8\n0\n66\n1\n70\n1\n\
+                   0\nVERTEX\n8\n0\n10\n0.0\n20\n0.0\n\
+                   0\nVERTEX\n8\n0\n10\n10.0\n20\n0.0\n\
+                   0\nVERTEX\n8\n0\n10\n10.0\n20\n10.0\n\
+                   0\nVERTEX\n8\n0\n10\n0.0\n20\n10.0\n\
+                   0\nSEQEND\n\
+                   0\nENDSEC\n0\nEOF\n";
+        let pairs = read_pairs(dxf);
+        let polys = extract_polylines(&pairs);
+        assert_eq!(polys.len(), 1);
+        assert!(polys[0].closed);
+        assert!(
+            (polygon_area(&polys[0].pts) - 100.0).abs() < 1e-6,
+            "area was {}",
+            polygon_area(&polys[0].pts)
+        );
     }
 
     #[test]
@@ -798,11 +881,11 @@ mod tests {
         // Square plus a dangling spur off a corner — the spur is degree-1 and
         // must be pruned, leaving the square as the outer face (area 100).
         let polys = vec![
-            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (15.0, 13.0)], closed: false },
+            Poly { pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 10.0), (15.0, 13.0)], closed: false },
         ];
         let c = outer_contour(&polys, 0.5).expect("contour");
         assert!((polygon_area(&c) - 100.0).abs() < 1e-6, "area was {}", polygon_area(&c));
@@ -813,11 +896,11 @@ mod tests {
         // A 0.3 mm gap on the bottom edge defeats chaining (TOL 0.05) but is
         // bridged by snap_tol 0.5, so the graph fallback still closes the loop.
         let polys = vec![
-            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (4.85, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(5.15, 0.0), (10.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+            Poly { pts: vec![(0.0, 0.0), (4.85, 0.0)], closed: false },
+            Poly { pts: vec![(5.15, 0.0), (10.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
         ];
         // Chaining alone leaves the largest loop open (gap > TOL).
         let mut loops = chain(&polys);
@@ -834,10 +917,10 @@ mod tests {
         // ImportedProfile with the right bbox and a name-seeded id. This is the
         // seam the DWG reader will reuse.
         let polys = vec![
-            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 20.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 20.0), (0.0, 20.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(0.0, 20.0), (0.0, 0.0)], closed: false },
+            Poly { pts: vec![(0.0, 0.0), (10.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 0.0), (10.0, 20.0)], closed: false },
+            Poly { pts: vec![(10.0, 20.0), (0.0, 20.0)], closed: false },
+            Poly { pts: vec![(0.0, 20.0), (0.0, 0.0)], closed: false },
         ];
         let p = profile_from_polys(&polys, "Test Profiel").expect("profile");
         assert_eq!(p.name, "Test Profiel");
@@ -853,11 +936,11 @@ mod tests {
         // nothing → None) but is bridged at snap 1.0 — the premise behind the
         // escalating SNAP_TOLS fallback.
         let polys = vec![
-            Poly { layer: "0".into(), pts: vec![(0.0, 0.0), (4.6, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(5.4, 0.0), (10.0, 0.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
-            Poly { layer: "0".into(), pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
+            Poly { pts: vec![(0.0, 0.0), (4.6, 0.0)], closed: false },
+            Poly { pts: vec![(5.4, 0.0), (10.0, 0.0)], closed: false },
+            Poly { pts: vec![(10.0, 0.0), (10.0, 10.0)], closed: false },
+            Poly { pts: vec![(10.0, 10.0), (0.0, 10.0)], closed: false },
+            Poly { pts: vec![(0.0, 10.0), (0.0, 0.0)], closed: false },
         ];
         assert!(outer_contour(&polys, 0.5).is_none());
         assert!(outer_contour(&polys, 1.0).is_some());
