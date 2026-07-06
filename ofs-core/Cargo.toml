@@ -2,6 +2,7 @@
 name = "ofs-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
@@ -10,10 +11,10 @@ uuid.workspace = true
 thiserror.workspace = true
 printpdf = { version = "0.9", optional = true }
 rust_xlsxwriter = { version = "0.94", optional = true }
-chrono = { version = "0.4", optional = true }
+chrono = "0.4"
 calamine = { version = "0.34", optional = true }
 
 [features]
 default = ["export", "import"]
-export = ["dep:printpdf", "dep:rust_xlsxwriter", "dep:chrono"]
+export = ["dep:printpdf", "dep:rust_xlsxwriter"]
 import = ["dep:calamine"]

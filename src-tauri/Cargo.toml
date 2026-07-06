@@ -2,6 +2,7 @@
 name = "open-frame-studio"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 ofs-core = { path = "../ofs-core" }
