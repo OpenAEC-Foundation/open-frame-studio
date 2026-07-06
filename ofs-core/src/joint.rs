@@ -68,20 +68,3 @@ impl Default for Joint {
         }
     }
 }
-
-impl Joint {
-    /// Standard wood corner: pen/slis, stijl through
-    pub fn wood_corner() -> Self {
-        Self::default()
-    }
-
-    /// Miter corner: 45° verstek, typical for aluminum/PVC
-    pub fn miter_corner() -> Self {
-        Self {
-            joint_type: JointType::Verstek,
-            through_member: ThroughMember::Stijl,
-            angle: 45.0,
-            pen_length: 0.0,
-        }
-    }
-}

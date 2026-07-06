@@ -192,18 +192,6 @@ impl Kozijn {
         self.cells.resize_with(num_cells, Cell::default);
     }
 
-    /// Get cell at grid position
-    pub fn cell_at(&self, col: usize, row: usize) -> Option<&Cell> {
-        let idx = row * self.grid.columns.len() + col;
-        self.cells.get(idx)
-    }
-
-    /// Get mutable cell at grid position
-    pub fn cell_at_mut(&mut self, col: usize, row: usize) -> Option<&mut Cell> {
-        let idx = row * self.grid.columns.len() + col;
-        self.cells.get_mut(idx)
-    }
-
     /// Inner width (excluding frame members)
     pub fn inner_width(&self) -> f64 {
         self.frame.outer_width - 2.0 * self.frame.frame_width

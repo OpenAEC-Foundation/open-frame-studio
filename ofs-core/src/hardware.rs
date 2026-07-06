@@ -248,22 +248,6 @@ fn handle_side_from_hinge(hinge_side: HingeSide) -> HandleSide {
     }
 }
 
-/// Recommend security class based on element type and accessibility.
-pub fn recommend_security_class(panel_type: PanelType, is_ground_floor: bool) -> SecurityClass {
-    if !panel_type.is_operable() {
-        return SecurityClass::None;
-    }
-    if is_ground_floor {
-        // NEN 5096: bereikbare openingen minimaal RC2
-        match panel_type {
-            PanelType::Door => SecurityClass::RC2,
-            _ => SecurityClass::RC2,
-        }
-    } else {
-        SecurityClass::None
-    }
-}
-
 /// Generate a default hardware set for a given cell configuration.
 /// Returns None for non-operable panel types (FixedGlass, Panel, Ventilation).
 pub fn default_hardware_set(

@@ -159,8 +159,3 @@ pub enum EdgePosition {
     Top,
     Bottom,
 }
-
-/// Standard spouwlat widths
-pub fn standard_spouwlat_widths() -> Vec<f64> {
-    vec![100.0, 120.0, 140.0, 160.0]
-}

@@ -86,20 +86,3 @@ impl Default for Sill {
         }
     }
 }
-
-/// Predefined sill catalog entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SillCatalogEntry {
-    pub id: String,
-    pub name: String,
-    pub manufacturer: String,
-    pub sill_type: SillType,
-    pub material: String,
-    pub profile_widths: Vec<f64>,
-    pub profile_heights: Vec<f64>,
-    pub sponning_options: Vec<(f64, f64)>, // (width, height) pairs
-    pub colors: Vec<String>,
-    pub neut_available: bool,
-    pub max_neut_height: f64,
-}

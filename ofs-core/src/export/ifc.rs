@@ -243,7 +243,9 @@ pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) 
 
     // ── Element ────────────────────────────────────────────────
 
-    let guid_elem = ifc.guid();
+    // Derive the element GlobalId from the kozijn UUID so exports are
+    // stable across runs (BCF references, roundtrip re-import).
+    let guid_elem = crate::ifc_guid::uuid_to_ifc_guid(&kozijn.id);
     let element = ifc.add_entity(&format!(
         "{}('{}',{},'{}','{}','{}',$,{},{},{:.6},{:.6})",
         ifc_class, guid_elem, owner_history,

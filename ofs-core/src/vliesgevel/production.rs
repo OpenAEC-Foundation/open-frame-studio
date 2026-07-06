@@ -9,7 +9,7 @@ const GASKET_OVERLAP_MM: f64 = 20.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VliesgevalProductionData {
+pub struct VliesgevelProductionData {
     pub mark: String,
     pub name: String,
     pub mullion_list: Vec<CutListItem>,
@@ -19,7 +19,7 @@ pub struct VliesgevalProductionData {
     pub bom: Vec<BomItem>,
 }
 
-pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevalProductionData {
+pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionData {
     let mark = &vg.mark;
     let mut mullion_list = Vec::new();
     let mut transom_list = Vec::new();
@@ -182,7 +182,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevalProductionDat
         quantity: total_gasket_m,
     });
 
-    VliesgevalProductionData {
+    VliesgevelProductionData {
         mark: vg.mark.clone(),
         name: vg.name.clone(),
         mullion_list,

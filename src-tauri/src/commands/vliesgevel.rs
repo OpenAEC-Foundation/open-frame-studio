@@ -2,7 +2,7 @@ use crate::state::AppState;
 use ofs_core::vliesgevel::{CurtainPanelType, Vliesgevel};
 use ofs_core::vliesgevel::geometry::{compute_vliesgevel_2d, VliesgevelGeometry2D};
 use ofs_core::vliesgevel::grid;
-use ofs_core::vliesgevel::production::{compute_vliesgevel_production, VliesgevalProductionData};
+use ofs_core::vliesgevel::production::{compute_vliesgevel_production, VliesgevelProductionData};
 use tauri::State;
 
 #[tauri::command]
@@ -149,7 +149,7 @@ pub fn get_vliesgevel_geometry(
 pub fn get_vliesgevel_production(
     state: State<'_, AppState>,
     id: String,
-) -> Result<VliesgevalProductionData, String> {
+) -> Result<VliesgevelProductionData, String> {
     let project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let vg = project.vliesgevels.iter().find(|v| v.id == id)

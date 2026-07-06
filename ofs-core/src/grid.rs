@@ -1,27 +1,5 @@
 use crate::kozijn::{GridDivision, Kozijn, PanelType, OpeningDirection};
-use crate::profile::ProfileRef;
 use crate::template::KozijnSjabloon;
-
-/// Distribute grid divisions evenly across available space
-pub fn distribute_evenly(count: usize, total_size: f64, divider_width: f64) -> Vec<GridDivision> {
-    let total_divider_space = if count > 1 {
-        (count - 1) as f64 * divider_width
-    } else {
-        0.0
-    };
-    let cell_size = (total_size - total_divider_space) / count as f64;
-
-    (0..count)
-        .map(|i| GridDivision {
-            size: cell_size,
-            divider_profile: if i > 0 {
-                Some(ProfileRef::default_divider())
-            } else {
-                None
-            },
-        })
-        .collect()
-}
 
 // ── Sjabloon-aware templates ──────────────────────────────────
 
@@ -140,38 +118,4 @@ pub fn template_stolp_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn
     k.cells[1].opening_direction = Some(OpeningDirection::Right);
     k.cells[1].assign_sash_from_sjabloon(sj);
     k
-}
-
-// ── Legacy templates (backward compatible, use default sjabloon) ──
-
-pub fn template_single_turn_tilt(width: f64, height: f64) -> Kozijn {
-    template_single_turn_tilt_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_double_turn_tilt(width: f64, height: f64) -> Kozijn {
-    template_double_turn_tilt_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_sliding_door(width: f64, height: f64) -> Kozijn {
-    template_sliding_door_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_front_door(width: f64, height: f64) -> Kozijn {
-    template_front_door_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_top_hung(width: f64, height: f64) -> Kozijn {
-    template_top_hung_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_lift_slide(width: f64, height: f64) -> Kozijn {
-    template_lift_slide_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_pivot(width: f64, height: f64) -> Kozijn {
-    template_pivot_sj(width, height, &crate::template::default_sjabloon())
-}
-
-pub fn template_stolp(width: f64, height: f64) -> Kozijn {
-    template_stolp_sj(width, height, &crate::template::default_sjabloon())
 }
