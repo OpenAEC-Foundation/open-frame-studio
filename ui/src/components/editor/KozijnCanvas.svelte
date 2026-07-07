@@ -89,19 +89,296 @@
     if (selectedLeafId && activeTree) setKozijnLayout(mergeAt(activeTree, selectedLeafId));
   }
 
+  // ── Round/elliptical frame: donut geometry + inner clip ─────────────────────
+  // The donut is drawn UNDER the cell layer and the cells are clipped to the
+  // inner opening, so the decoration never paints over vak content and never
+  // steals pointer events.
+  const clipId = `ofs-inner-clip-${Math.random().toString(36).slice(2, 9)}`;
+  let roundClip = $derived.by(() => {
+    const f = kozijn?.frame;
+    if (!f?.shape) return null;
+    if (f.shape.shapeType === "round") {
+      const rOuter = Math.min(f.outerWidth, f.outerHeight) / 2;
+      const rInner = rOuter - f.frameWidth;
+      if (rInner <= 0) return null;
+      return { kind: "circle", cx: f.outerWidth / 2, cy: f.outerHeight / 2, rOuter, rInner };
+    }
+    if (f.shape.shapeType === "elliptical") {
+      const rx = f.shape.ellipseRx || f.outerWidth / 2;
+      const ry = f.shape.ellipseRy || f.outerHeight / 3;
+      return {
+        kind: "ellipse", cx: f.outerWidth / 2, cy: f.outerHeight / 2,
+        rx, ry, irx: rx - f.frameWidth, iry: ry - f.frameWidth,
+      };
+    }
+    return null;
+  });
+
+  // ── Dimension view model ─────────────────────────────────────────────────────
+  // The backend bakes dimension levels in as fixed model-mm offsets, and older
+  // wasm builds use different offsets/orderings than current ofs-core. So:
+  //  - the level index per side is re-derived from the distinct baked offsets,
+  //  - every dimension is classified semantically by its span (outer / dagmaat /
+  //    stijl / tussenstijl / vak), independent of backend version,
+  //  - render positions are re-projected screen-space-aware so the levels never
+  //    overlap each other or the kozijn at low zoom,
+  //  - labels get a deterministic lane sweep (on/above/below the line) so a
+  //    chain of narrow segments stays readable (kozijnstaat practice),
+  //  - with a free-subdivision layout the (stale) grid chain is replaced by a
+  //    chain generated from layoutGeom, editable via the split tree,
+  //  - round/elliptical kozijnen only show the buitenwerkse maten.
+  // Rendering and inline editing both consume this single source.
+  const DIM_EPS = 1.0;
+  const near = (a, b, eps = DIM_EPS) => Math.abs(a - b) < eps;
+
+  let dimsView = $derived.by(() => {
+    const k = kozijn;
+    if (!k?.frame) return [];
+    const dims = geometry?.dimensions || [];
+    const ow = k.frame.outerWidth || 0;
+    const oh = k.frame.outerHeight || 0;
+    const fw = k.frame.frameWidth || 0;
+    const z = zoom || 1;
+    const fontSize = 12 / z;
+    const bgPad = 3 / z;
+    const tickSz = 6 / z;
+    const labelH = fontSize + bgPad * 2;
+    // Screen-aware level spacing: room for the label itself plus an above/below
+    // lane without touching the next level (all values are model-mm at this zoom).
+    const minStart = labelH + 12 / z;
+    const minStep = labelH * 1.5 + 10 / z;
+    const laneOffset = labelH / 2 + tickSz + 2 / z;
+    const shape = k.frame.shape?.shapeType;
+    const roundish = shape === "round" || shape === "elliptical";
+    const hasLayout = !!(k.layout && layoutGeom);
+
+    // Grid member start positions, mirroring ofs-core's column/row walk
+    const cols = k.grid?.columns || [];
+    const rows = k.grid?.rows || [];
+    const colPos = [];
+    { let x = fw; for (const c of cols) { colPos.push(x); x += c.size + fw; } }
+    const isArch = shape === "arched" || shape === "arched_trapezoid";
+    const rowStart = isArch ? (k.frame.shape.archHeight ?? ow / 4) : fw;
+    const rowPos = [];
+    { let y = rowStart; for (const r of rows) { rowPos.push(y); y += r.size + fw; } }
+
+    const SIDES = {
+      bottom: { isH: true, base: oh, dir: 1 },
+      top: { isH: true, base: 0, dir: -1 },
+      right: { isH: false, base: ow, dir: 1 },
+      left: { isH: false, base: 0, dir: -1 },
+    };
+    const bySide = { bottom: [], top: [], right: [], left: [] };
+    for (const dim of dims) (bySide[dim.side] || bySide.bottom).push(dim);
+
+    // Semantic classification by span — independent of backend level offsets
+    function classify(dim, cfg) {
+      const a = cfg.isH ? Math.min(dim.x1, dim.x2) : Math.min(dim.y1, dim.y2);
+      const b = cfg.isH ? Math.max(dim.x1, dim.x2) : Math.max(dim.y1, dim.y2);
+      const total = cfg.isH ? ow : oh;
+      if (near(a, 0) && near(b, total)) return { kind: "outer", editable: true, a, b };
+      if (near(a, fw) && near(b, total - fw)) return { kind: "dagmaat", editable: true, a, b };
+      // Vak match before the edge-touch rule: older wasm builds lay the last
+      // column flush against the outer edge, and a genuine vak must stay
+      // editable there. Current-backend vak dims never touch the outer edge.
+      const pos = cfg.isH ? colPos : rowPos;
+      const sizes = cfg.isH ? cols : rows;
+      for (let i = 0; i < pos.length; i++) {
+        if (near(a, pos[i]) && near(b - a, sizes[i].size)) {
+          return { kind: "vak", editable: true, a, b, gridAxis: cfg.isH ? "col" : "row", gridIndex: i };
+        }
+      }
+      if (near(a, 0) || near(b, total)) return { kind: "stijl", editable: false, a, b };
+      return { kind: "tussenstijl", editable: false, a, b };
+    }
+    const isChainKind = (kind) => kind !== "outer" && kind !== "dagmaat";
+
+    // Editing a layout vak = resizing the two children of the split next to it;
+    // exact (and thus offered) only when the leaf is a DIRECT child of that split.
+    function layoutEditInfo(leaf, cfg, a, b) {
+      const wantDir = cfg.isH ? "v" : "h";
+      const lo = cfg.isH ? leaf.rect.y : leaf.rect.x;
+      const hi = lo + (cfg.isH ? leaf.rect.height : leaf.rect.width);
+      for (const d of layoutGeom.dividers) {
+        if (d.direction !== wantDir) continue;
+        const dPos = cfg.isH ? d.rect.x : d.rect.y;
+        const dEnd = dPos + (cfg.isH ? d.rect.width : d.rect.height);
+        const dLo = cfg.isH ? d.rect.y : d.rect.x;
+        const dHi = dLo + (cfg.isH ? d.rect.height : d.rect.width);
+        if (dHi <= lo + 0.5 || dLo >= hi - 0.5) continue; // no cross overlap
+        const split = findNode(activeTree, d.splitId);
+        if (!split || split.kind !== "split") continue;
+        if (near(dPos, b) && split.children[d.childIndex]?.node?.id === leaf.node.id) {
+          return {
+            splitId: d.splitId, childIndex: d.childIndex, editIsFirst: true,
+            origI: split.children[d.childIndex].size,
+            origNext: split.children[d.childIndex + 1]?.size ?? 1,
+            avail: d.avail, sizeSum: d.sizeSum, leafLen: b - a,
+          };
+        }
+        if (near(dEnd, a) && split.children[d.childIndex + 1]?.node?.id === leaf.node.id) {
+          return {
+            splitId: d.splitId, childIndex: d.childIndex, editIsFirst: false,
+            origI: split.children[d.childIndex].size,
+            origNext: split.children[d.childIndex + 1].size,
+            avail: d.avail, sizeSum: d.sizeSum, leafLen: b - a,
+          };
+        }
+      }
+      return null;
+    }
+
+    // Chain from the free-subdivision layout: edges of the leaves that touch
+    // the inner edge (bottom for horizontal, right for vertical) → segments.
+    function layoutChain(cfg) {
+      const total = cfg.isH ? ow : oh;
+      const innerEdge = (cfg.isH ? oh : ow) - fw;
+      const bounds = [0, fw, total - fw, total];
+      const anchored = [];
+      for (const l of layoutGeom.leaves) {
+        if (l.node.vulling?.type === "buiten") continue;
+        const touches = cfg.isH
+          ? near(l.rect.y + l.rect.height, innerEdge)
+          : near(l.rect.x + l.rect.width, innerEdge);
+        if (!touches) continue;
+        anchored.push(l);
+        const a = cfg.isH ? l.rect.x : l.rect.y;
+        bounds.push(a, a + (cfg.isH ? l.rect.width : l.rect.height));
+      }
+      const uniq = [];
+      for (const v of bounds.sort((p, q) => p - q)) {
+        if (!uniq.length || v - uniq[uniq.length - 1] >= 0.5) uniq.push(v);
+      }
+      const segs = [];
+      for (let i = 0; i + 1 < uniq.length; i++) {
+        const a = uniq[i], b = uniq[i + 1];
+        const seg = { a, b, kind: "layoutSeg", editable: false, layout: null };
+        if (near(a, 0) || near(b, total)) {
+          seg.kind = "stijl";
+        } else {
+          const leaf = anchored.find((l) => {
+            const la = cfg.isH ? l.rect.x : l.rect.y;
+            return near(la, a) && near(la + (cfg.isH ? l.rect.width : l.rect.height), b);
+          });
+          if (leaf) {
+            seg.kind = "layoutVak";
+            seg.layout = layoutEditInfo(leaf, cfg, a, b);
+            seg.editable = !!seg.layout;
+          } else if (near(b - a, fw)) {
+            // Divider-width gap between anchored leaves → tussenstijl/-dorpel
+            seg.kind = "tussenstijl";
+          }
+        }
+        segs.push(seg);
+      }
+      return segs;
+    }
+
+    const out = [];
+    for (const side of Object.keys(SIDES)) {
+      const cfg = SIDES[side];
+      const list = bySide[side];
+      const wantLayoutChain = hasLayout && !roundish && (side === "bottom" || side === "right");
+      if (!list.length && !wantLayoutChain) continue;
+
+      // Geometric level index from the distinct baked offsets (0 = closest)
+      const offKey = cfg.isH ? "y1" : "x1";
+      const offsets = [];
+      for (const dim of list) {
+        if (!offsets.some((o) => near(o, dim[offKey]))) offsets.push(dim[offKey]);
+      }
+      offsets.sort((p, q) => cfg.dir * (p - q));
+      const origStart = offsets.length ? cfg.dir * (offsets[0] - cfg.base) : 20;
+      const origStep = offsets.length > 1 ? cfg.dir * (offsets[1] - offsets[0]) : 35;
+      const start = Math.max(origStart, minStart);
+      const step = Math.max(origStep, minStep);
+
+      let entries = list.map((dim) => {
+        const level = offsets.findIndex((o) => near(o, dim[offKey]));
+        const c = classify(dim, cfg);
+        const num = Number(dim.label);
+        return {
+          ...c, side, isH: cfg.isH,
+          level: level < 0 ? 0 : level,
+          text: num > 0 ? String(Math.round(num)) : String(dim.label ?? ""),
+          value: num > 0 ? Math.round(num) : Math.round(c.b - c.a),
+        };
+      });
+
+      if (roundish) {
+        // Rond/ellips: alleen de buitenwerkse breedte- en hoogtemaat tonen
+        entries = entries.filter((e) => e.kind === "outer");
+      } else if (wantLayoutChain) {
+        // Vrije indeling: grid-ketting vervangen door ketting uit de layout.
+        // Drop every dim at the chain level too — a vestigial 1×1 grid emits a
+        // full-span vak there that classifies as dagmaat and would collide.
+        const chainLevels = entries.filter((e) => isChainKind(e.kind)).map((e) => e.level);
+        const chainLevel = chainLevels.length ? Math.min(...chainLevels) : 0;
+        entries = entries.filter((e) => !isChainKind(e.kind) && e.level !== chainLevel);
+        for (const seg of layoutChain(cfg)) {
+          entries.push({
+            ...seg, side, isH: cfg.isH, level: chainLevel,
+            text: String(Math.round(seg.b - seg.a)),
+            value: Math.round(seg.b - seg.a),
+          });
+        }
+      }
+      if (!entries.length) continue;
+
+      // Compact the level indices after filtering (e.g. round: only outer left)
+      const lvls = [...new Set(entries.map((e) => e.level))].sort((p, q) => p - q);
+      for (const e of entries) e.level = lvls.indexOf(e.level);
+
+      // Project onto screen-space-aware level positions
+      for (const e of entries) {
+        const linePos = cfg.base + cfg.dir * (start + e.level * step);
+        e.mid = (e.a + e.b) / 2;
+        e.x1 = e.isH ? e.a : linePos;
+        e.x2 = e.isH ? e.b : linePos;
+        e.y1 = e.isH ? linePos : e.a;
+        e.y2 = e.isH ? linePos : e.b;
+        e.midX = e.isH ? e.mid : linePos;
+        e.midY = e.isH ? linePos : e.mid;
+        e.labelW = e.text.length * fontSize * 0.6 + bgPad * 2;
+        e.labelH = labelH;
+      }
+
+      // Deterministic label lanes per level: labels wider than ~85% of their
+      // segment go above the line (kozijnstaat practice for houtdiktes);
+      // colliding labels fall over to the above/below lanes.
+      const byLevel = new Map();
+      for (const e of entries) {
+        if (!byLevel.has(e.level)) byLevel.set(e.level, []);
+        byLevel.get(e.level).push(e);
+      }
+      for (const group of byLevel.values()) {
+        group.sort((p, q) => p.mid - q.mid);
+        const lanes = { on: -Infinity, above: -Infinity, below: -Infinity };
+        for (const e of group) {
+          const fits = e.labelW <= 0.85 * (e.b - e.a);
+          const order = fits ? ["on", "above", "below"] : ["above", "below"];
+          let lane = order.find((ln) => e.mid - e.labelW / 2 >= lanes[ln] + 4 / z);
+          if (!lane) lane = order.reduce((m, ln) => (lanes[ln] < lanes[m] ? ln : m), order[0]);
+          lanes[lane] = e.mid + e.labelW / 2;
+          e.laneOff = lane === "on" ? 0 : lane === "above" ? -laneOffset : laneOffset;
+        }
+      }
+
+      let n = 0;
+      for (const e of entries) e.key = `${side}:${e.level}:${n++}`;
+      out.push(...entries);
+    }
+    return out;
+  });
+
   // Inline dimension editing state
-  let editingDim = $state(null); // { index, value, x, y, isH, width, height }
+  let editingDim = $state(null); // { key, value, entry }
   let editInputEl = $state(null);
 
-  function handleDimClick(dimIndex, e) {
+  function handleDimClick(entry, e) {
     e.stopPropagation();
-    const dim = geometry.dimensions[dimIndex];
-    const isH = dim.side === "bottom" || dim.side === "top";
-    const midX = (dim.x1 + dim.x2) / 2;
-    const midY = (dim.y1 + dim.y2) / 2;
-    const val = Math.round(Number(dim.label));
-
-    editingDim = { index: dimIndex, value: val, x: midX, y: midY, isH };
+    if (!entry.editable) return;
+    editingDim = { key: entry.key, value: entry.value, entry };
 
     // Focus input after render
     requestAnimationFrame(() => {
@@ -124,86 +401,53 @@
 
   function commitDimEdit() {
     if (!editingDim) return;
+    const entry = editingDim.entry;
     const newVal = parseFloat(editInputEl?.value);
-    if (!newVal || newVal <= 0) { editingDim = null; return; }
+    editingDim = null;
+    if (!entry?.editable || !newVal || newVal <= 0) return;
 
-    const dim = geometry.dimensions[editingDim.index];
     const k = get(currentKozijn);
-    if (!k) { editingDim = null; return; }
-
+    if (!k) return;
     const ow = k.frame.outerWidth;
     const oh = k.frame.outerHeight;
     const fw = k.frame.frameWidth;
 
-    // Determine what this dimension controls based on position
-    const dimOffset = 25;
-    const y1 = dim.y1;
-    const x1 = dim.x1;
-
-    if (dim.side === "bottom") {
-      // Level 1: overall width
-      if (Math.abs(y1 - (oh + dimOffset)) < 5) {
-        updateDimensions(newVal, oh);
-      }
-      // Level 2: dagmaat — compute outer from inner
-      else if (Math.abs(y1 - (oh + dimOffset * 2)) < 5) {
-        updateDimensions(newVal + 2 * fw, oh);
-      }
-      // Level 3: column sizes or frame width
-      else if (Math.abs(y1 - (oh + dimOffset * 3)) < 5) {
-        // Check if it's a frame width or column size
-        if (Math.abs(dim.x1) < 1 || Math.abs(dim.x2 - ow) < 1) {
-          // Frame width — skip (profile-dependent)
-        } else {
-          // Column size — find which column
-          const cols = [...k.grid.columns];
-          let cx = fw;
-          for (let i = 0; i < cols.length; i++) {
-            if (Math.abs(dim.x1 - cx) < 2) {
-              const diff = newVal - cols[i].size;
-              cols[i] = { ...cols[i], size: newVal };
-              // Adjust adjacent column to compensate
-              if (i + 1 < cols.length) {
-                cols[i + 1] = { ...cols[i + 1], size: Math.max(100, cols[i + 1].size - diff) };
-              }
-              updateGridSizes(cols.map(c => c.size), k.grid.rows.map(r => r.size));
-              break;
-            }
-            cx += cols[i].size;
-            if (cols[i].dividerProfile || i < cols.length - 1) cx += fw;
-          }
-        }
-      }
-    } else if (dim.side === "right") {
-      // Level 1: overall height
-      if (Math.abs(x1 - (ow + dimOffset)) < 5) {
-        updateDimensions(ow, newVal);
-      }
-      // Level 2: dagmaat hoogte
-      else if (Math.abs(x1 - (ow + dimOffset * 2)) < 5) {
-        updateDimensions(ow, newVal + 2 * fw);
-      }
-      // Level 3: row sizes
-      else if (Math.abs(x1 - (ow + dimOffset * 3)) < 5) {
-        const rows = [...k.grid.rows];
-        let cy = fw;
-        for (let i = 0; i < rows.length; i++) {
-          if (Math.abs(dim.y1 - cy) < 2) {
-            const diff = newVal - rows[i].size;
-            rows[i] = { ...rows[i], size: newVal };
-            if (i + 1 < rows.length) {
-              rows[i + 1] = { ...rows[i + 1], size: Math.max(100, rows[i + 1].size - diff) };
-            }
-            updateGridSizes(k.grid.columns.map(c => c.size), rows.map(r => r.size));
-            break;
-          }
-          cy += rows[i].size;
-          if (i < rows.length - 1) cy += fw;
-        }
+    if (entry.kind === "outer") {
+      // Buitenwerkse maat
+      if (entry.isH) updateDimensions(newVal, oh);
+      else updateDimensions(ow, newVal);
+    } else if (entry.kind === "dagmaat") {
+      // Dagmaat → buitenwerkse maat; the backend rescales the vakken proportionally
+      if (entry.isH) updateDimensions(newVal + 2 * fw, oh);
+      else updateDimensions(ow, newVal + 2 * fw);
+    } else if (entry.kind === "vak") {
+      // Vakmaat: resize this column/row and compensate the neighbour so the
+      // buitenwerkse maat stays fixed
+      const colSizes = k.grid.columns.map((c) => c.size);
+      const rowSizes = k.grid.rows.map((r) => r.size);
+      const arr = entry.gridAxis === "col" ? colSizes : rowSizes;
+      const i = entry.gridIndex;
+      if (i == null || i < 0 || i >= arr.length) return;
+      const size = Math.max(100, newVal);
+      const nb = i + 1 < arr.length ? i + 1 : i - 1;
+      if (nb >= 0) arr[nb] = Math.max(100, arr[nb] - (size - arr[i]));
+      arr[i] = size;
+      updateGridSizes(colSizes, rowSizes);
+    } else if (entry.kind === "layoutVak" && entry.layout) {
+      // Vrije indeling: pas de twee kinderen van de aangrenzende split aan
+      // (same mm→size mapping and minimum as the divider drag)
+      const L = entry.layout;
+      if (!activeTree) return;
+      let delta = (newVal - L.leafLen) * L.sizeSum / Math.max(1, L.avail);
+      const min = 0.05 * L.sizeSum;
+      if (L.editIsFirst) {
+        delta = Math.max(-(L.origI - min), Math.min(L.origNext - min, delta));
+        setKozijnLayout(setSplitChildSizes(activeTree, L.splitId, L.childIndex, L.origI + delta, L.origNext - delta));
+      } else {
+        delta = Math.max(-(L.origNext - min), Math.min(L.origI - min, delta));
+        setKozijnLayout(setSplitChildSizes(activeTree, L.splitId, L.childIndex, L.origI - delta, L.origNext + delta));
       }
     }
-
-    editingDim = null;
   }
 
   const FRAME_MEMBER_NAMES = ["frame_top", "frame_bottom", "frame_left", "frame_right"];
@@ -351,6 +595,32 @@
     />
   {/each}
 
+  <!-- Round/elliptical frame: donut drawn UNDER the cell layer (decoration only,
+       no pointer events); the cell layer below is clipped to the inner opening -->
+  {#if roundClip}
+    <clipPath id={clipId}>
+      {#if roundClip.kind === "circle"}
+        <circle cx={roundClip.cx} cy={roundClip.cy} r={Math.max(0, roundClip.rInner)} />
+      {:else}
+        <ellipse cx={roundClip.cx} cy={roundClip.cy} rx={Math.max(0, roundClip.irx)} ry={Math.max(0, roundClip.iry)} />
+      {/if}
+    </clipPath>
+    {#if roundClip.kind === "circle"}
+      <circle cx={roundClip.cx} cy={roundClip.cy} r={roundClip.rOuter}
+        fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+      <circle cx={roundClip.cx} cy={roundClip.cy} r={roundClip.rInner}
+        fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+    {:else}
+      <ellipse cx={roundClip.cx} cy={roundClip.cy} rx={roundClip.rx} ry={roundClip.ry}
+        fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+      {#if roundClip.irx > 0 && roundClip.iry > 0}
+        <ellipse cx={roundClip.cx} cy={roundClip.cy} rx={roundClip.irx} ry={roundClip.iry}
+          fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+      {/if}
+    {/if}
+  {/if}
+
+  <g clip-path={roundClip ? `url(#${clipId})` : null}>
   {#if kozijn?.layout && layoutGeom}
     <!-- Free-subdivision layout (editable: click a vak, drag the dividers) -->
     {#each layoutGeom.dividers as d}
@@ -517,6 +787,7 @@
     {/if}
   {/each}
   {/if}
+  </g>
 
   <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is visible) -->
   {#each geometry.frameRects as rect, i}
@@ -595,37 +866,6 @@
     />
   {/if}
 
-  <!-- Round frame: filled donut between outer and inner circle -->
-  {#if kozijn.frame?.shape?.shapeType === "round"}
-    {@const rOuter = Math.min(kozijn.frame.outerWidth, kozijn.frame.outerHeight) / 2}
-    {@const rInner = rOuter - kozijn.frame.frameWidth}
-    {@const rcx = kozijn.frame.outerWidth / 2}
-    {@const rcy = kozijn.frame.outerHeight / 2}
-    {#if rInner > 0}
-      <!-- Frame fill using two circles with clip path (donut) -->
-      <circle cx={rcx} cy={rcy} r={rOuter}
-        fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" />
-      <circle cx={rcx} cy={rcy} r={rInner}
-        fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" />
-    {/if}
-  {/if}
-
-  <!-- Elliptical frame: filled donut between outer and inner ellipse -->
-  {#if kozijn.frame?.shape?.shapeType === "elliptical"}
-    {@const erx = kozijn.frame.shape.ellipseRx || kozijn.frame.outerWidth / 2}
-    {@const ery = kozijn.frame.shape.ellipseRy || kozijn.frame.outerHeight / 3}
-    {@const ecx = kozijn.frame.outerWidth / 2}
-    {@const ecy = kozijn.frame.outerHeight / 2}
-    {@const eirx = erx - kozijn.frame.frameWidth}
-    {@const eiry = ery - kozijn.frame.frameWidth}
-    <ellipse cx={ecx} cy={ecy} rx={erx} ry={ery}
-      fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" />
-    {#if eirx > 0 && eiry > 0}
-      <ellipse cx={ecx} cy={ecy} rx={eirx} ry={eiry}
-        fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" />
-    {/if}
-  {/if}
-
   <!-- Arcs for arched/round kozijnen -->
   {#each (geometry.arcs || []) as arc}
     {@const r = arc.radius}
@@ -678,12 +918,14 @@
   {/each}
   {/if}
 
-  <!-- Profile codes on frame members (GA Kozijn style - green text) -->
+  <!-- Profile codes on frame members (GA Kozijn style - green text) —
+       skipped for zero-size members (round/elliptical: all four; arched: top) -->
   {#each geometry.frameRects as rect, i}
     {@const memberName = FRAME_MEMBER_NAMES[i]}
     {@const isVertical = memberName === "frame_left" || memberName === "frame_right"}
     {@const profileLabel = `${Math.round(kozijn.frame.frameWidth)}×${Math.round(kozijn.frame.frameDepth)}`}
     {@const labelFs = 10 / zoom}
+    {#if rect.width > 0 && rect.height > 0}
     <text
       x={isVertical ? rect.x + rect.width / 2 : rect.x + rect.width / 2}
       y={isVertical ? rect.y + rect.height / 2 : rect.y + rect.height / 2}
@@ -699,6 +941,7 @@
     >
       {profileLabel}
     </text>
+    {/if}
   {/each}
 
   {#if !kozijn?.layout}
@@ -809,39 +1052,39 @@
     {/if}
   {/each}
 
-  <!-- Dimension lines — rendered in model-space with inverse-zoom for constant screen size -->
-  {#each geometry.dimensions as dim, dimIdx}
+  <!-- Dimension lines — positions, labels and editability come from dimsView
+       (levels re-projected screen-space-aware, deterministic label lanes) -->
+  {#each dimsView as entry (entry.key)}
     {@const fontSize = 12 / zoom}
     {@const sw = 1 / zoom}
     {@const tick = 6 / zoom}
     {@const bgPad = 3 / zoom}
-    {@const isH = dim.side === "bottom" || dim.side === "top"}
-    {@const midX = (dim.x1 + dim.x2) / 2}
-    {@const midY = (dim.y1 + dim.y2) / 2}
-    {@const dimVal = Number(dim.label) > 0 ? Math.round(Number(dim.label)) : dim.label}
+    {@const labelW = entry.labelW}
+    {@const labelH = entry.labelH}
+    {@const dimTitle = entry.editable
+      ? "Klik om de maat te bewerken"
+      : entry.kind === "stijl" || entry.kind === "tussenstijl"
+        ? "Profielmaat — volgt de profielkeuze"
+        : "Niet direct bewerkbaar — versleep de deellijn in de tekening"}
 
     <!-- Dimension line -->
-    <line x1={dim.x1} y1={dim.y1} x2={dim.x2} y2={dim.y2}
+    <line x1={entry.x1} y1={entry.y1} x2={entry.x2} y2={entry.y2}
       stroke="var(--editor-dimension)" stroke-width={sw} />
 
     <!-- Tick marks -->
-    {#if isH}
-      <line x1={dim.x1} y1={dim.y1 - tick} x2={dim.x1} y2={dim.y1 + tick} stroke="var(--editor-dimension)" stroke-width={sw}/>
-      <line x1={dim.x2} y1={dim.y2 - tick} x2={dim.x2} y2={dim.y2 + tick} stroke="var(--editor-dimension)" stroke-width={sw}/>
+    {#if entry.isH}
+      <line x1={entry.x1} y1={entry.y1 - tick} x2={entry.x1} y2={entry.y1 + tick} stroke="var(--editor-dimension)" stroke-width={sw}/>
+      <line x1={entry.x2} y1={entry.y2 - tick} x2={entry.x2} y2={entry.y2 + tick} stroke="var(--editor-dimension)" stroke-width={sw}/>
     {:else}
-      <line x1={dim.x1 - tick} y1={dim.y1} x2={dim.x1 + tick} y2={dim.y1} stroke="var(--editor-dimension)" stroke-width={sw}/>
-      <line x1={dim.x2 - tick} y1={dim.y2} x2={dim.x2 + tick} y2={dim.y2} stroke="var(--editor-dimension)" stroke-width={sw}/>
+      <line x1={entry.x1 - tick} y1={entry.y1} x2={entry.x1 + tick} y2={entry.y1} stroke="var(--editor-dimension)" stroke-width={sw}/>
+      <line x1={entry.x2 - tick} y1={entry.y2} x2={entry.x2 + tick} y2={entry.y2} stroke="var(--editor-dimension)" stroke-width={sw}/>
     {/if}
 
-    <!-- Label background for readability -->
-    {@const labelW = String(dimVal).length * fontSize * 0.6 + bgPad * 2}
-    {@const labelH = fontSize + bgPad * 2}
-
-    {#if editingDim && editingDim.index === dimIdx}
+    {#if editingDim && editingDim.key === entry.key}
       <!-- Inline edit input -->
       <foreignObject
-        x={isH ? midX - 50 / zoom : midX + bgPad}
-        y={midY - labelH * 0.7}
+        x={entry.isH ? entry.midX - 50 / zoom : entry.midX + bgPad}
+        y={entry.midY - labelH * 0.7}
         width={100 / zoom}
         height={labelH * 1.4}
       >
@@ -869,45 +1112,54 @@
         />
       </foreignObject>
     {:else}
-      {#if isH}
-        <!-- Horizontal: label centered above dimension line -->
+      {#if entry.isH}
+        <!-- Horizontal: label on/above/below the line (deterministic lane) -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <rect
-          x={midX - labelW / 2} y={midY - labelH / 2}
+          x={entry.midX - labelW / 2} y={entry.midY + entry.laneOff - labelH / 2}
           width={labelW} height={labelH}
           fill="var(--editor-bg, #1a1a2e)" rx={2 / zoom} opacity="0.85"
-          style="cursor: pointer"
-          onclick={(e) => handleDimClick(dimIdx, e)}
-        />
+          style="cursor: {entry.editable ? 'pointer' : 'default'}"
+          onclick={(e) => handleDimClick(entry, e)}
+        >
+          <title>{dimTitle}</title>
+        </rect>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <text
-          x={midX} y={midY}
+          x={entry.midX} y={entry.midY + entry.laneOff}
           text-anchor="middle" dominant-baseline="central"
           fill="var(--editor-dimension)" font-size={fontSize}
           font-family="var(--font-body)" font-weight="600"
-          style="cursor: pointer"
-          onclick={(e) => handleDimClick(dimIdx, e)}
-        >{dimVal}</text>
+          style="cursor: {entry.editable ? 'pointer' : 'default'}"
+          onclick={(e) => handleDimClick(entry, e)}
+        >{entry.text}</text>
       {:else}
-        <!-- Vertical (right side): label rotated 90° along the dimension line -->
-        <g transform="translate({midX}, {midY}) rotate(-90)">
+        <!-- Vertical: label rotated 90° along the line; laneOff is the local
+             perpendicular offset (negative = toward the kozijn) -->
+        <g transform="translate({entry.midX}, {entry.midY}) rotate(-90)">
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <rect
-            x={-labelW / 2} y={-labelH / 2}
+            x={-labelW / 2} y={entry.laneOff - labelH / 2}
             width={labelW} height={labelH}
             fill="var(--editor-bg, #1a1a2e)" rx={2 / zoom} opacity="0.85"
-            style="cursor: pointer"
-            onclick={(e) => handleDimClick(dimIdx, e)}
-          />
+            style="cursor: {entry.editable ? 'pointer' : 'default'}"
+            onclick={(e) => handleDimClick(entry, e)}
+          >
+            <title>{dimTitle}</title>
+          </rect>
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <text
-            x={0} y={0}
+            x={0} y={entry.laneOff}
             text-anchor="middle" dominant-baseline="central"
             fill="var(--editor-dimension)" font-size={fontSize}
             font-family="var(--font-body)" font-weight="600"
-            style="cursor: pointer"
-            onclick={(e) => handleDimClick(dimIdx, e)}
-          >{dimVal}</text>
+            style="cursor: {entry.editable ? 'pointer' : 'default'}"
+            onclick={(e) => handleDimClick(entry, e)}
+          >{entry.text}</text>
         </g>
       {/if}
     {/if}
