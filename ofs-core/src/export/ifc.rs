@@ -30,7 +30,7 @@ pub fn generate_ifc(kozijn: &Kozijn, output_path: &str) -> Result<(), String> {
 
 /// Generate an IFC4 file from a kozijn definition with a specific LOD level.
 pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) -> Result<(), String> {
-    let mut ifc = IfcWriter::new();
+    let mut ifc = IfcWriter::new(&kozijn.id);
 
     let frame = &kozijn.frame;
     let cells = &kozijn.cells;
@@ -44,14 +44,38 @@ pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) 
     let depth_m = frame.frame_depth / 1000.0;
     let fw_m = frame.frame_width / 1000.0;
 
-    // ── Spatial hierarchy ──────────────────────────────────────
-
     let owner_history = ifc.add_owner_history();
     let units = ifc.add_si_units();
+
+    // ── Geometry context ───────────────────────────────────────
+    // Created before the project record so IFCPROJECT can reference
+    // it in RepresentationContexts (attribute 8).
+
+    let origin_3d = ifc.add_entity("IFCCARTESIANPOINT((0.0,0.0,0.0))");
+    let axis_z = ifc.add_entity("IFCDIRECTION((0.0,0.0,1.0))");
+    let axis_x = ifc.add_entity("IFCDIRECTION((1.0,0.0,0.0))");
+    let placement_3d = ifc.add_entity(&format!(
+        "IFCAXIS2PLACEMENT3D({},{},{})",
+        origin_3d, axis_z, axis_x
+    ));
+
+    let true_north = ifc.add_entity("IFCDIRECTION((0.0,1.0,0.0))");
+    let context = ifc.add_entity(&format!(
+        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,{},{})",
+        placement_3d, true_north
+    ));
+
+    let body_context = ifc.add_entity(&format!(
+        "IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,{},{},.MODEL_VIEW.,$)",
+        context, "$"
+    ));
+
+    // ── Spatial hierarchy ──────────────────────────────────────
+
     let guid_proj = ifc.guid();
     let project = ifc.add_entity(&format!(
-        "IFCPROJECT('{}',{},'{}',$,$,$,$,$,{})",
-        guid_proj, owner_history, "Open Frame Studio Export", units
+        "IFCPROJECT('{}',{},'{}',$,$,$,$,({}),{})",
+        guid_proj, owner_history, "Open Frame Studio Export", context, units
     ));
 
     let guid_site = ifc.guid();
@@ -74,27 +98,6 @@ pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) 
     ifc.add_rel_aggregates(&owner_history, "ProjectSite", &project, &[site.clone()]);
     ifc.add_rel_aggregates(&owner_history, "SiteBuilding", &site, &[building.clone()]);
     ifc.add_rel_aggregates(&owner_history, "BuildingStorey", &building, &[storey.clone()]);
-
-    // ── Geometry context ───────────────────────────────────────
-
-    let origin_3d = ifc.add_entity("IFCCARTESIANPOINT((0.0,0.0,0.0))");
-    let axis_z = ifc.add_entity("IFCDIRECTION((0.0,0.0,1.0))");
-    let axis_x = ifc.add_entity("IFCDIRECTION((1.0,0.0,0.0))");
-    let placement_3d = ifc.add_entity(&format!(
-        "IFCAXIS2PLACEMENT3D({},{},{})",
-        origin_3d, axis_z, axis_x
-    ));
-
-    let true_north = ifc.add_entity("IFCDIRECTION((0.0,1.0,0.0))");
-    let context = ifc.add_entity(&format!(
-        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,{},{})",
-        placement_3d, true_north
-    ));
-
-    let body_context = ifc.add_entity(&format!(
-        "IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,{},{},.MODEL_VIEW.,$)",
-        context, "$"
-    ));
 
     // ── Frame geometry (LOD-dependent) ──────────────────────────
 
@@ -245,12 +248,24 @@ pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) 
 
     // Derive the element GlobalId from the kozijn UUID so exports are
     // stable across runs (BCF references, roundtrip re-import).
+    //
+    // IFC4 IfcWindow/IfcDoor (13 attributes): GlobalId, OwnerHistory,
+    // Name, Description, ObjectType, ObjectPlacement, Representation,
+    // Tag, OverallHeight, OverallWidth, PredefinedType,
+    // PartitioningType/OperationType, UserDefinedPartitioningType/
+    // UserDefinedOperationType. The merkteken travels in Tag.
     let guid_elem = crate::ifc_guid::uuid_to_ifc_guid(&kozijn.id);
     let element = ifc.add_entity(&format!(
-        "{}('{}',{},'{}','{}','{}',$,{},{},{:.6},{:.6})",
-        ifc_class, guid_elem, owner_history,
-        kozijn.name, kozijn.mark, "",
-        local_placement, product_shape, height_m, width_m,
+        "{}('{}',{},'{}',$,$,{},{},'{}',{:.6},{:.6},$,$,$)",
+        ifc_class,
+        guid_elem,
+        owner_history,
+        step_str(&kozijn.name),
+        local_placement,
+        product_shape,
+        step_str(&kozijn.mark),
+        height_m,
+        width_m,
     ));
 
     // Assign to storey
@@ -266,7 +281,7 @@ pub fn generate_ifc_with_lod(kozijn: &Kozijn, output_path: &str, lod: LodLevel) 
     add_ils_psets(&mut ifc, &owner_history, &element, kozijn);
 
     // Write file
-    ifc.write_to_file(output_path, project, context)
+    ifc.write_to_file(output_path)
 }
 
 // ── Standard property sets ─────────────────────────────────────
@@ -290,7 +305,7 @@ fn add_standard_psets(ifc: &mut IfcWriter, oh: &str, element: &str, kozijn: &Koz
     // Reference
     let p = ifc.add_entity(&format!(
         "IFCPROPERTYSINGLEVALUE('Reference',$,IFCLABEL('{}'),$)",
-        kozijn.mark
+        step_str(&kozijn.mark)
     ));
     props.push(p);
 
@@ -330,10 +345,10 @@ fn add_standard_psets(ifc: &mut IfcWriter, oh: &str, element: &str, kozijn: &Koz
             "IFCPROPERTYSINGLEVALUE('Material',$,IFCLABEL('{}'),$)", mat_str
         )),
         ifc.add_entity(&format!(
-            "IFCPROPERTYSINGLEVALUE('ColorInside',$,IFCLABEL('{}'),$)", frame.color_inside
+            "IFCPROPERTYSINGLEVALUE('ColorInside',$,IFCLABEL('{}'),$)", step_str(&frame.color_inside)
         )),
         ifc.add_entity(&format!(
-            "IFCPROPERTYSINGLEVALUE('ColorOutside',$,IFCLABEL('{}'),$)", frame.color_outside
+            "IFCPROPERTYSINGLEVALUE('ColorOutside',$,IFCLABEL('{}'),$)", step_str(&frame.color_outside)
         )),
         ifc.add_entity(&format!(
             "IFCPROPERTYSINGLEVALUE('FrameWidth_mm',$,IFCLENGTHMEASURE({:.1}),$)", frame.frame_width
@@ -675,6 +690,12 @@ fn add_ils_psets(ifc: &mut IfcWriter, oh: &str, element: &str, kozijn: &Kozijn) 
 
 // ── Helper functions ───────────────────────────────────────────
 
+/// Escape a string for embedding in a STEP (ISO 10303-21) string
+/// literal: backslashes and apostrophes are doubled.
+fn step_str(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('\'', "''")
+}
+
 fn determine_kozijn_type(cells: &[crate::kozijn::Cell]) -> String {
     let types: std::collections::HashSet<PanelType> =
         cells.iter().map(|c| c.panel_type).collect();
@@ -819,14 +840,17 @@ struct IfcWriter {
     entities: Vec<String>,
     next_id: u32,
     guid_counter: u32,
+    /// 128-bit seed (the kozijn UUID) from which entity GUIDs derive.
+    guid_seed: u128,
 }
 
 impl IfcWriter {
-    fn new() -> Self {
+    fn new(seed: &uuid::Uuid) -> Self {
         Self {
             entities: Vec::new(),
             next_id: 1,
             guid_counter: 0,
+            guid_seed: seed.as_u128(),
         }
     }
 
@@ -837,22 +861,20 @@ impl IfcWriter {
         id
     }
 
+    /// Deterministic IFC GlobalId (22 chars, first char always 0-3).
+    ///
+    /// Mixes the seed UUID with an incrementing counter — multiplying by
+    /// an odd constant is a bijection mod 2^128, so distinct counters
+    /// yield distinct GUIDs — and encodes the result MSB-first via
+    /// `uuid_to_ifc_guid`, which keeps the leading character within the
+    /// spec range 0-3. Deterministic, so repeated exports of the same
+    /// kozijn produce identical files. (The workspace `uuid` crate has
+    /// no `v5` feature, hence no `Uuid::new_v5` here.)
     fn guid(&mut self) -> String {
         self.guid_counter += 1;
-        // Generate a deterministic IFC-compatible compressed GUID (22 chars)
-        let mut guid = String::with_capacity(22);
-        let chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
-        let chars: Vec<char> = chars.chars().collect();
-
-        // Use counter bytes + padding to generate 22-char GUID
-        let mut val: u128 = self.guid_counter as u128;
-        // Mix in a seed for uniqueness
-        val = val.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        for _ in 0..22 {
-            guid.push(chars[(val % 64) as usize]);
-            val /= 64;
-        }
-        guid
+        let mixed = (self.guid_seed ^ self.guid_counter as u128)
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15_D1B5_4A32_D192_ED03);
+        crate::ifc_guid::uuid_to_ifc_guid(&uuid::Uuid::from_u128(mixed))
     }
 
     fn add_owner_history(&mut self) -> String {
@@ -921,7 +943,8 @@ impl IfcWriter {
     fn add_prop_label(&mut self, name: &str, value: &str) -> String {
         self.add_entity(&format!(
             "IFCPROPERTYSINGLEVALUE('{}','',IFCLABEL('{}'),$)",
-            name, value
+            name,
+            step_str(value)
         ))
     }
 
@@ -939,12 +962,7 @@ impl IfcWriter {
         ))
     }
 
-    fn write_to_file(
-        &self,
-        output_path: &str,
-        _project: String,
-        _context: String,
-    ) -> Result<(), String> {
+    fn write_to_file(&self, output_path: &str) -> Result<(), String> {
         let mut out = String::with_capacity(self.entities.len() * 100);
 
         // ISO header
@@ -957,7 +975,7 @@ impl IfcWriter {
         let _ = writeln!(
             out,
             "FILE_NAME('{}','',('Open Frame Studio'),('OpenAEC Foundation'),'','Open Frame Studio','');",
-            output_path.replace('\\', "/")
+            step_str(&output_path.replace('\\', "/"))
         );
         let _ = writeln!(out, "FILE_SCHEMA(('IFC4'));");
         let _ = writeln!(out, "ENDSEC;");
@@ -976,5 +994,260 @@ impl IfcWriter {
             .map_err(|e| format!("Kan IFC niet schrijven: {}", e))?;
 
         Ok(())
+    }
+}
+
+// ── Tests ──────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Export a kozijn to a temp file and return the IFC text.
+    fn export_to_string(kozijn: &Kozijn) -> String {
+        let path = std::env::temp_dir().join(format!(
+            "ofs_ifc_test_{}_{}.ifc",
+            std::process::id(),
+            kozijn.id
+        ));
+        let path_str = path.to_string_lossy().into_owned();
+        generate_ifc(kozijn, &path_str).expect("IFC-export hoort te slagen");
+        let content =
+            std::fs::read_to_string(&path).expect("IFC-bestand hoort leesbaar te zijn");
+        let _ = std::fs::remove_file(&path);
+        content
+    }
+
+    /// Split the attribute list of a STEP entity line into top-level
+    /// attributes, respecting quoted strings (with doubled apostrophes)
+    /// and nested parenthesis groups.
+    fn parse_step_attrs(line: &str) -> Vec<String> {
+        let start = line.find('(').expect("entity heeft een attributenlijst");
+        let end = line.rfind(')').expect("entity heeft een attributenlijst");
+        let body = &line[start + 1..end];
+
+        let mut attrs = Vec::new();
+        let mut current = String::new();
+        let mut depth = 0u32;
+        let mut in_string = false;
+        let mut chars = body.chars().peekable();
+        while let Some(c) = chars.next() {
+            if in_string {
+                current.push(c);
+                if c == '\'' {
+                    if chars.peek() == Some(&'\'') {
+                        // Doubled apostrophe: escaped quote, stay in string
+                        current.push(chars.next().unwrap());
+                    } else {
+                        in_string = false;
+                    }
+                }
+                continue;
+            }
+            match c {
+                '\'' => {
+                    in_string = true;
+                    current.push(c);
+                }
+                '(' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                ')' => {
+                    depth -= 1;
+                    current.push(c);
+                }
+                ',' if depth == 0 => {
+                    attrs.push(current.clone());
+                    current.clear();
+                }
+                _ => current.push(c),
+            }
+        }
+        attrs.push(current);
+        attrs
+    }
+
+    /// True when `id` (e.g. "#42") refers to an entity of the given class.
+    fn entity_is(content: &str, id: &str, ifc_class: &str) -> bool {
+        let needle = format!("{}={}(", id, ifc_class);
+        content.lines().any(|l| l.starts_with(&needle))
+    }
+
+    #[test]
+    fn window_record_matches_ifc4_layout() {
+        let kozijn = Kozijn::new("Testkozijn", "K-01", 1200.0, 1500.0);
+        let content = export_to_string(&kozijn);
+
+        let line = content
+            .lines()
+            .find(|l| l.contains("=IFCWINDOW("))
+            .expect("export hoort een IFCWINDOW-entity te bevatten");
+        let attrs = parse_step_attrs(line);
+
+        // IFC4 IfcWindow has 13 attributes
+        assert_eq!(
+            attrs.len(),
+            13,
+            "IfcWindow hoort 13 attributen te hebben: {}",
+            line
+        );
+
+        // Attr 6 (ObjectPlacement) references an IFCLOCALPLACEMENT
+        assert!(
+            attrs[5].starts_with('#'),
+            "ObjectPlacement hoort een referentie te zijn: {}",
+            line
+        );
+        assert!(
+            entity_is(&content, &attrs[5], "IFCLOCALPLACEMENT"),
+            "ObjectPlacement {} hoort naar IFCLOCALPLACEMENT te verwijzen",
+            attrs[5]
+        );
+
+        // Attr 7 (Representation) references an IFCPRODUCTDEFINITIONSHAPE
+        assert!(
+            attrs[6].starts_with('#'),
+            "Representation hoort een referentie te zijn: {}",
+            line
+        );
+        assert!(
+            entity_is(&content, &attrs[6], "IFCPRODUCTDEFINITIONSHAPE"),
+            "Representation {} hoort naar IFCPRODUCTDEFINITIONSHAPE te verwijzen",
+            attrs[6]
+        );
+
+        // Attr 8 (Tag) carries the merkteken as a string
+        assert_eq!(attrs[7], "'K-01'", "Tag hoort het merkteken te zijn: {}", line);
+
+        // Attrs 9/10: OverallHeight / OverallWidth in meters
+        assert_eq!(attrs[8], "1.500000", "OverallHeight klopt niet: {}", line);
+        assert_eq!(attrs[9], "1.200000", "OverallWidth klopt niet: {}", line);
+    }
+
+    #[test]
+    fn project_references_geometric_context() {
+        let kozijn = Kozijn::new("Testkozijn", "K-02", 1000.0, 1000.0);
+        let content = export_to_string(&kozijn);
+
+        let line = content
+            .lines()
+            .find(|l| l.contains("=IFCPROJECT("))
+            .expect("export hoort een IFCPROJECT-entity te bevatten");
+        let attrs = parse_step_attrs(line);
+
+        assert_eq!(
+            attrs.len(),
+            9,
+            "IfcProject hoort 9 attributen te hebben: {}",
+            line
+        );
+
+        // Attr 8 (RepresentationContexts) = (#N) with N a geometric context
+        let contexts = &attrs[7];
+        assert!(
+            contexts.starts_with("(#") && contexts.ends_with(')'),
+            "RepresentationContexts hoort een set met referentie te zijn: {}",
+            line
+        );
+        let ctx_id = &contexts[1..contexts.len() - 1];
+        assert!(
+            entity_is(&content, ctx_id, "IFCGEOMETRICREPRESENTATIONCONTEXT"),
+            "RepresentationContexts {} hoort naar IFCGEOMETRICREPRESENTATIONCONTEXT te verwijzen",
+            ctx_id
+        );
+
+        // Attr 9 (UnitsInContext) is a reference
+        assert!(
+            attrs[8].starts_with('#'),
+            "UnitsInContext hoort een referentie te zijn: {}",
+            line
+        );
+    }
+
+    #[test]
+    fn user_strings_are_step_escaped() {
+        let mut kozijn = Kozijn::new("Kozijn 's-Gravenhage", "K'03\\A", 1000.0, 1000.0);
+        kozijn.frame.color_inside = "RAL9010 'zuiver wit'".into();
+        let content = export_to_string(&kozijn);
+
+        // Apostrophes doubled per ISO 10303-21
+        assert!(
+            content.contains("'Kozijn ''s-Gravenhage'"),
+            "naam hoort ge-escaped te zijn"
+        );
+        // Backslash and apostrophe doubled (merkteken in the Tag attribute)
+        assert!(
+            content.contains("'K''03\\\\A'"),
+            "merkteken hoort ge-escaped te zijn"
+        );
+        assert!(
+            content.contains("IFCLABEL('RAL9010 ''zuiver wit''')"),
+            "kleur hoort ge-escaped te zijn"
+        );
+
+        // The escaped strings must not break the record structure
+        let line = content
+            .lines()
+            .find(|l| l.contains("=IFCWINDOW("))
+            .expect("export hoort een IFCWINDOW-entity te bevatten");
+        assert_eq!(parse_step_attrs(line).len(), 13);
+    }
+
+    #[test]
+    fn global_ids_are_22_chars_within_spec_range() {
+        let kozijn = Kozijn::new("Testkozijn", "K-04", 800.0, 1200.0);
+        let content = export_to_string(&kozijn);
+
+        // Entity classes rooted in IfcRoot (attribute 1 = GlobalId)
+        let rooted = [
+            "IFCPROJECT",
+            "IFCSITE",
+            "IFCBUILDING",
+            "IFCBUILDINGSTOREY",
+            "IFCWINDOW",
+            "IFCDOOR",
+            "IFCRELAGGREGATES",
+            "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+            "IFCPROPERTYSET",
+            "IFCRELDEFINESBYPROPERTIES",
+        ];
+
+        let mut checked = 0;
+        for line in content.lines() {
+            if !line.starts_with('#') {
+                continue;
+            }
+            let eq = match line.find('=') {
+                Some(i) => i,
+                None => continue,
+            };
+            let class = line[eq + 1..].split('(').next().unwrap_or("");
+            if !rooted.contains(&class) {
+                continue;
+            }
+            let attrs = parse_step_attrs(line);
+            let guid = attrs[0].trim_matches('\'');
+            assert_eq!(guid.len(), 22, "GlobalId hoort 22 tekens te zijn: {}", line);
+            let first = guid.chars().next().unwrap();
+            assert!(
+                matches!(first, '0'..='3'),
+                "GlobalId hoort met teken 0-3 te beginnen: {}",
+                line
+            );
+            checked += 1;
+        }
+        assert!(checked >= 10, "te weinig GlobalIds gecontroleerd: {}", checked);
+    }
+
+    #[test]
+    fn export_is_deterministic() {
+        let kozijn = Kozijn::new("Determinisme", "K-05", 900.0, 1200.0);
+        let first = export_to_string(&kozijn);
+        let second = export_to_string(&kozijn);
+        assert_eq!(
+            first, second,
+            "twee exports van hetzelfde kozijn horen identiek te zijn"
+        );
     }
 }
