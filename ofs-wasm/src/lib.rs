@@ -361,6 +361,13 @@ pub fn add_row(id: &str, position: f64) -> Result<String, String> {
     })?
 }
 
+// ── Custom profiles ────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub fn get_custom_profiles() -> Result<String, String> {
+    with_project(|p| serde_json::to_string(&p.custom_profiles).unwrap())
+}
+
 // ── Geometry ───────────────────────────────────────────────────
 
 #[wasm_bindgen]

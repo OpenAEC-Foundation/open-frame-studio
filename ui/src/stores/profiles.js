@@ -5,9 +5,22 @@
  * biedt ze aan als een doorzoekbare lijst.
  */
 import { writable, derived } from "svelte/store";
+import { invoke } from "../lib/tauri.js";
 
-// Alle profielen, gegroepeerd per categorie
-export const profileCategories = writable([]);
+// Statische bibliotheek uit de profiles/ directory (of embedded fallback)
+const libraryCategories = writable([]);
+
+// Eigen/geïmporteerde profielen uit project.custom_profiles
+const customProfiles = writable([]);
+
+// Alle profielen, gegroepeerd per categorie — bibliotheek + eigen profielen
+export const profileCategories = derived(
+  [libraryCategories, customProfiles],
+  ([$library, $custom]) =>
+    $custom.length
+      ? [...$library, { id: "custom", label: "Eigen / geïmporteerd", profiles: $custom }]
+      : $library
+);
 
 // Platte lijst van alle profielen
 export const allProfiles = derived(profileCategories, ($cats) =>
@@ -43,9 +56,26 @@ export async function loadProfiles() {
   try {
     // Embedded profile data for browser preview
     const categories = await fetchProfileData();
-    profileCategories.set(categories);
+    libraryCategories.set(categories);
   } catch (e) {
     console.error("Profielen laden mislukt:", e);
+  }
+  await refreshCustomProfiles();
+}
+
+/**
+ * Ververs de eigen/geïmporteerde profielen uit project.custom_profiles.
+ * Aanroepen na add_custom_profile-flows en bij project openen/nieuw.
+ */
+export async function refreshCustomProfiles() {
+  try {
+    const result = await invoke("get_custom_profiles");
+    const list = typeof result === "string" ? JSON.parse(result) : result;
+    // Laatste definitie per id wint — add_custom_profile dedupliceert niet.
+    const byId = new Map((Array.isArray(list) ? list : []).map((p) => [p.id, p]));
+    customProfiles.set([...byId.values()]);
+  } catch (e) {
+    console.error("Eigen profielen laden mislukt:", e);
   }
 }
 

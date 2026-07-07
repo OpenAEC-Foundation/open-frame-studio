@@ -381,7 +381,8 @@
       crossSection: crossSection,
       ufValue,
       applicableAs: aa,
-      kvtType,
+      // KvtProfileType deserialiseert snake_case ("a", "a1", "custom")
+      kvtType: kvtType.toLowerCase(),
       profileSeries,
       isParametric: true,
       sponning: {

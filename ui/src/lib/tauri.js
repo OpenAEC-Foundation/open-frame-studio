@@ -252,6 +252,10 @@ function wasmCommand(cmd, args) {
       case "remove_frame_extension":
         return args?.id ? J(wasm.get_kozijn(args.id)) : null;
 
+      case "get_custom_profiles":
+        return typeof wasm.get_custom_profiles === "function"
+          ? J(wasm.get_custom_profiles())
+          : [];
       case "load_profile_library":
       case "add_custom_profile":
         return "[]";
@@ -378,6 +382,7 @@ function browserFallback(cmd, args) {
     case "get_all_kozijnen": return [];
     case "get_all_vliesgevels": return [];
     case "load_profile_library": return [];
+    case "get_custom_profiles": return [];
     case "get_sjablonen": return loadWebSjablonen();
     case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
     case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);

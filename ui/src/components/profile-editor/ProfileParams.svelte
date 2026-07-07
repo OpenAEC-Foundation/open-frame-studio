@@ -1,6 +1,7 @@
 <script>
   import { _ } from "svelte-i18n";
   import { profileEditor, editorProfile, editorBounds, editorIsDirty } from "../../stores/profileEditor.js";
+  import { refreshCustomProfiles } from "../../stores/profiles.js";
   import { toast } from "../../stores/toast.js";
 
   let profile = $derived($editorProfile);
@@ -83,6 +84,7 @@
       if (isTauri) {
         const { invoke } = await import("@tauri-apps/api/core");
         await invoke("add_custom_profile", { profileJson });
+        await refreshCustomProfiles();
       }
       toast.success($_("profileEditor.saved") || `Profiel "${data.name}" opgeslagen.`);
       profileEditor.update((s) => ({ ...s, isDirty: false, profile: { ...s.profile, id } }));

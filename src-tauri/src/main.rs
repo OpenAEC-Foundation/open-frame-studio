@@ -43,6 +43,7 @@ fn main() {
             commands::kozijn::update_frame_shape,
             commands::kozijn::update_corner_joints,
             commands::kozijn::add_custom_profile,
+            commands::kozijn::get_custom_profiles,
             commands::kozijn::update_cell_type,
             commands::kozijn::add_column,
             commands::kozijn::add_row,

@@ -587,6 +587,14 @@ pub fn add_custom_profile(
 }
 
 #[tauri::command]
+pub fn get_custom_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<ofs_core::profile::ProfileDefinition>, String> {
+    let project = state.project.lock().map_err(|e| e.to_string())?;
+    Ok(project.custom_profiles.clone())
+}
+
+#[tauri::command]
 pub fn update_cell_hardware(
     state: State<'_, AppState>,
     id: String,

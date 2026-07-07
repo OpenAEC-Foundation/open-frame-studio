@@ -8,6 +8,7 @@ import { isTauri, isWeb } from "./tauri.js";
 import { api } from "./api.js";
 import { toast } from "../stores/toast.js";
 import { currentKozijn } from "../stores/kozijn.js";
+import { refreshCustomProfiles } from "../stores/profiles.js";
 
 // In web mode file export/import commands resolve to null (no filesystem);
 // be honest about it instead of showing a success toast. In Tauri mode
@@ -264,6 +265,7 @@ export async function importDxfProfile() {
   if (importUnavailable(result)) return;
   const profile = JSON.parse(result);
   await api("add_custom_profile", { profileJson: JSON.stringify(profile) });
+  await refreshCustomProfiles();
   toast.success(
     get(_)("alert.profileImported", {
       values: { name: profile.name, width: profile.width, depth: profile.depth },
@@ -284,6 +286,7 @@ export async function importCatalog() {
   for (const profile of profiles) {
     await api("add_custom_profile", { profileJson: JSON.stringify(profile) });
   }
+  await refreshCustomProfiles();
   toast.success(
     get(_)("alert.catalogImported", { values: { count: profiles.length } })
   );

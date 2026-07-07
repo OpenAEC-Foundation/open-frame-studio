@@ -1,5 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
+import { refreshCustomProfiles } from "./profiles.js";
 
 export const project = writable(null);
 export const projectPath = writable(null);
@@ -30,6 +31,7 @@ export async function newProject(name, number) {
   project.set(p);
   projectPath.set(null);
   isDirty.set(false);
+  await refreshCustomProfiles();
   return p;
 }
 
@@ -38,6 +40,7 @@ export async function openProject(filePath) {
   project.set(p);
   projectPath.set(filePath);
   isDirty.set(false);
+  await refreshCustomProfiles();
   return p;
 }
 
