@@ -221,6 +221,10 @@ function wasmCommand(cmd, args) {
         return typeof wasm.update_corner_joints === "function"
           ? J(wasm.update_corner_joints(args?.id, args?.jointsJson))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_frame_shape":
+        return typeof wasm.update_frame_shape === "function"
+          ? J(wasm.update_frame_shape(args?.id, args?.shapeType, args?.archHeight, args?.topWidth, args?.leftAngle, args?.rightAngle))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_kozijn_layout":
         return typeof wasm.update_kozijn_layout === "function"
           ? J(wasm.update_kozijn_layout(args?.id, args?.layoutJson))
@@ -239,7 +243,6 @@ function wasmCommand(cmd, args) {
       case "update_frame_profile":
       case "update_sill_profile":
       case "update_member_profile":
-      case "update_frame_shape":
       case "update_cell_hardware":
       case "auto_select_hardware":
       case "update_security_class":

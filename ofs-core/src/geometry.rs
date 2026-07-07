@@ -1,4 +1,4 @@
-use crate::kozijn::{Kozijn, ShapeType};
+use crate::kozijn::{GridDivision, Kozijn, ShapeType};
 use serde::{Deserialize, Serialize};
 
 /// 2D rectangle for SVG rendering
@@ -50,6 +50,11 @@ pub struct KozijnGeometry2D {
     /// Arcs (for arched/round frame shapes)
     #[serde(default)]
     pub arcs: Vec<Arc2D>,
+    /// Arched top band as a closed polygon [[x,y], ...]: outer arc (left→right)
+    /// followed by inner arc (right→left), ready for a filled SVG path
+    /// (for arched frame shapes; empty otherwise)
+    #[serde(default)]
+    pub arch_band: Vec<[f64; 2]>,
     /// Trapezoid outer polygon points [[x,y], ...] (for trapezoid frame shapes)
     #[serde(default)]
     pub trapezoid_outer: Vec<[f64; 2]>,
@@ -159,13 +164,28 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     }
 
     // Calculate row positions (y coordinates of cell starts)
-    // For arched frames, first row starts at arch spring line
+    // For arched frames, the first row starts at the arch spring line and the
+    // row heights are scaled proportionally so the cells fit exactly between
+    // spring line and sill. The stored grid is NOT mutated — this geometry is
+    // a derived view.
+    let num_rows = kozijn.grid.rows.len();
+    let row_area_top = if is_arched { stile_top_y } else { fw };
+    let rows_total: f64 = kozijn.grid.rows.iter().map(|r| r.size).sum();
+    let row_scale = if is_arched && rows_total > 0.0 {
+        let divider_total = divider_width * (num_rows.saturating_sub(1) as f64);
+        ((oh - fw - row_area_top - divider_total) / rows_total).max(0.0)
+    } else {
+        1.0
+    };
+    let row_display_sizes: Vec<f64> =
+        kozijn.grid.rows.iter().map(|r| r.size * row_scale).collect();
+
     let mut row_positions = Vec::new();
-    let mut y = if is_arched { stile_top_y } else { fw };
-    for (i, row) in kozijn.grid.rows.iter().enumerate() {
+    let mut y = row_area_top;
+    for (i, size) in row_display_sizes.iter().enumerate() {
         row_positions.push(y);
-        y += row.size;
-        if i < kozijn.grid.rows.len() - 1 {
+        y += size;
+        if i < num_rows - 1 {
             y += divider_width;
         }
     }
@@ -178,20 +198,20 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         if i < kozijn.grid.columns.len() - 1 {
             v_dividers.push(Rect2D {
                 x: vx,
-                y: fw,
+                y: row_area_top,
                 width: divider_width,
-                height: oh - 2.0 * fw,
+                height: oh - row_area_top - fw,
             });
             vx += divider_width;
         }
     }
 
-    // Horizontal dividers
+    // Horizontal dividers (follow the displayed — possibly scaled — row heights)
     let mut h_dividers = Vec::new();
-    let mut hy = fw;
-    for i in 0..kozijn.grid.rows.len() {
-        hy += kozijn.grid.rows[i].size;
-        if i < kozijn.grid.rows.len() - 1 {
+    let mut hy = row_area_top;
+    for (i, size) in row_display_sizes.iter().enumerate() {
+        hy += size;
+        if i < num_rows - 1 {
             h_dividers.push(Rect2D {
                 x: fw,
                 y: hy,
@@ -205,7 +225,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // Cell rects
     let num_cols = kozijn.grid.columns.len();
     let mut cell_rects = Vec::new();
-    for (row_idx, row) in kozijn.grid.rows.iter().enumerate() {
+    for row_idx in 0..num_rows {
         for (col_idx, col) in kozijn.grid.columns.iter().enumerate() {
             let cx = col_positions[col_idx];
             let cy = row_positions[row_idx];
@@ -214,7 +234,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                     x: cx,
                     y: cy,
                     width: col.size,
-                    height: row.size,
+                    height: row_display_sizes[row_idx],
                 },
                 col: col_idx,
                 row: row_idx,
@@ -237,37 +257,41 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let num_rows = kozijn.grid.rows.len();
 
     // ── Bottom Level 1: houtdiktes + vakmaten (complete dimension chain) ──
+    // Suppressed for round/elliptical frames (no rectangular members: only
+    // dagmaat + buitenwerkse maat apply)
     let bot_y1 = oh + dim_start;
-    // Left stijl
-    dimensions.push(DimensionLine {
-        x1: 0.0, y1: bot_y1, x2: fw, y2: bot_y1,
-        label: format!("{:.0}", fw),
-        side: DimensionSide::Bottom,
-    });
-    // Column widths (vakmaten)
-    for (i, col) in kozijn.grid.columns.iter().enumerate() {
-        let cx = col_positions[i];
+    if !(is_round || is_elliptical) {
+        // Left stijl
         dimensions.push(DimensionLine {
-            x1: cx, y1: bot_y1, x2: cx + col.size, y2: bot_y1,
-            label: format!("{:.0}", col.size),
+            x1: 0.0, y1: bot_y1, x2: fw, y2: bot_y1,
+            label: format!("{:.0}", fw),
             side: DimensionSide::Bottom,
         });
-        // Divider width (tussenstijl)
-        if i < num_cols - 1 {
-            let dx = cx + col.size;
+        // Column widths (vakmaten)
+        for (i, col) in kozijn.grid.columns.iter().enumerate() {
+            let cx = col_positions[i];
             dimensions.push(DimensionLine {
-                x1: dx, y1: bot_y1, x2: dx + divider_width, y2: bot_y1,
-                label: format!("{:.0}", divider_width),
+                x1: cx, y1: bot_y1, x2: cx + col.size, y2: bot_y1,
+                label: format!("{:.0}", col.size),
                 side: DimensionSide::Bottom,
             });
+            // Divider width (tussenstijl)
+            if i < num_cols - 1 {
+                let dx = cx + col.size;
+                dimensions.push(DimensionLine {
+                    x1: dx, y1: bot_y1, x2: dx + divider_width, y2: bot_y1,
+                    label: format!("{:.0}", divider_width),
+                    side: DimensionSide::Bottom,
+                });
+            }
         }
+        // Right stijl
+        dimensions.push(DimensionLine {
+            x1: ow - fw, y1: bot_y1, x2: ow, y2: bot_y1,
+            label: format!("{:.0}", fw),
+            side: DimensionSide::Bottom,
+        });
     }
-    // Right stijl
-    dimensions.push(DimensionLine {
-        x1: ow - fw, y1: bot_y1, x2: ow, y2: bot_y1,
-        label: format!("{:.0}", fw),
-        side: DimensionSide::Bottom,
-    });
 
     // ── Bottom Level 2: dagmaat ──
     let bot_y2 = oh + dim_start + dim_gap;
@@ -286,40 +310,52 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     });
 
     // ── Right Level 1: houtdiktes + vakmaten ──
+    // Suppressed for round/elliptical frames (only dagmaat + buitenwerkse maat)
     let right_x1 = ow + dim_start;
-    // Bovendorpel
-    let top_h = if is_arched || is_round { 0.0 } else { fw };
-    if top_h > 0.0 {
-        dimensions.push(DimensionLine {
-            x1: right_x1, y1: 0.0, x2: right_x1, y2: top_h,
-            label: format!("{:.0}", top_h),
-            side: DimensionSide::Right,
-        });
-    }
-    // Row heights (vakmaten)
-    for (i, row) in kozijn.grid.rows.iter().enumerate() {
-        let cy = row_positions[i];
-        dimensions.push(DimensionLine {
-            x1: right_x1, y1: cy, x2: right_x1, y2: cy + row.size,
-            label: format!("{:.0}", row.size),
-            side: DimensionSide::Right,
-        });
-        // Divider height (tussendorpel)
-        if i < num_rows - 1 {
-            let dy = cy + row.size;
+    if !(is_round || is_elliptical) {
+        // Bovendorpel (0 for arched — the arc replaces it)
+        let top_h = top_rect_height;
+        if top_h > 0.0 {
             dimensions.push(DimensionLine {
-                x1: right_x1, y1: dy, x2: right_x1, y2: dy + divider_width,
-                label: format!("{:.0}", divider_width),
+                x1: right_x1, y1: 0.0, x2: right_x1, y2: top_h,
+                label: format!("{:.0}", top_h),
                 side: DimensionSide::Right,
             });
         }
+        // Boogpijl (arch rise) for arched frames
+        if is_arched {
+            dimensions.push(DimensionLine {
+                x1: right_x1, y1: 0.0, x2: right_x1, y2: stile_top_y,
+                label: format!("{:.0}", stile_top_y),
+                side: DimensionSide::Right,
+            });
+        }
+        // Row heights (vakmaten) — displayed sizes (scaled for arched frames)
+        for i in 0..num_rows {
+            let cy = row_positions[i];
+            let size = row_display_sizes[i];
+            dimensions.push(DimensionLine {
+                x1: right_x1, y1: cy, x2: right_x1, y2: cy + size,
+                label: format!("{:.0}", size),
+                side: DimensionSide::Right,
+            });
+            // Divider height (tussendorpel)
+            if i < num_rows - 1 {
+                let dy = cy + size;
+                dimensions.push(DimensionLine {
+                    x1: right_x1, y1: dy, x2: right_x1, y2: dy + divider_width,
+                    label: format!("{:.0}", divider_width),
+                    side: DimensionSide::Right,
+                });
+            }
+        }
+        // Onderdorpel
+        dimensions.push(DimensionLine {
+            x1: right_x1, y1: oh - fw, x2: right_x1, y2: oh,
+            label: format!("{:.0}", fw),
+            side: DimensionSide::Right,
+        });
     }
-    // Onderdorpel
-    dimensions.push(DimensionLine {
-        x1: right_x1, y1: oh - fw, x2: right_x1, y2: oh,
-        label: format!("{:.0}", fw),
-        side: DimensionSide::Right,
-    });
 
     // ── Right Level 2: dagmaat ──
     let right_x2 = ow + dim_start + dim_gap;
@@ -339,8 +375,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
 
     // Arched frame geometry
     let mut arcs = Vec::new();
+    let mut arch_band: Vec<[f64; 2]> = Vec::new();
     if kozijn.frame.shape.shape_type == ShapeType::Arched {
         let arch_height = kozijn.frame.shape.arch_height.unwrap_or(ow / 4.0);
+        arch_band = arch_band_polygon(ow, fw, arch_height);
         // Segmental arch: peak at y=0 (top of frame)
         // For a segmental arch of width W and rise H:
         // radius = (W/2)^2 / (2*H) + H/2
@@ -381,6 +419,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     } else if kozijn.frame.shape.shape_type == ShapeType::ArchedTrapezoid {
         // Combined: arched top + angled stiles (CNCware-style)
         let arch_height = kozijn.frame.shape.arch_height.unwrap_or(ow / 4.0);
+        arch_band = arch_band_polygon(ow, fw, arch_height);
         let half_w = ow / 2.0;
         let radius = (half_w * half_w) / (2.0 * arch_height) + arch_height / 2.0;
         let center_y = radius; // peak at y=0
@@ -595,7 +634,177 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         cell_rects,
         dimensions,
         arcs,
+        arch_band,
         trapezoid_outer,
         trapezoid_inner,
+    }
+}
+
+/// Closed polygon [[x,y], ...] for the arched top band: outer arc sampled from
+/// the left spring point over the peak to the right spring point, then the
+/// inner arc back from right to left. The straight closing segments between
+/// the arc ends (sluitstukken) fall within the stile footprints, so the
+/// polygon can be filled directly as the toogband. Falls back to just the
+/// outer arc (closed by its chord) when the frame width leaves no inner arc.
+fn arch_band_polygon(ow: f64, fw: f64, arch_height: f64) -> Vec<[f64; 2]> {
+    let half_w = ow / 2.0;
+    // Segmental arch: radius = (W/2)^2 / (2*H) + H/2, peak at y = 0
+    let radius = (half_w * half_w) / (2.0 * arch_height) + arch_height / 2.0;
+    let center_y = radius;
+    let segments = 32;
+
+    let mut points: Vec<[f64; 2]> = Vec::new();
+    // Outer arc (left spring → peak → right spring)
+    let spring_angle = (half_w / radius).min(1.0).acos();
+    let start = std::f64::consts::PI - spring_angle;
+    let end = spring_angle;
+    for i in 0..=segments {
+        let a = start + (end - start) * (i as f64 / segments as f64);
+        points.push([half_w + radius * a.cos(), center_y - radius * a.sin()]);
+    }
+    // Inner arc (right spring → peak → left spring), closing the band
+    let inner_radius = radius - fw;
+    let inner_half_w = half_w - fw;
+    if inner_radius > 0.0 && inner_half_w > 0.0 {
+        let inner_spring = (inner_half_w / inner_radius).min(1.0).acos();
+        let start = inner_spring;
+        let end = std::f64::consts::PI - inner_spring;
+        for i in 0..=segments {
+            let a = start + (end - start) * (i as f64 / segments as f64);
+            points.push([
+                half_w + inner_radius * a.cos(),
+                center_y - inner_radius * a.sin(),
+            ]);
+        }
+    }
+    points
+}
+
+/// Normalize the grid to a single 1×1 cell (used when switching to the Round
+/// shape, where dividers don't apply). Rebuilds cells with the same logic as
+/// `Kozijn::add_column`/`add_row`.
+pub fn normalize_grid_single_cell(kozijn: &mut Kozijn) {
+    let fw = kozijn.frame.frame_width;
+    kozijn.grid.columns = vec![GridDivision {
+        size: kozijn.frame.outer_width - 2.0 * fw,
+        divider_profile: None,
+    }];
+    kozijn.grid.rows = vec![GridDivision {
+        size: kozijn.frame.outer_height - 2.0 * fw,
+        divider_profile: None,
+    }];
+    kozijn.rebuild_cells();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kozijn::FrameShape;
+
+    fn arched_kozijn(w: f64, h: f64, arch_height: f64) -> Kozijn {
+        let mut k = Kozijn::new("Test", "K01", w, h);
+        k.frame.shape = FrameShape {
+            shape_type: ShapeType::Arched,
+            arch_height: Some(arch_height),
+            ..FrameShape::default()
+        };
+        k
+    }
+
+    #[test]
+    fn arched_rows_scaled_to_fit_frame() {
+        let mut k = arched_kozijn(1200.0, 1500.0, 300.0);
+        k.add_row(600.0); // two rows
+        let fw = k.frame.frame_width;
+        let oh = k.frame.outer_height;
+        let g = compute_2d_geometry(&k);
+
+        // No cell may extend below the top of the sill
+        let bottom = g
+            .cell_rects
+            .iter()
+            .map(|c| c.rect.y + c.rect.height)
+            .fold(f64::MIN, f64::max);
+        assert!(
+            bottom <= oh - fw + 1e-6,
+            "cells overflow the sill: {} > {}",
+            bottom,
+            oh - fw
+        );
+
+        // Rows + dividers span exactly from the arch spring line to the sill
+        let rows_sum: f64 = g
+            .cell_rects
+            .iter()
+            .filter(|c| c.col == 0)
+            .map(|c| c.rect.height)
+            .sum();
+        let dividers_sum: f64 = g.h_dividers.iter().map(|d| d.height).sum();
+        let expected = oh - fw - 300.0;
+        assert!((rows_sum + dividers_sum - expected).abs() < 1e-6);
+        // First row starts at the arch spring line
+        assert!((g.cell_rects[0].rect.y - 300.0).abs() < 1e-6);
+        // The stored grid itself is untouched (geometry is a view)
+        assert!((k.grid.rows[0].size - 600.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn arched_emits_arch_rise_dimension_and_band() {
+        let k = arched_kozijn(1200.0, 1500.0, 250.0);
+        let g = compute_2d_geometry(&k);
+        let has_rise = g.dimensions.iter().any(|d| {
+            matches!(d.side, DimensionSide::Right) && d.y1 == 0.0 && (d.y2 - 250.0).abs() < 1e-6
+        });
+        assert!(has_rise, "missing boogpijl dimension in right chain");
+        // Band polygon present and closed-fillable (outer + inner arc samples)
+        assert!(g.arch_band.len() >= 4, "arch band polygon missing");
+        // Outer arc springs at (0, arch_height) and (ow, arch_height)
+        let first = g.arch_band.first().unwrap();
+        assert!((first[0] - 0.0).abs() < 1e-6 && (first[1] - 250.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn elliptical_has_no_phantom_frame_width_dimension() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 800.0);
+        k.frame.shape = FrameShape {
+            shape_type: ShapeType::Elliptical,
+            ..FrameShape::default()
+        };
+        let g = compute_2d_geometry(&k);
+        let right: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Right))
+            .collect();
+        // Only dagmaat + buitenwerkse maat remain in the right chain
+        assert_eq!(right.len(), 2, "right chain: {:?}", right);
+        let fw_label = format!("{:.0}", k.frame.frame_width);
+        assert!(right.iter().all(|d| d.label != fw_label));
+        // Bottom chain equally reduced to dagmaat + buitenwerkse maat
+        let bottom_count = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Bottom))
+            .count();
+        assert_eq!(bottom_count, 2);
+    }
+
+    #[test]
+    fn round_normalized_grid_is_single_cell() {
+        let mut k = Kozijn::new("Test", "K01", 900.0, 900.0);
+        k.add_column(300.0);
+        k.add_row(300.0);
+        assert_eq!(k.cells.len(), 4);
+        k.frame.shape = FrameShape {
+            shape_type: ShapeType::Round,
+            ..FrameShape::default()
+        };
+        normalize_grid_single_cell(&mut k);
+        assert_eq!(k.grid.columns.len(), 1);
+        assert_eq!(k.grid.rows.len(), 1);
+        assert_eq!(k.cells.len(), 1);
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.cell_rects.len(), 1);
+        assert!(g.v_dividers.is_empty() && g.h_dividers.is_empty());
     }
 }

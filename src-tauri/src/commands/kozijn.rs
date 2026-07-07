@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
+use ofs_core::geometry::{compute_2d_geometry, normalize_grid_single_cell, KozijnGeometry2D};
 use ofs_core::hardware::{self, HardwareSet, SecurityClass};
 use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, PanelType, OpeningDirection, ShapeType};
 use ofs_core::profile::ProfileRef;
@@ -530,18 +530,28 @@ pub fn update_frame_shape(
     let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
+    // Merge with the existing shape: None arguments keep the stored value, so
+    // switching shape type doesn't wipe previously configured parameters.
+    let prev = kozijn.frame.shape.clone();
     kozijn.frame.shape = FrameShape {
         shape_type,
-        arch_radius: None, // computed from arch_height in geometry
-        arch_height,
-        top_width,
-        left_angle,
-        right_angle,
-        ellipse_rx: None,
-        ellipse_ry: None,
-        polygon_points,
-        apex_offset,
+        arch_radius: prev.arch_radius, // computed from arch_height in geometry
+        arch_height: arch_height.or(prev.arch_height),
+        top_width: top_width.or(prev.top_width),
+        left_angle: left_angle.or(prev.left_angle),
+        right_angle: right_angle.or(prev.right_angle),
+        ellipse_rx: prev.ellipse_rx,
+        ellipse_ry: prev.ellipse_ry,
+        polygon_points: polygon_points.or(prev.polygon_points),
+        apex_offset: apex_offset.or(prev.apex_offset),
     };
+
+    // Round frames have no grid dividers: normalize to a single 1×1 cell.
+    // ow == oh is NOT enforced — the model accepts it and the 2D view draws
+    // the shape as-is.
+    if shape_type == ShapeType::Round {
+        normalize_grid_single_cell(kozijn);
+    }
 
     Ok(kozijn.clone())
 }

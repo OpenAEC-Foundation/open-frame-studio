@@ -306,6 +306,44 @@ pub fn update_corner_joints(id: &str, joints_json: &str) -> Result<String, Strin
 }
 
 #[wasm_bindgen]
+pub fn update_frame_shape(
+    id: &str,
+    shape_type: &str,
+    arch_height: Option<f64>,
+    top_width: Option<f64>,
+    left_angle: Option<f64>,
+    right_angle: Option<f64>,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let st: ofs_core::kozijn::ShapeType =
+            serde_json::from_str(&format!("\"{}\"", shape_type))
+                .map_err(|e| format!("Ongeldig shape type: {}", e))?;
+        let k = &mut p.kozijnen[idx];
+        // Merge with the existing shape: None arguments keep the stored value
+        // (same semantics as the Tauri command).
+        let prev = k.frame.shape.clone();
+        k.frame.shape = ofs_core::kozijn::FrameShape {
+            shape_type: st,
+            arch_radius: prev.arch_radius,
+            arch_height: arch_height.or(prev.arch_height),
+            top_width: top_width.or(prev.top_width),
+            left_angle: left_angle.or(prev.left_angle),
+            right_angle: right_angle.or(prev.right_angle),
+            ellipse_rx: prev.ellipse_rx,
+            ellipse_ry: prev.ellipse_ry,
+            polygon_points: prev.polygon_points,
+            apex_offset: prev.apex_offset,
+        };
+        // Round frames have no grid dividers: normalize to a single 1×1 cell
+        if st == ofs_core::kozijn::ShapeType::Round {
+            ofs_core::geometry::normalize_grid_single_cell(k);
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
