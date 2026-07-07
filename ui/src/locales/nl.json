@@ -768,6 +768,7 @@
   "props.elliptical": "Elliptisch",
   "props.triangle": "Driehoek",
   "props.polygon": "Polygonaal",
+  "props.experimental": "experimenteel",
   "props.hint": "Klik op een cel of onderdeel in het kozijn om de eigenschappen te bewerken",
   "props.columnsCount": "Kolommen",
   "props.rowsCount": "Rijen",

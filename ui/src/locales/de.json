@@ -652,6 +652,7 @@
   "props.elliptical": "Elliptisch",
   "props.triangle": "Dreieck",
   "props.polygon": "Polygonal",
+  "props.experimental": "experimentell",
   "props.hint": "Klicken Sie auf eine Zelle oder ein Element im Fenster, um die Eigenschaften zu bearbeiten",
   "props.columnsCount": "Spalten",
   "props.rowsCount": "Zeilen",

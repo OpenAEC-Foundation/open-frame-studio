@@ -31,6 +31,17 @@
   import ProfileCrossSection from "./ProfileCrossSection.svelte";
   import { RAL_COLORS, ralToHex } from "../../lib/ral-colors.js";
 
+  // Shapes that are not fully implemented in the UI/backend (no input fields,
+  // or parameters that never reach the geometry). They stay in the ShapeType
+  // enum so old projects still load; a loaded kozijn with such a shape shows
+  // it as a disabled option so the value never mutates silently, but new
+  // selection is not offered.
+  const EXPERIMENTAL_SHAPES = {
+    elliptical: "props.elliptical",
+    triangle: "props.triangle",
+    polygon: "props.polygon",
+  };
+
   let editWidth = 0;
   let editHeight = 0;
   let thermalResult = null;
@@ -266,9 +277,13 @@
           <option value="round">{$_('props.round')}</option>
           <option value="trapezoid">{$_('props.trapezoid') || "Trapezium (schuine stijlen)"}</option>
           <option value="arched_trapezoid">{$_('props.archedTrapezoid') || "Boog + trapezium"}</option>
-          <option value="elliptical">{$_('props.elliptical') || "Elliptisch"}</option>
-          <option value="triangle">{$_('props.triangle') || "Driehoek"}</option>
-          <option value="polygon">{$_('props.polygon') || "Polygonaal"}</option>
+          {#if EXPERIMENTAL_SHAPES[$currentKozijn.frame.shape?.shapeType]}
+            <!-- Shape carried by a loaded project: shown but not selectable,
+                 so the stored value never mutates silently. -->
+            <option value={$currentKozijn.frame.shape.shapeType} disabled>
+              {$_(EXPERIMENTAL_SHAPES[$currentKozijn.frame.shape.shapeType])} ({$_('props.experimental') || "experimenteel"})
+            </option>
+          {/if}
         </select>
       </div>
       {#if $currentKozijn.frame.shape?.shapeType === "arched" || $currentKozijn.frame.shape?.shapeType === "arched_trapezoid"}
@@ -277,7 +292,7 @@
           <input
             type="number"
             value={$currentKozijn.frame.shape.archHeight || Math.round($currentKozijn.frame.outerWidth / 6)}
-            onchange={(e) => updateFrameShape("arched", parseFloat(e.target.value))}
+            onchange={(e) => updateFrameShape($currentKozijn.frame.shape.shapeType, parseFloat(e.target.value))}
             min="50"
             max={Math.round($currentKozijn.frame.outerHeight / 2)}
             step="10"
@@ -313,17 +328,9 @@
             />
           </div>
         </div>
-        <div class="field">
-          <label>{$_('props.topWidth') || "Breedte boven (mm)"}</label>
-          <input
-            type="number"
-            value={shape.topWidth || Math.round($currentKozijn.frame.outerWidth * 0.6)}
-            onchange={(e) => updateFrameShape(shapeType, shape.archHeight, parseFloat(e.target.value), shape.leftAngle, shape.rightAngle)}
-            min="200"
-            max={$currentKozijn.frame.outerWidth}
-            step="10"
-          />
-        </div>
+        <!-- Geen topWidth-veld: de bovenbreedte volgt uit de hoeken; het
+             top_width-parameter bereikt de geometrie niet (ongebruikt in
+             ofs-core geometry.rs). -->
       {/if}
     </div>
 
