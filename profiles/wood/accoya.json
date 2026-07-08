@@ -6,33 +6,15 @@
     "materialSubtype": "accoya",
     "width": 67,
     "depth": 114,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "sightline": 50,
+    "glazingRebate": 51,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        67,
-        0
-      ],
-      [
-        67,
-        90
-      ],
-      [
-        55,
-        90
-      ],
-      [
-        55,
-        114
-      ],
-      [
-        0,
-        114
-      ]
+      [0, 0],
+      [67, 0],
+      [67, 63],
+      [50, 63],
+      [50, 114],
+      [0, 114]
     ],
     "ufValue": 1.5,
     "applicableAs": [
@@ -41,54 +23,65 @@
       "divider"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte dagkanten vast 17 mm (zichtlijn 50)",
+      "KVT-tekening 14.01 + DTS: binnensponning vast glas 51x17",
+      "TO-binnendetaillering 2024: aanslagsponning draaiend deel 29 mm, lucht 6 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ]
   },
   {
-    "id": "wood-accoya-67x150",
-    "name": "Accoya 67x150mm (dorpel)",
+    "id": "wood-accoya-67x114-dorpel",
+    "name": "Accoya 67x114mm (onderdorpel)",
     "material": "wood",
     "materialSubtype": "accoya",
     "width": 67,
-    "depth": 150,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "depth": 114,
+    "sightline": 50,
+    "glazingRebate": 53,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        67,
-        0
-      ],
-      [
-        67,
-        126
-      ],
-      [
-        55,
-        126
-      ],
-      [
-        55,
-        150
-      ],
-      [
-        0,
-        150
-      ]
+      [0, 0],
+      [67, 0],
+      [67, 61],
+      [42.1, 61],
+      [50, 106],
+      [65, 106],
+      [65, 114],
+      [0, 114]
     ],
     "ufValue": 1.5,
     "applicableAs": [
       "sill"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
-      "type": "binnensponning"
-    }
+      "width": 53,
+      "depth": 17,
+      "type": "binnensponning",
+      "slopeDegrees": 10
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 61.1 + DTS + TO 2024: standaard onderdorpel 67x114 (67x150 is geen reeks-/handelsmaat)",
+      "KVT 14.2 + tekening 14.01: sponningbodem afwaterend 10 graden, bodem 45 + opstand 8x15"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ]
   }
 ]

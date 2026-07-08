@@ -14,6 +14,8 @@
     "glazingRebate": 24,
     "maxGlassThickness": 40,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [70, 0],
@@ -50,8 +52,18 @@
     "sponning": {
       "width": 15,
       "depth": 24,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "Aluplast IDEAL-reeks deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -116,6 +128,8 @@
     "glazingRebate": 28,
     "maxGlassThickness": 52,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [85, 0],
@@ -152,8 +166,18 @@
     "sponning": {
       "width": 15,
       "depth": 28,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "Aluplast IDEAL-reeks deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -224,6 +248,8 @@
     "glazingRebate": 30,
     "maxGlassThickness": 56,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [85, 0],
@@ -259,8 +285,18 @@
     "sponning": {
       "width": 15,
       "depth": 30,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "Aluplast IDEAL-reeks deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],

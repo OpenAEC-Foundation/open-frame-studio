@@ -1,44 +1,24 @@
 [
   {
-    "id": "raamhout-54x67",
-    "name": "Raamhout RSx 54x67mm (stijl/bovendorpel)",
+    "id": "raamhout-rsx-54x78",
+    "name": "Raamhout RSx 54x78mm (stijl/bovendorpel)",
     "manufacturer": "Standaard",
-    "series": "Raamhout 54mm",
+    "series": "Raamhout KVT 54mm",
     "material": "wood",
     "materialSubtype": "meranti",
     "width": 54,
-    "depth": 67,
-    "sightline": 42,
-    "glazingRebate": 17,
+    "depth": 78,
+    "sightline": 37,
+    "glazingRebate": 51,
     "maxGlassWeight": 40,
     "profileType": "RSx",
-    "sponningDepth": 17,
-    "sponningWidth": 41,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        54,
-        0
-      ],
-      [
-        54,
-        50
-      ],
-      [
-        42,
-        50
-      ],
-      [
-        42,
-        67
-      ],
-      [
-        0,
-        67
-      ]
+      [0, 0],
+      [54, 0],
+      [54, 27],
+      [37, 27],
+      [37, 78],
+      [0, 78]
     ],
     "ufValue": 2,
     "applicableAs": [
@@ -54,49 +34,47 @@
       "RAL9001"
     ],
     "sponning": {
-      "width": 12,
+      "width": 51,
       "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 61.1: kleinste raamhout-reeksmaat is 54x78 (reeks 54x78/90/102) — 54x67 bestaat niet",
+      "KVT 12.2: sponninghoogte 17 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
+    "dataNotes": [
+      "sponningbreedte 51: kozijnmaatketen (KVT 14.01) aangehouden; raamhout-specifieke sponningbreedte niet fabrieksgeverifieerd"
+    ]
   },
   {
     "id": "raamhout-54x78",
     "name": "Raamhout ROx 54x78mm (onderdorpel schuin)",
     "manufacturer": "Standaard",
-    "series": "Raamhout 54mm",
+    "series": "Raamhout KVT 54mm",
     "material": "wood",
     "materialSubtype": "meranti",
     "width": 54,
     "depth": 78,
-    "sightline": 42,
-    "glazingRebate": 17,
+    "sightline": 37,
+    "glazingRebate": 51,
     "maxGlassWeight": 40,
     "profileType": "ROx",
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        54,
-        0
-      ],
-      [
-        54,
-        61
-      ],
-      [
-        42,
-        61
-      ],
-      [
-        42,
-        78
-      ],
-      [
-        0,
-        78
-      ]
+      [0, 0],
+      [54, 0],
+      [54, 27],
+      [29.4, 27],
+      [37, 70],
+      [52, 70],
+      [52, 78],
+      [0, 78]
     ],
     "ufValue": 2,
     "applicableAs": [
@@ -112,48 +90,42 @@
       "RAL9001"
     ],
     "sponning": {
-      "width": 12,
+      "width": 51,
       "depth": 17,
-      "type": "binnensponning"
-    }
+      "type": "binnensponning",
+      "slopeDegrees": 10
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 14.2: sponningbodem afwaterend >= 9 graden (praktijk 10)",
+      "KVT 61.1: raamhout-reeksmaat 54x78"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ]
   },
   {
     "id": "raamhout-69x90",
-    "name": "Raamhout 69x90mm (HR++ dubbelglas)",
+    "name": "Raamhout 69x90mm (draaikiep standaard)",
     "manufacturer": "Standaard",
-    "series": "Raamhout HR++",
+    "series": "Raamhout draaikiep",
     "material": "wood",
     "materialSubtype": "meranti",
     "width": 69,
     "depth": 90,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "sightline": 52,
+    "glazingRebate": 51,
     "maxGlassWeight": 60,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        69,
-        0
-      ],
-      [
-        69,
-        66
-      ],
-      [
-        57,
-        66
-      ],
-      [
-        57,
-        90
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [69, 0],
+      [69, 39],
+      [52, 39],
+      [52, 90],
+      [0, 90]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -170,48 +142,44 @@
       "RAL9016"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "TO-binnendetaillering 2024 p.3: fabrieksstandaard draaikiep-raamhout 69x90 (zichtdeel 55 incl. aanslag)",
+      "KVT 61.1: KVT-minimum draaiend raamhout 66x90"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
+    "dataNotes": [
+      "sightline hier = aanzicht - glasinval (69-17=52); het TO-zichtdeel van 55 mm is inclusief aanslagdetail"
+    ]
   },
   {
-    "id": "raamhout-84x90",
-    "name": "Raamhout 84x90mm (triple glas)",
+    "id": "raamhout-78x90",
+    "name": "Raamhout 78x90mm (triple glas)",
     "manufacturer": "Standaard",
     "series": "Raamhout Triple",
     "material": "wood",
     "materialSubtype": "meranti",
-    "width": 84,
+    "width": 78,
     "depth": 90,
-    "sightline": 66,
-    "glazingRebate": 32,
+    "sightline": 61,
+    "glazingRebate": 51,
     "maxGlassWeight": 80,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        84,
-        0
-      ],
-      [
-        84,
-        58
-      ],
-      [
-        72,
-        58
-      ],
-      [
-        72,
-        90
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [78, 0],
+      [78, 39],
+      [61, 39],
+      [61, 90],
+      [0, 90]
     ],
     "ufValue": 1.5,
     "applicableAs": [
@@ -228,10 +196,20 @@
       "RAL9016"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 32,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 61.1: 78x90 is een KVT-raamhoutreeksmaat (78x78/90/102) — 84x90 bestaat niet in de reeks"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ]
   },
   {
     "id": "deurhout-54x118",
@@ -242,34 +220,16 @@
     "materialSubtype": "meranti",
     "width": 54,
     "depth": 118,
-    "sightline": 42,
-    "glazingRebate": 17,
+    "sightline": 37,
+    "glazingRebate": 51,
     "maxGlassWeight": null,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        54,
-        0
-      ],
-      [
-        54,
-        101
-      ],
-      [
-        42,
-        101
-      ],
-      [
-        42,
-        118
-      ],
-      [
-        0,
-        118
-      ]
+      [0, 0],
+      [54, 0],
+      [54, 67],
+      [37, 67],
+      [37, 118],
+      [0, 118]
     ],
     "ufValue": 2,
     "applicableAs": [
@@ -285,9 +245,23 @@
       "RAL9001"
     ],
     "sponning": {
-      "width": 12,
+      "width": 51,
       "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte beglazingssponning 17 mm"
+    ],
+    "unverifiedFields": [
+      "width",
+      "depth",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "profielmaat 54x118 deze onderzoeksronde niet geverifieerd"
+    ]
   }
 ]

@@ -1,29 +1,40 @@
 /**
- * Parametrische, realistische profieldoorsnedes voor kunststof (PVC),
+ * Parametrische, realistische profieldoorsnedes voor hout, kunststof (PVC),
  * aluminium en hout-aluminium kozijnprofielen.
  *
- * Coördinatenconventie (alle maten in mm):
- *   x: 0 = muurzijde ........ w = vakzijde (dagkant / glasopening)
- *   y: 0 = buitenzijde ...... d = binnenzijde (bouwdiepte)
+ * Coördinatenconventie (alle maten in mm, identiek aan profiles/*.json en
+ * de extrusie in Viewer3D.svelte):
+ *   u (x): 0 = muurzijde ........ w = vakzijde (dagkant / glasopening)
+ *   v (y): 0 = buitenzijde ...... d = binnenzijde (bouwdiepte)
+ * Een binnensponning heeft zijn inkeping dus op de vakzijde-binnen-hoek
+ * (u = w, v = d); een buitensponning op (u = w, v = 0).
  *
- * Output per profiel: { crossSection, innerWalls }
+ * Veldsemantiek (KVT 12.01: h = sponninghoogte in het vlak, m = sponning-
+ * breedte in de bouwdiepterichting):
+ *   - sponning.depth  = sponninghoogte h (glasinval in het aanzicht; hout
+ *     vast 17 mm per KVT 12.2, PVC = Glaseinstand per systeem, alu per
+ *     systeem — 13,5 (SL38) t/m 27 (MasterLine 8)).
+ *   - sponning.width  = sponningbreedte m (bouwdiepterichting; hout vast
+ *     glas 51 mm per KVT-tekening 14.01/DTS, onderdorpel 53 = bodem 45 +
+ *     opstand 8).
+ *   - glazingRebate   = zelfde m voor hout; voor PVC de Glasfalzhöhe
+ *     (aanzichtrichting! — VEKA 82: Falzhöhe 28 ≠ Glaseinstand 20) en voor
+ *     aluminium de sponninghoogte van het systeem.
+ *   - thermalBreakWidth = breedte isolatorsteg alu (ML8 40; insulbar-reeks
+ *     24/34/42 als subtype-fallback).
+ *
+ * Output per profiel: { crossSection, innerWalls? }
  *   - crossSection: buitencontour — impliciet gesloten, enkelvoudige polygoon
- *     (zelfde vorm als altijd: Array<[x, y]>), tekenbaar door ProfileCanvas
- *     en ProfileCrossSection zonder wijziging.
- *   - innerWalls: Array van impliciet gesloten polygonen (Array<Array<[x, y]>>)
- *     met de binnenstructuur: kamer-holtes, staalversterking (U-band),
- *     polyamide isolatorstroken (alu) en de alu-schaal + houtkern (hout-alu).
- *     De tussenruimtes tussen de holtes vormen de zichtbare binnenwanden
- *     (~2,8 mm PVC / ~2,0 mm aluminium).
+ *     (Array<[x, y]>), tekenbaar door ProfileCanvas en ProfileCrossSection.
+ *   - innerWalls: Array van impliciet gesloten polygonen met binnenstructuur:
+ *     kamer-holtes, staalversterking (U-band), isolatorstroken (alu) en de
+ *     alu-schaal + spouw (hout-alu). Hout is massief: geen innerWalls.
  *
  * Serde-/compatibiliteitsnotitie:
- *   - `innerWalls` is een NIEUW, puur additief veld in de profiel-JSON's.
- *     De Tauri-kant (src-tauri/src/commands/profiles.rs::load_profile_library)
- *     leest de JSON's als serde_json::Value en geeft ze ongewijzigd door.
- *   - ofs-core::profile::ProfileDefinition heeft GEEN #[serde(deny_unknown_fields)];
- *     standaard serde negeert onbekende velden. Wordt een bibliotheekprofiel als
- *     eigen profiel opgeslagen (add_custom_profile), dan valt innerWalls stil weg —
- *     de buitencontour blijft intact. Geen Rust-wijziging nodig.
+ *   - `innerWalls` en de extra datavelden zijn puur additief in de
+ *     profiel-JSON's. De Tauri-kant (load_profile_library) leest de JSON's
+ *     als serde_json::Value en geeft ze ongewijzigd door; ProfileDefinition
+ *     negeert onbekende velden (geen deny_unknown_fields).
  *
  * Deterministisch: geen Date/Math.random; alles afgerond op 0,1 mm.
  */
@@ -52,11 +63,138 @@ function pt(x, y) {
   return [r1(x), r1(y)];
 }
 
+/* ──────────────────────────── HOUT ──────────────────────────────── */
+
+function hasApplication(spec, names) {
+  const apps = spec.applicableAs || [];
+  return apps.some((a) => names.includes(a));
+}
+
+/**
+ * Massieve houtdoorsnede volgens de KVT-maatketen.
+ *
+ * Vormen:
+ *   - binnensponning (standaard): inkeping h×m op de vakzijde-binnen-hoek;
+ *   - buitensponning: inkeping op de vakzijde-buiten-hoek;
+ *   - tussenstijl/tussendorpel (divider): inkeping aan beide vakzijden;
+ *   - onderdorpel (sill): sponningbodem afwaterend ≥9° (praktijk 10°,
+ *     KVT 14.2) met opstand 8 breed × 15 hoog (KVT-tekening 14.01);
+ *   - draaikiep-raamhout: sponning + opdeklip 13 en rubbergroeven;
+ *   - dubbele sponning: sponning aan binnen- én buitenzijde met kernhout;
+ *   - geen sponning: rechthoek (glaslat, spouwlat, stomp kozijn).
+ *
+ * h = spec.sponning.depth (sponninghoogte, KVT-min 17), m = spec.sponning
+ * .width of glazingRebate (sponningbreedte).
+ */
+export function woodCrossSection(spec) {
+  const w = spec.width;
+  const d = spec.depth;
+  const sp = spec.sponning || null;
+  const h = r1(sp && sp.depth > 0 ? sp.depth : 0); // sponninghoogte (u)
+  const m = r1(
+    sp && sp.width > 0 ? sp.width : spec.glazingRebate > 0 ? spec.glazingRebate : 0
+  ); // sponningbreedte (v)
+
+  // Geen sponning: rechthoek.
+  if (!h || !m || (sp && sp.type === "geen")) {
+    return [pt(0, 0), pt(w, 0), pt(w, d), pt(0, d)];
+  }
+
+  const position =
+    (sp && sp.position) ||
+    (sp && sp.type === "buitensponning" ? "buiten" : "binnen");
+  const isSill = hasApplication(spec, ["sill", "sash_sill", "onderdorpel"]);
+  // Alleen zuivere tussenstijlen/-dorpels dubbelzijdig tekenen; een profiel
+  // dat óók stijl/raamhout kan zijn houdt de enkelzijdige standaardvorm.
+  const isDivider =
+    hasApplication(spec, ["divider", "divider_horizontal", "tussenstijl", "tussendorpel"]) &&
+    !hasApplication(spec, ["frame", "sash"]);
+  const isDraaikiep =
+    sp && sp.opdek_width > 0 && hasApplication(spec, ["sash", "raam_stijl", "raam_dorpel"]);
+
+  // Onderdorpel: afwaterende sponningbodem + opstand (KVT 14.2 / 14.01).
+  if (isSill) {
+    const slope = ((sp && sp.slopeDegrees) || 10) * (Math.PI / 180);
+    const upW = 8; // opstand breedte (KVT 14.01: >= 8)
+    const upH = 15; // opstand hoogte (KVT 14.01: >= 15 bij draaiende delen)
+    const bodem = Math.max(m - upW, 10); // afwaterende bodembreedte (~45 bij m=53)
+    const drop = r1(Math.tan(slope) * bodem);
+    const xTop = w - h; // bodem aan binnenzijde (= dagmaat - sponninghoogte)
+    const xLow = xTop - drop; // bodem aan buitenzijde (afschot omlaag)
+    const xUp = Math.min(xTop + upH, w - 2); // bovenkant opstand
+    const y0 = d - m; // sponningrand (buitenzijde van de sponning)
+    const yUp = d - upW; // voorkant opstand
+    return [
+      pt(0, 0), pt(w, 0), pt(w, y0), pt(xLow, y0),
+      pt(xTop, yUp), pt(xUp, yUp), pt(xUp, d), pt(0, d),
+    ];
+  }
+
+  // Tussenstijl / tussendorpel: sponning aan beide vakzijden (binnenzijde).
+  if (isDivider) {
+    return [
+      pt(0, 0), pt(w, 0), pt(w, d - m), pt(w - h, d - m),
+      pt(w - h, d), pt(h, d), pt(h, d - m), pt(0, d - m),
+    ];
+  }
+
+  // Draaikiep-raamhout: glassponning + opdeklip (~13, TO 2024: aanslaglip
+  // 12,5) met rubbergroeven, aan de binnenzijde (v = d).
+  if (isDraaikiep) {
+    const opdek = (sp && sp.opdek_width) || 13;
+    const rW = 3; // rubbergroef breedte
+    const rD = 4; // rubbergroef diepte
+    return [
+      pt(0, 0), pt(w, 0), pt(w, d),
+      pt(w - h, d), pt(w - h, d - opdek),
+      pt(w - h + rW, d - opdek), pt(w - h + rW, d - opdek - rD), pt(w - h, d - opdek - rD),
+      pt(w - h, d - m),
+      pt(h, d - m),
+      pt(h, d - opdek - rD), pt(h - rW, d - opdek - rD), pt(h - rW, d - opdek), pt(h, d - opdek),
+      pt(h, d), pt(0, d),
+    ];
+  }
+
+  // Dubbele sponning: binnen- en buitensponning met kernhout ertussen.
+  if (position === "dubbel") {
+    const h2 = r1((sp && sp.second_depth) || h);
+    const m2 = r1((sp && sp.second_width) || m);
+    return [
+      pt(0, 0), pt(w - h2, 0), pt(w - h2, m2), pt(w, m2),
+      pt(w, d - m), pt(w - h, d - m), pt(w - h, d), pt(0, d),
+    ];
+  }
+
+  // Buitensponning: inkeping op de vakzijde-buiten-hoek.
+  if (position === "buiten") {
+    return [
+      pt(0, 0), pt(w - h, 0), pt(w - h, m), pt(w, m), pt(w, d), pt(0, d),
+    ];
+  }
+
+  // Middensponning: inkeping halverwege de bouwdiepte (vakzijde).
+  if (position === "midden") {
+    const y0 = r1((d - m) / 2);
+    return [
+      pt(0, 0), pt(w, 0), pt(w, y0), pt(w - h, y0),
+      pt(w - h, y0 + m), pt(w, y0 + m), pt(w, d), pt(0, d),
+    ];
+  }
+
+  // Binnensponning (standaard): inkeping op de vakzijde-binnen-hoek.
+  return [
+    pt(0, 0), pt(w, 0), pt(w, d - m), pt(w - h, d - m), pt(w - h, d), pt(0, d),
+  ];
+}
+
+/* ─────────────────────── PVC / ALUMINIUM ────────────────────────── */
+
 /**
  * Buitencontour voor een kader-/vleugelprofiel in PVC of aluminium:
- * rechthoekig lijf met glas-/vleugelsponning op de vak-binnenhoek,
- * buitenaanslag (optioneel met 15°-afschuining), dichtingsgroef op de
- * aanslag en een klikgroef voor de glaslat in de sponningbodem.
+ * rechthoekig lijf met glas-/vleugelsponning op de vak-binnen-hoek
+ * (glaslat binnen), buitenaanslag (optioneel met 15°-afschuining),
+ * dichtingsgroef op de aanslag en een klikgroef voor de glaslat in de
+ * sponningbodem.
  */
 function bodyContour(w, d, rH, aY, opts) {
   const bevel = opts.bevel || 0; // afschuiningshoogte (y) op de aanslag, 0 = haaks
@@ -110,14 +248,16 @@ function parseChambers(spec, fallback) {
 /**
  * PVC-profiel (meerkamer, bv. VEKA Softline / Gealan S-serie).
  * Kamers gestapeld in de dieptrichting met een grotere staalkamer in het
- * midden; wanddikte ~2,8 mm; 15°-aanslagafschuining; klik- en dichtingsgroef.
+ * midden; wanddikte 2,8 mm (Klasse A zichtvlak, DIN EN 12608);
+ * 15°-aanslagafschuining; klik- en dichtingsgroef. glazingRebate wordt hier
+ * als Glasfalzhöhe (aanzichtrichting) gebruikt.
  */
 export function pvcProfileSection(spec) {
   const w = spec.width;
   const d = spec.depth;
-  const t = 2.8; // wanddikte PVC
-  const rH = clamp(spec.glazingRebate || 25, 15, w * 0.45); // sponninghoogte (x)
-  const aY = clamp(25, 12, d * 0.4); // sponningdiepte / aanslag (y), ~25 mm
+  const t = 2.8; // wanddikte PVC — Klasse A zichtvlak >= 2,8 (DIN EN 12608)
+  const rH = clamp(spec.glazingRebate || 25, 15, Math.max(15, w - 14)); // Falzhöhe (x)
+  const aY = clamp(25, 12, d * 0.4); // aanslagzone (y), ~25 mm
   // 15°-afwateringsafschuining op de aanslag (Gealan/VEKA-silhouet);
   // vlakke designs (bv. Gealan-KUBUS, flushDesign) blijven haaks.
   const bevel = spec.flushDesign ? 0 : Math.min(10, aY - 8);
@@ -172,20 +312,28 @@ export function pvcProfileSection(spec) {
 
 /**
  * Aluminium profiel met thermische onderbreking: buiten- en binnenschaal
- * (wanddikte ~2 mm) verbonden door twee polyamide isolatorstroken van
- * 24–34 mm (zichtbare isolatorzone als middelste kamer).
+ * (wanddikte nominaal 2 mm, band 1,6-2,5 per ML8-bestek) verbonden door twee
+ * polyamide isolatorstroken. Stegbreedte uit spec.thermalBreakWidth
+ * (MasterLine 8: 40 mm) of de insulbar-referentiereeks per subtype
+ * (24 / 34 / 42 mm). glazingRebate = sponninghoogte van het systeem
+ * (SL38 13,5 / ML8 27; CS77 en Schüco AWS niet publiek — daar 25 met
+ * unverified-vlag in de data).
  */
 export function aluProfileSection(spec) {
   const w = spec.width;
   const d = spec.depth;
-  const t = 2.0; // wanddikte aluminium
-  const rH = clamp(spec.glazingRebate || 25, 15, w * 0.45);
+  const t = 2.0; // wanddikte aluminium (nominaal; 1,6-2,5 per EN 12020-2/ML8)
+  const rH = clamp(spec.glazingRebate || 25, 10, Math.max(10, w - 14));
   const aY = clamp(25, 12, d * 0.4);
 
   const sub = spec.materialSubtype || "";
-  let bZ = 24; // polyamide-strookbreedte (dieptrichting)
-  if (sub === "high_insulation") bZ = 30;
-  if (sub === "super_insulated" || sub === "passivhaus") bZ = 34;
+  // Isolatorsteg: systeemwaarde of insulbar-reeks 24/34/42 (Uf-trap 2,6/1,9/1,5)
+  let bZ = 24;
+  if (sub === "high_insulation") bZ = 34;
+  if (sub === "super_insulated" || sub === "passivhaus") bZ = 42;
+  if (typeof spec.thermalBreakWidth === "number" && spec.thermalBreakWidth > 0) {
+    bZ = spec.thermalBreakWidth;
+  }
   bZ = Math.min(bZ, d - aY - 12); // binnenschaal minimaal ~12 mm
   const y1 = r1(Math.max(aY, (d - bZ) * 0.45)); // onderbrekingszone direct achter de aanslag
   const y2 = r1(Math.min(y1 + bZ, d - 10));
@@ -213,7 +361,8 @@ export function aluProfileSection(spec) {
 
 /**
  * Schuifprofiel (PVC of aluminium): kamvormig kader met twee sponningkanalen
- * voor de schuivende vleugels, kamers in het gesloten lijf.
+ * voor de schuivende vleugels (kanalen gestapeld over de bouwdiepte),
+ * kamers in het gesloten lijf.
  */
 export function slidingSection(spec, material) {
   const w = spec.width;
@@ -255,21 +404,28 @@ export function slidingSection(spec, material) {
 }
 
 /**
- * Hout-aluminium: massieve houten kern met glassponning aan de binnenzijde
- * en een aluminium schaal (2 mm) met geventileerde spouw (4 mm) op de
- * buitenzijde. Alleen schaal en spouw staan in innerWalls; de houten kern
- * blijft massief. Tussenstijlen (divider) krijgen sponning en schaalomslag
- * aan beide zijden.
+ * Hout-aluminium: massieve houten kern met glassponning (h×m per KVT, zoals
+ * hout) aan de binnenzijde en een aluminium schaal (2 mm) met geventileerde
+ * spouw (4 mm) op de buitenzijde. Alleen schaal en spouw staan in innerWalls;
+ * de houten kern blijft massief. Tussenstijlen (divider) krijgen sponning en
+ * schaalomslag aan beide zijden.
  */
 export function woodAluProfileSection(spec) {
   const w = spec.width;
   const d = spec.depth;
-  const rW = clamp((spec.sponning && spec.sponning.width) || 12, 8, w * 0.3); // sponninghoogte (x)
-  const rD = clamp(spec.glazingRebate || 24, 12, d * 0.35); // sponningdiepte (y)
+  const sp = spec.sponning || null;
+  const rW = clamp((sp && sp.depth) || 17, 8, w * 0.35); // sponninghoogte (x)
+  const rD = clamp(
+    (sp && sp.width) || spec.glazingRebate || 51,
+    12,
+    Math.max(12, d - 20)
+  ); // sponningbreedte (y)
   const capT = 2; // schaaldikte aluminium
   const gap = 4; // geventileerde spouw hout/alu
   const capD = clamp(spec.aluCapDepth || 25, 10, d * 0.4); // omslagdiepte van de schaal
-  const isDivider = (spec.applicableAs || []).includes("divider");
+  const isDivider =
+    hasApplication(spec, ["divider", "divider_horizontal", "tussenstijl", "tussendorpel"]) &&
+    !hasApplication(spec, ["frame", "sash"]);
 
   const crossSection = isDivider
     ? [
@@ -307,11 +463,15 @@ export function woodAluProfileSection(spec) {
 
 /**
  * Kies per materiaal de juiste generator.
- * Retourneert { crossSection, innerWalls } of null (hout en onbekende
- * materialen behouden hun bestaande, massieve contour).
+ * Retourneert { crossSection, innerWalls? } of null (onbekende materialen
+ * behouden hun bestaande contour). Hout krijgt een massieve contour zonder
+ * innerWalls.
  */
 export function generateProfileGeometry(spec) {
   const sub = spec.materialSubtype || "";
+  if (spec.material === "wood") {
+    return { crossSection: woodCrossSection(spec) };
+  }
   if (spec.material === "pvc") {
     return sub === "sliding" ? slidingSection(spec, "pvc") : pvcProfileSection(spec);
   }

@@ -1,190 +1,5 @@
 [
   {
-    "id": "hebo-basis-kunststof",
-    "name": "HEBO Basis Kozijn (kunststof)",
-    "manufacturer": "HEBO Kozijnen",
-    "series": "Basis",
-    "material": "pvc",
-    "materialSubtype": "kunststof",
-    "description": "HEBO 120 systeem met houtnerfstructuur buitenzijde. HR++ standaard.",
-    "width": 70,
-    "depth": 120,
-    "sightline": 55,
-    "glazingRebate": 24,
-    "maxGlassThickness": 40,
-    "mondiPlus": true,
-    "pkVeiligWonen": "Klasse 2",
-    "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        15,
-        0
-      ],
-      [
-        15,
-        24
-      ],
-      [
-        70,
-        24
-      ],
-      [
-        70,
-        120
-      ],
-      [
-        0,
-        120
-      ]
-    ],
-    "ufValue": 1.3,
-    "applicableAs": [
-      "frame",
-      "sash"
-    ],
-    "finishes": [
-      "houtnerfstructuur wit",
-      "glad wit",
-      "folie",
-      "acryl"
-    ],
-    "colors": [
-      "wit",
-      "creme",
-      "antraciet",
-      "houtdecor"
-    ],
-    "sponning": {
-      "width": 15,
-      "depth": 24,
-      "type": "buitensponning"
-    }
-  },
-  {
-    "id": "hebo-thermo-kunststof",
-    "name": "HEBO Thermo Kozijn (kunststof, triple)",
-    "manufacturer": "HEBO Kozijnen",
-    "series": "Thermo",
-    "material": "pvc",
-    "materialSubtype": "kunststof_thermo",
-    "description": "HEBO Thermo met triple glas standaard. Geschikt voor BENG.",
-    "width": 82,
-    "depth": 120,
-    "sightline": 62,
-    "glazingRebate": 28,
-    "maxGlassThickness": 52,
-    "mondiPlus": true,
-    "pkVeiligWonen": "Klasse 2",
-    "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        15,
-        0
-      ],
-      [
-        15,
-        28
-      ],
-      [
-        82,
-        28
-      ],
-      [
-        82,
-        120
-      ],
-      [
-        0,
-        120
-      ]
-    ],
-    "ufValue": 1,
-    "applicableAs": [
-      "frame",
-      "sash"
-    ],
-    "finishes": [
-      "houtnerfstructuur wit",
-      "glad wit",
-      "folie",
-      "acryl"
-    ],
-    "colors": [
-      "wit",
-      "creme",
-      "antraciet"
-    ],
-    "sponning": {
-      "width": 15,
-      "depth": 28,
-      "type": "buitensponning"
-    }
-  },
-  {
-    "id": "hebo-slimline-kunststof",
-    "name": "HEBO SlimLine (kunststof, smal profiel)",
-    "manufacturer": "HEBO Kozijnen",
-    "series": "SlimLine",
-    "material": "pvc",
-    "materialSubtype": "kunststof_slimline",
-    "description": "Smalle kunststof profielen voor maximaal glasoppervlak.",
-    "width": 58,
-    "depth": 70,
-    "sightline": 38,
-    "glazingRebate": 24,
-    "maxGlassThickness": 40,
-    "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        15,
-        0
-      ],
-      [
-        15,
-        24
-      ],
-      [
-        58,
-        24
-      ],
-      [
-        58,
-        70
-      ],
-      [
-        0,
-        70
-      ]
-    ],
-    "ufValue": 1.5,
-    "applicableAs": [
-      "frame",
-      "sash"
-    ],
-    "finishes": [
-      "wit",
-      "folie"
-    ],
-    "colors": [
-      "wit",
-      "antraciet"
-    ],
-    "sponning": {
-      "width": 15,
-      "depth": 24,
-      "type": "buitensponning"
-    }
-  },
-  {
     "id": "hebo-hout-67x114",
     "name": "HEBO Houten Kozijn 67x114mm",
     "manufacturer": "HEBO Kozijnen",
@@ -194,34 +9,16 @@
     "description": "Standaard houten kozijn, CNC gefreesd, prefab met glas.",
     "width": 67,
     "depth": 114,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "sightline": 50,
+    "glazingRebate": 51,
     "maxGlassWeight": 80,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        67,
-        0
-      ],
-      [
-        67,
-        90
-      ],
-      [
-        55,
-        90
-      ],
-      [
-        55,
-        114
-      ],
-      [
-        0,
-        114
-      ]
+      [0, 0],
+      [67, 0],
+      [67, 63],
+      [50, 63],
+      [50, 114],
+      [0, 114]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -241,9 +38,28 @@
       "RAL7016"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte dagkanten vast 17 mm",
+      "KVT-tekening 14.01 + DTS: binnensponning vast glas 51x17",
+      "TO-binnendetaillering 2024: aanslagsponning draaiend deel 29 mm, lucht 6 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
+    "dataNotes": [
+      "de eerdere HEBO-kunststofprofielen zijn verplaatst naar pvc/hebo.json (ongeverifieerd product)"
+    ]
   }
 ]

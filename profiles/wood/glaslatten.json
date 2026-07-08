@@ -1,0 +1,136 @@
+[
+  {
+    "id": "glaslat-15x17",
+    "name": "Glaslat 15x17mm (norm-minimum)",
+    "manufacturer": "Generiek",
+    "series": "KVT",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 17,
+    "depth": 15,
+    "sightline": 17,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [17, 0],
+      [17, 15],
+      [0, 15]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "glaslat"
+    ],
+    "sources": [
+      "KVT 12.3.2: glaslat minimaal 15x17; hoogte >= 17 en >= sponninghoogte"
+    ],
+    "dataNotes": [
+      "notatie voet x hoogte: width = hoogte (aanzicht), depth = voetbreedte (bouwdiepte)"
+    ]
+  },
+  {
+    "id": "glaslat-17x17",
+    "name": "Glaslat 17x17mm (fabrieksstandaard)",
+    "manufacturer": "Generiek",
+    "series": "KVT",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 17,
+    "depth": 17,
+    "sightline": 17,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [17, 0],
+      [17, 17],
+      [0, 17]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "glaslat"
+    ],
+    "sources": [
+      "TO-binnendetaillering 2024: fabrieksstandaard 17x17, verdekt genageld (dubbel glas)"
+    ]
+  },
+  {
+    "id": "glaslat-15x28",
+    "name": "Glaslat 15x28mm (handelsmaat)",
+    "manufacturer": "Generiek",
+    "series": "Handel",
+    "material": "wood",
+    "materialSubtype": "hardhout",
+    "width": 28,
+    "depth": 15,
+    "sightline": 28,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [28, 0],
+      [28, 15],
+      [0, 15]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "glaslat"
+    ],
+    "sources": [
+      "handel (o.a. bakkerdehouthandel.nl): hardhouten glaslat 15x28"
+    ]
+  },
+  {
+    "id": "glaslat-17x28",
+    "name": "Glaslat 17x28mm (handelsmaat)",
+    "manufacturer": "Generiek",
+    "series": "Handel",
+    "material": "wood",
+    "materialSubtype": "hardhout",
+    "width": 28,
+    "depth": 17,
+    "sightline": 28,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [28, 0],
+      [28, 17],
+      [0, 17]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "glaslat"
+    ],
+    "sources": [
+      "handel (o.a. bakkerdehouthandel.nl): hardhouten glaslat 17x28 (A4-kwaliteit)"
+    ],
+    "dataNotes": [
+      "bij 28 mm lathoogte op een 17 mm sponning is de tekenoffset t.o.v. de sponninglijn 28-17 = 11 mm (KVT 12.3.2)"
+    ]
+  },
+  {
+    "id": "glaslat-20x34-5",
+    "name": "Glaslat 20x34,5mm (isolatie/triple)",
+    "manufacturer": "Generiek",
+    "series": "Handel",
+    "material": "wood",
+    "materialSubtype": "hardhout",
+    "width": 34.5,
+    "depth": 20,
+    "sightline": 34.5,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [34.5, 0],
+      [34.5, 20],
+      [0, 20]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "glaslat"
+    ],
+    "sources": [
+      "handel: glaslat 20x34,5 voor isolatie-/tripleglas"
+    ],
+    "dataNotes": [
+      "vervangt de niet-bestaande 'Glaslat 56x60' (dat was een raamhout-formaat); door gebruiker genoemde 16x28 en 22x28 zijn niet als handelsmaat aangetroffen"
+    ]
+  }
+]

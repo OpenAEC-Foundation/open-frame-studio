@@ -8,6 +8,8 @@
     "depth": 80,
     "sightline": 55,
     "glazingRebate": 24,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [70, 0],
@@ -34,8 +36,17 @@
     "sponning": {
       "width": 15,
       "depth": 24,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "generiek referentieprofiel, geen fabrikantdata"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -94,6 +105,8 @@
     "depth": 90,
     "sightline": 58,
     "glazingRebate": 28,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [76, 0],
@@ -120,8 +133,17 @@
     "sponning": {
       "width": 15,
       "depth": 28,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "generiek referentieprofiel, geen fabrikantdata"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],

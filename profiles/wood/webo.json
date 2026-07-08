@@ -9,34 +9,16 @@
     "description": "WEBO standaard BENG kozijn, HR++ glas, Uw 1.0",
     "width": 68,
     "depth": 114,
-    "sightline": 55,
-    "glazingRebate": 24,
+    "sightline": 51,
+    "glazingRebate": 51,
     "maxGlassWeight": 85,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        68,
-        0
-      ],
-      [
-        68,
-        90
-      ],
-      [
-        56,
-        90
-      ],
-      [
-        56,
-        114
-      ],
-      [
-        0,
-        114
-      ]
+      [0, 0],
+      [68, 0],
+      [68, 63],
+      [51, 63],
+      [51, 114],
+      [0, 114]
     ],
     "ufValue": 1.7,
     "uwValue": 1,
@@ -59,10 +41,26 @@
       "RAL7021"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte dagkanten vast 17 mm (zichtlijn 68-17=51)",
+      "KVT-tekening 14.01 + DTS: binnensponning vast glas 51x17"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "uwValue",
+      "maxGlassWeight"
+    ]
   },
   {
     "id": "webo-nom-90x114",
@@ -74,34 +72,16 @@
     "description": "WEBO NOM kozijn voor triple glas, Uw 0.8",
     "width": 90,
     "depth": 114,
-    "sightline": 72,
-    "glazingRebate": 32,
+    "sightline": 73,
+    "glazingRebate": 51,
     "maxGlassWeight": 110,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        90,
-        0
-      ],
-      [
-        90,
-        82
-      ],
-      [
-        78,
-        82
-      ],
-      [
-        78,
-        114
-      ],
-      [
-        0,
-        114
-      ]
+      [0, 0],
+      [90, 0],
+      [90, 63],
+      [73, 63],
+      [73, 114],
+      [0, 114]
     ],
     "ufValue": 1.2,
     "uwValue": 0.8,
@@ -124,10 +104,25 @@
       "RAL7021"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 32,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte 17 mm vast (zichtlijn 90-17=73)"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "uwValue",
+      "maxGlassWeight"
+    ]
   },
   {
     "id": "webo-houtalu-68x90",
@@ -139,34 +134,17 @@
     "description": "Hout-aluminium kozijn, houten binnenzijde, aluminium buitenzijde",
     "width": 68,
     "depth": 90,
-    "sightline": 55,
-    "glazingRebate": 24,
+    "sightline": 51,
+    "glazingRebate": 51,
     "maxGlassWeight": 90,
+    "aluCapDepth": 25,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        68,
-        0
-      ],
-      [
-        68,
-        66
-      ],
-      [
-        56,
-        66
-      ],
-      [
-        56,
-        90
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [68, 0],
+      [68, 39],
+      [51, 39],
+      [51, 90],
+      [0, 90]
     ],
     "ufValue": 1.4,
     "komo": true,
@@ -185,10 +163,42 @@
       "DB703"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte 17 mm; sponningbreedte 51 (KVT 14.01/DTS)"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
+    "innerWalls": [
+      [
+        [0, 0],
+        [68, 0],
+        [68, 25],
+        [66, 25],
+        [66, 2],
+        [0, 2]
+      ],
+      [
+        [0, 2],
+        [66, 2],
+        [66, 25],
+        [62, 25],
+        [62, 6],
+        [0, 6]
+      ]
+    ]
   },
   {
     "id": "webo-houtalu-90x90",
@@ -200,34 +210,17 @@
     "description": "Hout-aluminium kozijn 90mm voor triple glas",
     "width": 90,
     "depth": 90,
-    "sightline": 72,
-    "glazingRebate": 32,
+    "sightline": 73,
+    "glazingRebate": 51,
     "maxGlassWeight": 110,
+    "aluCapDepth": 25,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        90,
-        0
-      ],
-      [
-        90,
-        58
-      ],
-      [
-        78,
-        58
-      ],
-      [
-        78,
-        90
-      ],
-      [
-        0,
-        90
-      ]
+      [0, 0],
+      [90, 0],
+      [90, 39],
+      [73, 39],
+      [73, 90],
+      [0, 90]
     ],
     "ufValue": 1.1,
     "komo": true,
@@ -246,10 +239,42 @@
       "DB703"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 32,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte 17 mm vast (zichtlijn 73)"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
+    "innerWalls": [
+      [
+        [0, 0],
+        [90, 0],
+        [90, 25],
+        [88, 25],
+        [88, 2],
+        [0, 2]
+      ],
+      [
+        [0, 2],
+        [88, 2],
+        [88, 25],
+        [84, 25],
+        [84, 6],
+        [0, 6]
+      ]
+    ]
   },
   {
     "id": "webo-deur-54",
@@ -261,33 +286,15 @@
     "description": "Standaard deur dikte 54mm",
     "width": 54,
     "depth": 118,
-    "sightline": 42,
-    "glazingRebate": 17,
+    "sightline": 37,
+    "glazingRebate": 51,
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        54,
-        0
-      ],
-      [
-        54,
-        101
-      ],
-      [
-        42,
-        101
-      ],
-      [
-        42,
-        118
-      ],
-      [
-        0,
-        118
-      ]
+      [0, 0],
+      [54, 0],
+      [54, 67],
+      [37, 67],
+      [37, 118],
+      [0, 118]
     ],
     "ufValue": 2,
     "komo": true,
@@ -305,9 +312,23 @@
       "RAL9016"
     ],
     "sponning": {
-      "width": 12,
+      "width": 51,
       "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte beglazingssponning 17 mm"
+    ],
+    "unverifiedFields": [
+      "width",
+      "depth",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "profielmaat 54x118 deze onderzoeksronde niet geverifieerd"
+    ]
   }
 ]

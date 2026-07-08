@@ -1,33 +1,243 @@
 [
   {
+    "id": "reynaers-masterline8",
+    "name": "Reynaers MasterLine 8",
+    "manufacturer": "Reynaers Aluminium",
+    "series": "MasterLine 8",
+    "material": "aluminum",
+    "materialSubtype": "thermisch_onderbroken",
+    "width": 53,
+    "depth": 77,
+    "ventDepth": 87,
+    "sightline": 53,
+    "sightlineVent": 37,
+    "sightlineCombination": 97,
+    "glazingRebate": 27,
+    "thermalBreakWidth": 40,
+    "glazingBeadHeight": 25,
+    "ventOverlap": 6,
+    "shadowJoint": 7,
+    "wallThicknessMin": 1.6,
+    "wallThicknessMax": 2.5,
+    "minGlassThickness": 24,
+    "maxGlassThickness": 72,
+    "maxGlassThicknessFixed": 62,
+    "crossSection": [
+      [0, 0],
+      [53, 0],
+      [53, 25],
+      [32, 25],
+      [32, 21],
+      [29, 21],
+      [29, 25],
+      [26, 25],
+      [26, 69],
+      [23, 69],
+      [23, 74],
+      [26, 74],
+      [26, 77],
+      [0, 77]
+    ],
+    "ufValue": 1.9,
+    "applicableAs": [
+      "frame",
+      "sash"
+    ],
+    "finishes": [
+      "gepoedercoat",
+      "geanodiseerd"
+    ],
+    "colors": [
+      "RAL9010",
+      "RAL9001",
+      "RAL9016",
+      "RAL7016",
+      "RAL7021",
+      "RAL9005",
+      "DB703"
+    ],
+    "sponning": {
+      "width": 15,
+      "depth": 27,
+      "type": "binnensponning"
+    },
+    "sources": [
+      "reynaers.com MasterLine 8 technical info: kozijn 77 / vleugel 87 mm diep; sponninghoogte ('rebate height') 27 mm; glaslat 25 mm klik",
+      "ML8-bestekbeschrijving (viewworks.be): omega-steg PA6.6 GF25 40 mm breed (vlakke deuren 32), wanddikte nominaal 1,6-2,5, vleugel-overlap 6, schaduwvoeg 7, EPDM-middendichting (overlap aanslaglip 4,5)",
+      "ML8-bestek + reynaers.com: aanzicht binnendraaiend kozijn 53 + vleugel 37 = 97 mm (buitendraaiend 20/118/138); Uf 1,9 std / 1,5 HI / 1,2 HI+ (119 mm sectie)",
+      "ATG 3067: minimale glasdikte 24 mm (conservatief aangehouden; reynaers.com noemt 13) — glas <= 62 vast / <= 72 draaiend"
+    ],
+    "dataNotes": [
+      "ufValue = standaarduitvoering 1,9; HI 1,5 / HI+ 1,2",
+      "vleugel is 10 mm dieper dan het kozijn (77/87)"
+    ],
+    "innerWalls": [
+      [
+        [2, 2],
+        [24, 2],
+        [24, 23],
+        [2, 23]
+      ],
+      [
+        [28, 2],
+        [51, 2],
+        [51, 19],
+        [28, 19]
+      ],
+      [
+        [1.2, 25],
+        [3.2, 25],
+        [3.2, 65],
+        [1.2, 65]
+      ],
+      [
+        [22.8, 25],
+        [24.8, 25],
+        [24.8, 65],
+        [22.8, 65]
+      ],
+      [
+        [5.2, 26],
+        [20.8, 26],
+        [20.8, 64],
+        [5.2, 64]
+      ],
+      [
+        [2, 67],
+        [21, 67],
+        [21, 75],
+        [2, 75]
+      ]
+    ],
+    "glaslatHeight": 25
+  },
+  {
+    "id": "reynaers-slimline38-classic",
+    "name": "Reynaers SlimLine 38 Classic (steellook)",
+    "manufacturer": "Reynaers Aluminium",
+    "series": "SlimLine 38",
+    "material": "aluminum",
+    "materialSubtype": "thermisch_onderbroken",
+    "width": 33.5,
+    "depth": 99,
+    "ventDepth": 86,
+    "sightline": 33.5,
+    "sightlineVent": 23,
+    "sightlineCombination": 67,
+    "glazingRebate": 13.5,
+    "minGlassThickness": 16,
+    "maxGlassThickness": 55,
+    "crossSection": [
+      [0, 0],
+      [33.5, 0],
+      [33.5, 25],
+      [26, 25],
+      [26, 21],
+      [23, 21],
+      [23, 25],
+      [20, 25],
+      [20, 91],
+      [17, 91],
+      [17, 96],
+      [20, 96],
+      [20, 99],
+      [0, 99]
+    ],
+    "ufValue": 1.9,
+    "applicableAs": [
+      "frame",
+      "sash"
+    ],
+    "finishes": [
+      "gepoedercoat",
+      "geanodiseerd"
+    ],
+    "colors": [
+      "RAL9010",
+      "RAL7016",
+      "RAL9005",
+      "DB703"
+    ],
+    "sponning": {
+      "width": 15,
+      "depth": 13.5,
+      "type": "binnensponning"
+    },
+    "sources": [
+      "reynaersrus.com/slimline-38 + reynaers.com SL38-variantpagina's: Classic kozijn 99 / vleugel 86 diep; combinatie-aanzicht ±67 (kozijn 33,5 + vleugel 21,5-23); sponninghoogte 13,5; glas 16-55; Uf 1,9"
+    ],
+    "dataNotes": [
+      "uitzondering op het +10-patroon: de vleugel is hier ondieper dan het kozijn (99/86, steellook)",
+      "sightlineVent 23 = bovengrens van de opgegeven 21,5-23"
+    ],
+    "innerWalls": [
+      [
+        [2, 2],
+        [18, 2],
+        [18, 31.8],
+        [2, 31.8]
+      ],
+      [
+        [22, 2],
+        [31.5, 2],
+        [31.5, 19],
+        [22, 19]
+      ],
+      [
+        [1.2, 33.8],
+        [3.2, 33.8],
+        [3.2, 57.8],
+        [1.2, 57.8]
+      ],
+      [
+        [16.8, 33.8],
+        [18.8, 33.8],
+        [18.8, 57.8],
+        [16.8, 57.8]
+      ],
+      [
+        [5.2, 34.8],
+        [14.8, 34.8],
+        [14.8, 56.8],
+        [5.2, 56.8]
+      ],
+      [
+        [2, 59.8],
+        [15, 59.8],
+        [15, 97],
+        [2, 97]
+      ]
+    ]
+  },
+  {
     "id": "reynaers-cs77-standard",
     "name": "Reynaers CS 77 Standard",
     "manufacturer": "Reynaers Aluminium",
     "series": "ConceptSystem 77",
     "material": "aluminum",
     "materialSubtype": "thermisch_onderbroken",
-    "width": 77,
-    "depth": 68,
-    "ventDepth": 77,
+    "width": 51,
+    "depth": 77,
+    "ventDepth": 87,
     "sightline": 51,
     "glazingRebate": 25,
     "maxGlassThickness": 63,
     "minGlassThickness": 4,
     "crossSection": [
       [0, 0],
-      [77, 0],
-      [77, 25],
-      [58, 25],
-      [58, 21],
-      [55, 21],
-      [55, 25],
-      [52, 25],
-      [52, 60],
-      [49, 60],
-      [49, 65],
-      [52, 65],
-      [52, 68],
-      [0, 68]
+      [51, 0],
+      [51, 25],
+      [32, 25],
+      [32, 21],
+      [29, 21],
+      [29, 25],
+      [26, 25],
+      [26, 69],
+      [23, 69],
+      [23, 74],
+      [26, 74],
+      [26, 77],
+      [0, 77]
     ],
     "ufValue": 2.2,
     "uwValue": 1.4,
@@ -54,20 +264,39 @@
     "sponning": {
       "width": 15,
       "depth": 25,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "reynaers.com + Concept-naamconventie: CS 77 = 77 mm bouwdiepte (depth-veld stond op 68 en width op 77 — verwisseld)"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "ventDepth",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "uwValue",
+      "maxGlassThickness",
+      "minGlassThickness"
+    ],
+    "dataNotes": [
+      "width/sightline 51: bestaande aanzichtwaarde aangehouden, CS77-aanzichten deze ronde niet onderzocht",
+      "ventDepth 87 afgeleid uit het alu-patroon vleugel = kozijn + 10 (niet CS77-specifiek bevestigd)",
+      "sponninghoogte CS77 niet publiek gevonden — 25 aangehouden met vlag, niet verzonnen"
+    ],
     "innerWalls": [
       [
         [2, 2],
-        [50, 2],
-        [50, 23],
+        [24, 2],
+        [24, 23],
         [2, 23]
       ],
       [
-        [54, 2],
-        [75, 2],
-        [75, 19],
-        [54, 19]
+        [28, 2],
+        [49, 2],
+        [49, 19],
+        [28, 19]
       ],
       [
         [1.2, 25],
@@ -76,22 +305,22 @@
         [1.2, 49]
       ],
       [
-        [48.8, 25],
-        [50.8, 25],
-        [50.8, 49],
-        [48.8, 49]
+        [22.8, 25],
+        [24.8, 25],
+        [24.8, 49],
+        [22.8, 49]
       ],
       [
         [5.2, 26],
-        [46.8, 26],
-        [46.8, 48],
+        [20.8, 26],
+        [20.8, 48],
         [5.2, 48]
       ],
       [
         [2, 51],
-        [47, 51],
-        [47, 66],
-        [2, 66]
+        [21, 51],
+        [21, 75],
+        [2, 75]
       ]
     ]
   },
@@ -102,27 +331,27 @@
     "series": "ConceptSystem 77 HI+",
     "material": "aluminum",
     "materialSubtype": "high_insulation",
-    "width": 77,
-    "depth": 68,
-    "ventDepth": 77,
+    "width": 51,
+    "depth": 77,
+    "ventDepth": 87,
     "sightline": 51,
     "glazingRebate": 25,
     "maxGlassThickness": 63,
     "crossSection": [
       [0, 0],
-      [77, 0],
-      [77, 25],
-      [58, 25],
-      [58, 21],
-      [55, 21],
-      [55, 25],
-      [52, 25],
-      [52, 60],
-      [49, 60],
-      [49, 65],
-      [52, 65],
-      [52, 68],
-      [0, 68]
+      [51, 0],
+      [51, 25],
+      [32, 25],
+      [32, 21],
+      [29, 21],
+      [29, 25],
+      [26, 25],
+      [26, 69],
+      [23, 69],
+      [23, 74],
+      [26, 74],
+      [26, 77],
+      [0, 77]
     ],
     "ufValue": 1.2,
     "airTightness": "Klasse 4",
@@ -148,44 +377,59 @@
     "sponning": {
       "width": 15,
       "depth": 25,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "reynaers.com + Concept-naamconventie: CS 77 = 77 mm bouwdiepte"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "ventDepth",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "zelfde vlaggen als CS 77 Standard: aanzichten/sponning/Uf deze ronde niet onderzocht"
+    ],
     "innerWalls": [
       [
         [2, 2],
-        [50, 2],
-        [50, 23],
+        [24, 2],
+        [24, 23],
         [2, 23]
       ],
       [
-        [54, 2],
-        [75, 2],
-        [75, 19],
-        [54, 19]
+        [28, 2],
+        [49, 2],
+        [49, 19],
+        [28, 19]
       ],
       [
         [1.2, 25],
         [3.2, 25],
-        [3.2, 55],
-        [1.2, 55]
+        [3.2, 59],
+        [1.2, 59]
       ],
       [
-        [48.8, 25],
-        [50.8, 25],
-        [50.8, 55],
-        [48.8, 55]
+        [22.8, 25],
+        [24.8, 25],
+        [24.8, 59],
+        [22.8, 59]
       ],
       [
         [5.2, 26],
-        [46.8, 26],
-        [46.8, 54],
-        [5.2, 54]
+        [20.8, 26],
+        [20.8, 58],
+        [5.2, 58]
       ],
       [
-        [2, 57],
-        [47, 57],
-        [47, 66],
-        [2, 66]
+        [2, 61],
+        [21, 61],
+        [21, 75],
+        [2, 75]
       ]
     ]
   },
@@ -196,28 +440,28 @@
     "series": "ConceptSystem 86-HI",
     "material": "aluminum",
     "materialSubtype": "super_insulated",
-    "width": 86,
-    "depth": 77,
-    "ventDepth": 86,
+    "width": 51,
+    "depth": 86,
+    "ventDepth": 96,
     "sightline": 51,
     "glazingRebate": 25,
     "maxGlassThickness": 72,
     "minGlassThickness": 10,
     "crossSection": [
       [0, 0],
-      [86, 0],
-      [86, 25],
-      [67, 25],
-      [67, 21],
-      [64, 21],
-      [64, 25],
-      [61, 25],
-      [61, 69],
-      [58, 69],
-      [58, 74],
-      [61, 74],
-      [61, 77],
-      [0, 77]
+      [51, 0],
+      [51, 25],
+      [32, 25],
+      [32, 21],
+      [29, 21],
+      [29, 25],
+      [26, 25],
+      [26, 78],
+      [23, 78],
+      [23, 83],
+      [26, 83],
+      [26, 86],
+      [0, 86]
     ],
     "ufValue": 1,
     "applicableAs": [
@@ -240,44 +484,60 @@
     "sponning": {
       "width": 15,
       "depth": 25,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "Reynaers Concept-naamconventie: CS 86 = 86 mm bouwdiepte (depth-veld stond op 77)"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "ventDepth",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness",
+      "minGlassThickness"
+    ],
+    "dataNotes": [
+      "ventDepth 96 afgeleid uit het +10-patroon; aanzichten deze ronde niet onderzocht"
+    ],
     "innerWalls": [
       [
         [2, 2],
-        [59, 2],
-        [59, 23],
+        [24, 2],
+        [24, 23],
         [2, 23]
       ],
       [
-        [63, 2],
-        [84, 2],
-        [84, 19],
-        [63, 19]
+        [28, 2],
+        [49, 2],
+        [49, 19],
+        [28, 19]
       ],
       [
         [1.2, 25],
         [3.2, 25],
-        [3.2, 59],
-        [1.2, 59]
+        [3.2, 67],
+        [1.2, 67]
       ],
       [
-        [57.8, 25],
-        [59.8, 25],
-        [59.8, 59],
-        [57.8, 59]
+        [22.8, 25],
+        [24.8, 25],
+        [24.8, 67],
+        [22.8, 67]
       ],
       [
         [5.2, 26],
-        [55.8, 26],
-        [55.8, 58],
-        [5.2, 58]
+        [20.8, 26],
+        [20.8, 66],
+        [5.2, 66]
       ],
       [
-        [2, 61],
-        [56, 61],
-        [56, 75],
-        [2, 75]
+        [2, 69],
+        [21, 69],
+        [21, 84],
+        [2, 84]
       ]
     ]
   },
@@ -288,25 +548,25 @@
     "series": "ConceptPatio 155",
     "material": "aluminum",
     "materialSubtype": "sliding",
-    "width": 155,
-    "depth": 68,
+    "width": 68,
+    "depth": 155,
     "sightline": 87,
     "glazingRebate": 32,
     "maxGlassThickness": 52,
     "maxWeight": 400,
     "crossSection": [
       [0, 0],
-      [155, 0],
-      [155, 5],
-      [87, 5],
-      [87, 31],
-      [155, 31],
-      [155, 37],
-      [87, 37],
-      [87, 63],
-      [155, 63],
-      [155, 68],
-      [0, 68]
+      [68, 0],
+      [68, 5],
+      [47.6, 5],
+      [47.6, 74.5],
+      [68, 74.5],
+      [68, 80.5],
+      [47.6, 80.5],
+      [47.6, 150],
+      [68, 150],
+      [68, 155],
+      [0, 155]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -326,26 +586,41 @@
     "sponning": {
       "width": 15,
       "depth": 32,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "Reynaers Concept-naamconventie: CP 155 = 155 mm bouwdiepte (afgeleid; oude data had 155 als aanzicht en 68 als diepte — omgedraaid)"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness",
+      "maxWeight"
+    ],
+    "dataNotes": [
+      "CP155-aanzichten deze ronde niet onderzocht; width 68 is de oude dieptewaarde als voorlopige aanzichtbreedte"
+    ],
     "innerWalls": [
       [
         [2, 2],
-        [85, 2],
-        [85, 22],
-        [2, 22]
+        [45.6, 2],
+        [45.6, 51],
+        [2, 51]
       ],
       [
-        [2, 24],
-        [85, 24],
-        [85, 44],
-        [2, 44]
+        [2, 53],
+        [45.6, 53],
+        [45.6, 102],
+        [2, 102]
       ],
       [
-        [2, 46],
-        [85, 46],
-        [85, 66],
-        [2, 66]
+        [2, 104],
+        [45.6, 104],
+        [45.6, 153],
+        [2, 153]
       ]
     ]
   }

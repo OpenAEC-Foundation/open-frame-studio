@@ -1,0 +1,244 @@
+[
+  {
+    "id": "schuco-living82-as",
+    "name": "Schüco LivIng 82 AS",
+    "manufacturer": "Schüco",
+    "series": "LivIng 82",
+    "variant": "AS",
+    "material": "pvc",
+    "materialSubtype": "7_kamer",
+    "width": 70,
+    "depth": 82,
+    "chambers": 7,
+    "sealingLevels": 2,
+    "sightline": 70,
+    "sightlineCombination": 120,
+    "minGlassThickness": 16,
+    "maxGlassThickness": 54,
+    "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
+    "crossSection": [
+      [0, 0],
+      [70, 0],
+      [70, 15],
+      [67.3, 25],
+      [51, 25],
+      [51, 21],
+      [48, 21],
+      [48, 25],
+      [45, 25],
+      [45, 74],
+      [42, 74],
+      [42, 79],
+      [45, 79],
+      [45, 82],
+      [0, 82]
+    ],
+    "ufValue": 1,
+    "applicableAs": [
+      "frame",
+      "sash"
+    ],
+    "finishes": [
+      "wit",
+      "folie"
+    ],
+    "colors": [
+      "wit",
+      "creme",
+      "antraciet"
+    ],
+    "sources": [
+      "Schüco-brochure LivIng Classic P4151/07.20 p.8-9: 82 mm / 7 kamers / lasbare EPDM-dichtingen; AS-variant 2 dichtingsniveaus, Uf 1,0",
+      "widuro.de + bew24-fenster.de: kozijnaanzicht 70, minimale combinatie 120, glas 16-54 (dealers noemen 24-52)"
+    ],
+    "unverifiedFields": [
+      "glasinval"
+    ],
+    "dataNotes": [
+      "Glaseinstand/Falzhoehe niet gepubliceerd gevonden — geen sponningdiepte opgenomen"
+    ],
+    "innerWalls": [
+      [
+        [2.8, 2.8],
+        [42.2, 2.8],
+        [42.2, 8.8],
+        [2.8, 8.8]
+      ],
+      [
+        [2.8, 11.6],
+        [42.2, 11.6],
+        [42.2, 17.5],
+        [2.8, 17.5]
+      ],
+      [
+        [2.8, 20.3],
+        [42.2, 20.3],
+        [42.2, 26.3],
+        [2.8, 26.3]
+      ],
+      [
+        [2.8, 29.1],
+        [42.2, 29.1],
+        [42.2, 52.9],
+        [2.8, 52.9]
+      ],
+      [
+        [4.8, 50.9],
+        [4.8, 31.1],
+        [40.2, 31.1],
+        [40.2, 50.9],
+        [38.7, 50.9],
+        [38.7, 32.6],
+        [6.3, 32.6],
+        [6.3, 50.9]
+      ],
+      [
+        [2.8, 55.7],
+        [42.2, 55.7],
+        [42.2, 61.7],
+        [2.8, 61.7]
+      ],
+      [
+        [2.8, 64.5],
+        [42.2, 64.5],
+        [42.2, 70.4],
+        [2.8, 70.4]
+      ],
+      [
+        [2.8, 73.2],
+        [39.2, 73.2],
+        [39.2, 79.2],
+        [2.8, 79.2]
+      ],
+      [
+        [47.8, 2.8],
+        [64.5, 2.8],
+        [64.5, 19],
+        [47.8, 19]
+      ]
+    ]
+  },
+  {
+    "id": "schuco-living82-md",
+    "name": "Schüco LivIng 82 MD",
+    "manufacturer": "Schüco",
+    "series": "LivIng 82",
+    "variant": "MD",
+    "material": "pvc",
+    "materialSubtype": "7_kamer",
+    "width": 70,
+    "depth": 82,
+    "chambers": 7,
+    "sealingLevels": 3,
+    "sightline": 70,
+    "sightlineCombination": 120,
+    "minGlassThickness": 16,
+    "maxGlassThickness": 54,
+    "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
+    "crossSection": [
+      [0, 0],
+      [70, 0],
+      [70, 15],
+      [67.3, 25],
+      [51, 25],
+      [51, 21],
+      [48, 21],
+      [48, 25],
+      [45, 25],
+      [45, 74],
+      [42, 74],
+      [42, 79],
+      [45, 79],
+      [45, 82],
+      [0, 82]
+    ],
+    "ufValue": 0.96,
+    "applicableAs": [
+      "frame",
+      "sash"
+    ],
+    "finishes": [
+      "wit",
+      "folie"
+    ],
+    "colors": [
+      "wit",
+      "creme",
+      "antraciet"
+    ],
+    "sources": [
+      "Schüco-brochure LivIng Classic P4151/07.20 p.8-9: MD-variant 3 dichtingsniveaus, Uf 0,96",
+      "widuro.de + bew24-fenster.de: kozijnaanzicht 70, minimale combinatie 120, glas 16-54"
+    ],
+    "unverifiedFields": [
+      "glasinval"
+    ],
+    "dataNotes": [
+      "Glaseinstand/Falzhoehe niet gepubliceerd gevonden — geen sponningdiepte opgenomen"
+    ],
+    "innerWalls": [
+      [
+        [2.8, 2.8],
+        [42.2, 2.8],
+        [42.2, 8.8],
+        [2.8, 8.8]
+      ],
+      [
+        [2.8, 11.6],
+        [42.2, 11.6],
+        [42.2, 17.5],
+        [2.8, 17.5]
+      ],
+      [
+        [2.8, 20.3],
+        [42.2, 20.3],
+        [42.2, 26.3],
+        [2.8, 26.3]
+      ],
+      [
+        [2.8, 29.1],
+        [42.2, 29.1],
+        [42.2, 52.9],
+        [2.8, 52.9]
+      ],
+      [
+        [4.8, 50.9],
+        [4.8, 31.1],
+        [40.2, 31.1],
+        [40.2, 50.9],
+        [38.7, 50.9],
+        [38.7, 32.6],
+        [6.3, 32.6],
+        [6.3, 50.9]
+      ],
+      [
+        [2.8, 55.7],
+        [42.2, 55.7],
+        [42.2, 61.7],
+        [2.8, 61.7]
+      ],
+      [
+        [2.8, 64.5],
+        [42.2, 64.5],
+        [42.2, 70.4],
+        [2.8, 70.4]
+      ],
+      [
+        [2.8, 73.2],
+        [39.2, 73.2],
+        [39.2, 79.2],
+        [2.8, 79.2]
+      ],
+      [
+        [47.8, 2.8],
+        [64.5, 2.8],
+        [64.5, 19],
+        [47.8, 19]
+      ]
+    ]
+  }
+]

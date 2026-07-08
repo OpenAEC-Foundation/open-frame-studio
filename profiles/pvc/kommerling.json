@@ -1,9 +1,126 @@
 [
   {
+    "id": "kommerling-76ad",
+    "name": "Kommerling 76 AD",
+    "manufacturer": "Kommerling (profine)",
+    "series": "76 AD",
+    "variant": "AD",
+    "material": "pvc",
+    "materialSubtype": "5_kamer",
+    "width": 67,
+    "depth": 76,
+    "chambers": 5,
+    "sealingLevels": 2,
+    "sightline": 67,
+    "glazingRebate": 26,
+    "maxGlassThickness": 50,
+    "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
+    "crossSection": [
+      [0, 0],
+      [67, 0],
+      [67, 15],
+      [64.3, 25],
+      [47, 25],
+      [47, 21],
+      [44, 21],
+      [44, 25],
+      [41, 25],
+      [41, 68],
+      [38, 68],
+      [38, 73],
+      [41, 73],
+      [41, 76],
+      [0, 76]
+    ],
+    "ufValue": 1.1,
+    "applicableAs": [
+      "frame",
+      "sash"
+    ],
+    "finishes": [
+      "wit",
+      "folie",
+      "AluClip"
+    ],
+    "colors": [
+      "wit",
+      "creme",
+      "antraciet"
+    ],
+    "sponning": {
+      "width": 15,
+      "depth": 26,
+      "type": "binnensponning"
+    },
+    "sources": [
+      "koemmerling.com 76-mm-systeme (AD-pagina): 5 kamers, 2 dichtingsniveaus, glas tot 50, Uf 1,1",
+      "bew24-fenster.de (dealer, een bron): kozijnaanzicht 67"
+    ],
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth"
+    ],
+    "dataNotes": [
+      "Glaseinstand niet gepubliceerd gevonden — geen glasinval-veld; de tekenlaag valt terug op de PVC-norm 20 (ofs-core::profile::norm_glasinval)"
+    ],
+    "innerWalls": [
+      [
+        [2.8, 2.8],
+        [38.2, 2.8],
+        [38.2, 11.7],
+        [2.8, 11.7]
+      ],
+      [
+        [2.8, 14.5],
+        [38.2, 14.5],
+        [38.2, 23.4],
+        [2.8, 23.4]
+      ],
+      [
+        [2.8, 26.2],
+        [38.2, 26.2],
+        [38.2, 49.8],
+        [2.8, 49.8]
+      ],
+      [
+        [4.8, 47.8],
+        [4.8, 28.2],
+        [36.2, 28.2],
+        [36.2, 47.8],
+        [34.7, 47.8],
+        [34.7, 29.7],
+        [6.3, 29.7],
+        [6.3, 47.8]
+      ],
+      [
+        [2.8, 52.6],
+        [38.2, 52.6],
+        [38.2, 61.5],
+        [2.8, 61.5]
+      ],
+      [
+        [2.8, 64.3],
+        [35.2, 64.3],
+        [35.2, 73.2],
+        [2.8, 73.2]
+      ],
+      [
+        [43.8, 2.8],
+        [61.5, 2.8],
+        [61.5, 19],
+        [43.8, 19]
+      ]
+    ]
+  },
+  {
     "id": "kommerling-76md",
     "name": "Kommerling 76 MD",
     "manufacturer": "Kommerling (profine)",
     "series": "76 MD",
+    "variant": "MD",
     "material": "pvc",
     "materialSubtype": "6_kamer",
     "width": 76,
@@ -12,8 +129,10 @@
     "sealingLevels": 3,
     "sightline": 58,
     "glazingRebate": 26,
-    "maxGlassThickness": 50,
+    "maxGlassThickness": 56,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [76, 0],
@@ -50,8 +169,21 @@
     "sponning": {
       "width": 15,
       "depth": 26,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "koemmerling.com 76 MD: beglazing 'bis 56 mm', Uf 1,0 (MD standaard), 3 dichtingsniveaus"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "glazingRebate",
+      "sponning.depth"
+    ],
+    "dataNotes": [
+      "maxGlassThickness 56 per koemmerling.com; dealers noemen 50 (oudere opgave)",
+      "Glaseinstand niet gepubliceerd gevonden — geen glasinval-veld; de tekenlaag valt terug op de PVC-norm 20 (ofs-core::profile::norm_glasinval)"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -112,6 +244,7 @@
     "name": "Kommerling 76 MD proEnergyTec",
     "manufacturer": "Kommerling (profine)",
     "series": "76 MD proEnergyTec",
+    "variant": "MD",
     "material": "pvc",
     "materialSubtype": "6_kamer_isolatie",
     "width": 76,
@@ -120,9 +253,11 @@
     "sealingLevels": 3,
     "sightline": 58,
     "glazingRebate": 26,
-    "maxGlassThickness": 50,
+    "maxGlassThickness": 56,
     "steelReinforced": true,
     "thermalInsert": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [76, 0],
@@ -158,8 +293,21 @@
     "sponning": {
       "width": 15,
       "depth": 26,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "koemmerling.com 76 MD: beglazing tot 56 mm"
+    ],
+    "unverifiedFields": [
+      "width",
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "Glaseinstand niet gepubliceerd gevonden — geen glasinval-veld; de tekenlaag valt terug op de PVC-norm 20 (ofs-core::profile::norm_glasinval)"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -220,34 +368,37 @@
     "name": "Kommerling 88 MD",
     "manufacturer": "Kommerling (profine)",
     "series": "88 MD",
+    "variant": "MD",
     "material": "pvc",
     "materialSubtype": "7_kamer",
-    "width": 88,
+    "width": 74,
     "depth": 88,
     "chambers": 7,
     "sealingLevels": 3,
-    "sightline": 66,
+    "sightline": 74,
     "glazingRebate": 30,
-    "maxGlassThickness": 56,
+    "maxGlassThickness": 58,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
-      [88, 0],
-      [88, 15],
-      [85.3, 25],
-      [64, 25],
-      [64, 21],
-      [61, 21],
-      [61, 25],
-      [58, 25],
-      [58, 80],
-      [55, 80],
-      [55, 85],
-      [58, 85],
-      [58, 88],
+      [74, 0],
+      [74, 15],
+      [71.3, 25],
+      [50, 25],
+      [50, 21],
+      [47, 21],
+      [47, 25],
+      [44, 25],
+      [44, 80],
+      [41, 80],
+      [41, 85],
+      [44, 85],
+      [44, 88],
       [0, 88]
     ],
-    "ufValue": 1.2,
+    "ufValue": 0.95,
     "uwPassiveHouse": 0.72,
     "applicableAs": [
       "frame",
@@ -267,66 +418,78 @@
     "sponning": {
       "width": 15,
       "depth": 30,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "koemmerling.com 88-mm-systeme (88 MD): Uf 0,95 officieel standaard, beglazing tot 58 mm, centrische staalversterking is systeemkenmerk",
+      "bew24-fenster.de (dealerconfigurator, een bron): kozijnaanzicht 74"
+    ],
+    "unverifiedFields": [
+      "glazingRebate",
+      "sponning.depth",
+      "sightline"
+    ],
+    "dataNotes": [
+      "Glaseinstand niet gepubliceerd gevonden — geen glasinval-veld; de tekenlaag valt terug op de PVC-norm 20 (ofs-core::profile::norm_glasinval)"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
-        [55.2, 2.8],
-        [55.2, 9.4],
+        [41.2, 2.8],
+        [41.2, 9.4],
         [2.8, 9.4]
       ],
       [
         [2.8, 12.2],
-        [55.2, 12.2],
-        [55.2, 18.7],
+        [41.2, 12.2],
+        [41.2, 18.7],
         [2.8, 18.7]
       ],
       [
         [2.8, 21.5],
-        [55.2, 21.5],
-        [55.2, 28.1],
+        [41.2, 21.5],
+        [41.2, 28.1],
         [2.8, 28.1]
       ],
       [
         [2.8, 30.9],
-        [55.2, 30.9],
-        [55.2, 57.1],
+        [41.2, 30.9],
+        [41.2, 57.1],
         [2.8, 57.1]
       ],
       [
         [4.8, 55.1],
         [4.8, 32.9],
-        [53.2, 32.9],
-        [53.2, 55.1],
-        [51.7, 55.1],
-        [51.7, 34.4],
+        [39.2, 32.9],
+        [39.2, 55.1],
+        [37.7, 55.1],
+        [37.7, 34.4],
         [6.3, 34.4],
         [6.3, 55.1]
       ],
       [
         [2.8, 59.9],
-        [55.2, 59.9],
-        [55.2, 66.5],
+        [41.2, 59.9],
+        [41.2, 66.5],
         [2.8, 66.5]
       ],
       [
         [2.8, 69.3],
-        [55.2, 69.3],
-        [55.2, 75.8],
+        [41.2, 69.3],
+        [41.2, 75.8],
         [2.8, 75.8]
       ],
       [
         [2.8, 78.6],
-        [52.2, 78.6],
-        [52.2, 85.2],
+        [38.2, 78.6],
+        [38.2, 85.2],
         [2.8, 85.2]
       ],
       [
-        [60.8, 2.8],
-        [82.5, 2.8],
-        [82.5, 19],
-        [60.8, 19]
+        [46.8, 2.8],
+        [68.5, 2.8],
+        [68.5, 19],
+        [46.8, 19]
       ]
     ]
   }

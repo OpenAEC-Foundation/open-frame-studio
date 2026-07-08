@@ -14,6 +14,8 @@
     "glazingRebate": 24,
     "maxGlassThickness": 40,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [74, 0],
@@ -51,8 +53,18 @@
     "sponning": {
       "width": 15,
       "depth": 24,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "maxGlassThickness",
+      "ufValue"
+    ],
+    "dataNotes": [
+      "S 8000 deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -109,29 +121,36 @@
     "series": "S 9000",
     "material": "pvc",
     "materialSubtype": "6_kamer",
-    "width": 82.5,
+    "width": 70,
     "depth": 82.5,
     "chambers": 6,
     "sealingLevels": 3,
-    "sightline": 62,
+    "sightline": 70,
+    "sightlineCombination": 110,
+    "sightlineMullion": 92,
     "glazingRebate": 28,
+    "overslagHoogte": 26,
+    "falzluft": 12,
+    "stulpNaad": 6,
     "maxGlassThickness": 54,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
-      [82.5, 0],
-      [82.5, 15],
-      [79.8, 25],
-      [60.5, 25],
-      [60.5, 21],
-      [57.5, 21],
-      [57.5, 25],
-      [54.5, 25],
-      [54.5, 74.5],
-      [51.5, 74.5],
-      [51.5, 79.5],
-      [54.5, 79.5],
-      [54.5, 82.5],
+      [70, 0],
+      [70, 15],
+      [67.3, 25],
+      [48, 25],
+      [48, 21],
+      [45, 21],
+      [45, 25],
+      [42, 25],
+      [42, 74.5],
+      [39, 74.5],
+      [39, 79.5],
+      [42, 79.5],
+      [42, 82.5],
       [0, 82.5]
     ],
     "ufValue": 0.89,
@@ -158,170 +177,80 @@
     "sponning": {
       "width": 15,
       "depth": 28,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "sources": [
+      "GEALAN Zubehoer-/Zusatzprofile 03-2020: glasaanslaghoogte 18 mm, overslaghoogte kozijn-vleugel 26 mm, karakteristieke 15 graden schuinte",
+      "gealan.de/de/systeme/s-9000: platform 82,5 mm bouwdiepte; maxGlass 54 (STV)",
+      "stolma.de GEALAN-sneden p.85: aanzichten kozijn 70, DK-combinatie 110, T-stijl 92 (combi 172), stulp 74 (combi 154), stulpnaad 6, Falzluft 12"
+    ],
+    "unverifiedFields": [
+      "glazingRebate",
+      "sightlineCombination",
+      "sightlineMullion",
+      "falzluft"
+    ],
+    "dataNotes": [
+      "glasinval = glasaanslaghoogte 18 (getekende glasrand); glazingRebate/sponning.depth 28 als Falzhoehe aangehouden maar niet fabrieksbevestigd",
+      "aanzichten zijn van STOLMA-tekeningen afgelezen (afgeleid)",
+      "gealan.de noemt inmiddels glasdikte 56/58 — 54 (STV 03-2020) aangehouden",
+      "het eerdere 'S 9000 Plus (92mm)' is verwijderd: geen bewijs dat dit product bestaat, het S 9000-platform is uitsluitend 82,5 mm"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
-        [51.7, 2.8],
-        [51.7, 10.3],
+        [39.2, 2.8],
+        [39.2, 10.3],
         [2.8, 10.3]
       ],
       [
         [2.8, 13.1],
-        [51.7, 13.1],
-        [51.7, 20.7],
+        [39.2, 13.1],
+        [39.2, 20.7],
         [2.8, 20.7]
       ],
       [
         [2.8, 23.5],
-        [51.7, 23.5],
-        [51.7, 48.7],
+        [39.2, 23.5],
+        [39.2, 48.7],
         [2.8, 48.7]
       ],
       [
         [4.8, 46.7],
         [4.8, 25.5],
-        [49.7, 25.5],
-        [49.7, 46.7],
-        [48.2, 46.7],
-        [48.2, 27],
+        [37.2, 25.5],
+        [37.2, 46.7],
+        [35.7, 46.7],
+        [35.7, 27],
         [6.3, 27],
         [6.3, 46.7]
       ],
       [
         [2.8, 51.5],
-        [51.7, 51.5],
-        [51.7, 59],
+        [39.2, 51.5],
+        [39.2, 59],
         [2.8, 59]
       ],
       [
         [2.8, 61.8],
-        [51.7, 61.8],
-        [51.7, 69.4],
+        [39.2, 61.8],
+        [39.2, 69.4],
         [2.8, 69.4]
       ],
       [
         [2.8, 72.2],
-        [48.7, 72.2],
-        [48.7, 79.7],
+        [36.2, 72.2],
+        [36.2, 79.7],
         [2.8, 79.7]
       ],
       [
-        [57.3, 2.8],
-        [77, 2.8],
-        [77, 19],
-        [57.3, 19]
+        [44.8, 2.8],
+        [64.5, 2.8],
+        [64.5, 19],
+        [44.8, 19]
       ]
-    ]
-  },
-  {
-    "id": "gealan-s9000-plus",
-    "name": "Gealan S 9000 Plus (92mm)",
-    "manufacturer": "Gealan",
-    "series": "S 9000 Plus",
-    "material": "pvc",
-    "materialSubtype": "6_kamer_plus",
-    "width": 92,
-    "depth": 92,
-    "chambers": 6,
-    "sealingLevels": 3,
-    "sightline": 68,
-    "glazingRebate": 32,
-    "maxGlassThickness": 60,
-    "steelReinforced": true,
-    "crossSection": [
-      [0, 0],
-      [92, 0],
-      [92, 15],
-      [89.3, 25],
-      [66, 25],
-      [66, 21],
-      [63, 21],
-      [63, 25],
-      [60, 25],
-      [60, 84],
-      [57, 84],
-      [57, 89],
-      [60, 89],
-      [60, 92],
-      [0, 92]
     ],
-    "ufValue": 0.82,
-    "passiveHouseCertified": true,
-    "applicableAs": [
-      "frame",
-      "sash"
-    ],
-    "finishes": [
-      "wit",
-      "folie",
-      "acrylcolor"
-    ],
-    "colors": [
-      "wit",
-      "creme",
-      "antraciet"
-    ],
-    "sponning": {
-      "width": 15,
-      "depth": 32,
-      "type": "buitensponning"
-    },
-    "innerWalls": [
-      [
-        [2.8, 2.8],
-        [57.2, 2.8],
-        [57.2, 11.5],
-        [2.8, 11.5]
-      ],
-      [
-        [2.8, 14.3],
-        [57.2, 14.3],
-        [57.2, 23],
-        [2.8, 23]
-      ],
-      [
-        [2.8, 25.8],
-        [57.2, 25.8],
-        [57.2, 54.7],
-        [2.8, 54.7]
-      ],
-      [
-        [4.8, 52.7],
-        [4.8, 27.8],
-        [55.2, 27.8],
-        [55.2, 52.7],
-        [53.7, 52.7],
-        [53.7, 29.3],
-        [6.3, 29.3],
-        [6.3, 52.7]
-      ],
-      [
-        [2.8, 57.5],
-        [57.2, 57.5],
-        [57.2, 66.2],
-        [2.8, 66.2]
-      ],
-      [
-        [2.8, 69],
-        [57.2, 69],
-        [57.2, 77.7],
-        [2.8, 77.7]
-      ],
-      [
-        [2.8, 80.5],
-        [54.2, 80.5],
-        [54.2, 89.2],
-        [2.8, 89.2]
-      ],
-      [
-        [62.8, 2.8],
-        [86.5, 2.8],
-        [86.5, 19],
-        [62.8, 19]
-      ]
-    ]
+    "glasinval": 18
   },
   {
     "id": "gealan-kubus",
@@ -339,6 +268,8 @@
     "maxGlassThickness": 54,
     "steelReinforced": true,
     "flushDesign": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [85, 0],
@@ -374,8 +305,20 @@
     "sponning": {
       "width": 15,
       "depth": 30,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "width",
+      "depth",
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "Gealan-KUBUS deze onderzoeksronde niet geverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],

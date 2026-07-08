@@ -97,81 +97,16 @@ async function fetchProfileData() {
 }
 
 /**
- * Genereer crossSection polygon op basis van profiel parameters.
- * Buitensponning: sponning aan buitenkant (standaard houten kozijn)
- * Binnensponning: sponning aan binnenkant (raamhout/deurhout)
- * Midden: sponning in het midden (aluminium/PVC)
- * Draaikiep: binnensponning + opdek overlap + rubber groeven
- */
-function generateCrossSection(w, d, sp, type) {
-  const sw = sp?.width || 0;
-  const sd = sp?.depth || 0;
-  const pos = sp?.position || "buiten";
-
-  // Eenvoudige rechthoek zonder sponning (glaslat, spouwlat)
-  if (!sw || !sd) return [[0,0],[w,0],[w,d],[0,d]];
-
-  if (pos === "buiten") {
-    // Buitensponning: inkepingen aan onderkant links+rechts
-    return [[0,0],[w,0],[w,d-sd],[w-sw,d-sd],[w-sw,d],[sw,d],[sw,d-sd],[0,d-sd]];
-  }
-  if (pos === "binnen") {
-    // Binnensponning: inkepingen aan bovenkant links+rechts
-    return [[sw,0],[w-sw,0],[w-sw,sd],[w,sd],[w,d],[0,d],[0,sd],[sw,sd]];
-  }
-  if (pos === "midden") {
-    // Midden sponning: groef in het midden van de diepte
-    const mid = (d - sd) / 2;
-    return [[sw,0],[w-sw,0],[w-sw,mid],[w,mid],[w,mid+sd],[w-sw,mid+sd],[w-sw,d],[sw,d],[sw,mid+sd],[0,mid+sd],[0,mid],[sw,mid]];
-  }
-  if (type === "draaikiep") {
-    // Draaikiep: binnensponning + opdek (13mm overlap) + 2 rubber groeven
-    const opdek = sp?.opdek_width || 13;
-    const rubberW = 3;
-    const rubberD = 4;
-    // Binnenzijde (boven): sponning met opdek lip
-    // Buitenzijde (onder): glad
-    return [
-      [0, 0],                           // linksonder buiten
-      [w, 0],                           // rechtsonder buiten
-      [w, d],                           // rechtsboven buiten
-      [w - sw, d],                      // begin sponning rechts boven
-      [w - sw, d - opdek],              // opdek lip rechts
-      [w - sw + rubberW, d - opdek],    // rubber groef 1 rechts
-      [w - sw + rubberW, d - opdek - rubberD],
-      [w - sw, d - opdek - rubberD],    // einde rubber 1
-      [w - sw, d - sd],                 // sponning bodem rechts
-      [sw, d - sd],                     // sponning bodem links
-      [sw, d - opdek - rubberD],        // begin rubber 1 links
-      [sw - rubberW, d - opdek - rubberD],
-      [sw - rubberW, d - opdek],        // rubber groef 1 links
-      [sw, d - opdek],                  // opdek lip links
-      [sw, d],                          // sponning bovenkant links
-      [0, d],                           // linksboven buiten
-    ];
-  }
-  // Dubbele sponning
-  if (pos === "dubbel") {
-    const sw2 = sp?.second_width || sw;
-    const sd2 = sp?.second_depth || sd;
-    const kern = sp?.kernhout || 20;
-    return [
-      [0, 0], [w, 0],
-      [w, sd], [w - sw, sd],
-      [w - sw, sd + kern], [w - sw2, sd + kern],
-      [w - sw2, d], [sw2, d],
-      [sw2, sd + kern], [sw, sd + kern],
-      [sw, sd], [0, sd],
-    ];
-  }
-  // Fallback
-  return [[0,0],[w,0],[w,d-sd],[w-sw,d-sd],[w-sw,d],[sw,d],[sw,d-sd],[0,d-sd]];
-}
-
-/**
- * Verrijk een profielspec met een realistische doorsnede uit de
- * parametrische generator (kunststof/aluminium/hout-aluminium):
- * buitencontour + innerWalls (kamers, staal, isolatoren, alu-schaal).
+ * Verrijk een profielspec met een doorsnede uit de parametrische generator
+ * (ui/src/lib/profileContour.js): buitencontour + innerWalls (kamers, staal,
+ * isolatoren, alu-schaal). Hout krijgt de massieve KVT-contour.
+ *
+ * Conventie (identiek aan profiles/*.json en Viewer3D): u 0=muurzijde ..
+ * w=vakzijde, v 0=buitenzijde .. d=binnenzijde. Sponningmaatketen hout per
+ * KVT: sponninghoogte (sponning.depth) 17 mm vast, sponningbreedte
+ * (sponning.width/glazingRebate) 51 mm bij vast glas, aanslagsponning 29 mm
+ * met 6 mm lucht bij draaiende delen (bron: KVT 12.2/14.01, DTS,
+ * TO-binnendetaillering 2024 — zie docs/profielmaten-onderzoek.md).
  */
 function withRealSection(p) {
   return { ...p, ...(generateProfileGeometry(p) || {}) };
@@ -183,84 +118,95 @@ function getEmbeddedProfiles() {
       id: "wood",
       label: "Hout",
       profiles: [
-        { id: "wood-meranti-67x114", name: "Meranti 67x114mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame", "sash", "divider"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: [[0,0],[67,0],[67,97],[55,97],[55,114],[12,114],[12,97],[0,97]] },
-        { id: "wood-meranti-67x150", name: "Meranti 67x150mm (dorpel)", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 150, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["sill"], sponning: { width: 12, depth: 20, position: "buiten" }, crossSection: [[0,0],[67,0],[67,130],[55,130],[55,150],[12,150],[12,130],[0,130]] },
-        { id: "wood-accoya-67x114", name: "Accoya 67x114mm", manufacturer: "Generiek", series: "Accoya", material: "wood", materialSubtype: "accoya", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.5, applicableAs: ["frame", "sash", "divider"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "hebo-67x114", name: "Hebo Kozijn 67x114mm", manufacturer: "Hebo Kozijnen", series: "Classic", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "hebo-67x130", name: "Hebo Kozijn 67x130mm (zwaar)", manufacturer: "Hebo Kozijnen", series: "Classic", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 54, glazingRebate: 30, ufValue: 1.7, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 20, position: "buiten" }, crossSection: generateCrossSection(67, 130, { width: 15, depth: 20, position: "buiten" }) },
-        { id: "goemaat-67x114", name: "Goemaat Standaard 67x114mm", manufacturer: "Goemaat Kozijnen", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "goemaat-67x130", name: "Goemaat Zwaar 67x130mm", manufacturer: "Goemaat Kozijnen", series: "Zwaar", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 54, glazingRebate: 30, ufValue: 1.7, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 20, position: "buiten" }, crossSection: generateCrossSection(67, 130, { width: 15, depth: 20, position: "buiten" }) },
-        { id: "weekamp-67x114", name: "WeekampGroep Standaard 67x114mm", manufacturer: "WeekampGroep", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame", "door_frame"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "raamwerk-67x114", name: "Raamwerk Standaard 67x114mm", manufacturer: "Het Raamwerk", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-      ],
+        { id: "wood-meranti-67x114", name: "Meranti 67x114mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame", "sash", "divider"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "wood-meranti-67x150", name: "Meranti 67x114mm (onderdorpel)", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 53, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, waterhol: true, ufValue: 1.8, applicableAs: ["sill"], sponning: { width: 53, depth: 17, position: "binnen", type: "binnensponning", slopeDegrees: 10 } },
+        { id: "wood-meranti-67x139-dorpel", name: "Meranti 67x139mm (onderdorpel zwaar)", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 139, sightline: 50, glazingRebate: 53, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, waterhol: true, ufValue: 1.7, applicableAs: ["sill"], sponning: { width: 53, depth: 17, position: "binnen", type: "binnensponning", slopeDegrees: 10 } },
+        { id: "wood-meranti-90x114-tussenstijl", name: "Meranti 90x114mm (tussenstijl)", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 90, depth: 114, sightline: 73, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["divider"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+        { id: "wood-accoya-67x114", name: "Accoya 67x114mm", manufacturer: "Generiek", series: "Accoya", material: "wood", materialSubtype: "accoya", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.5, applicableAs: ["frame", "sash", "divider"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "hebo-67x114", name: "Hebo Kozijn 67x114mm", manufacturer: "Hebo Kozijnen", series: "Classic", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "hebo-67x130", name: "Hebo Kozijn 67x130mm (zwaar)", manufacturer: "Hebo Kozijnen", series: "Classic", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.7, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "goemaat-67x114", name: "Goemaat Standaard 67x114mm", manufacturer: "Goemaat Kozijnen", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "goemaat-67x130", name: "Goemaat Zwaar 67x130mm", manufacturer: "Goemaat Kozijnen", series: "Zwaar", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.7, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "weekamp-67x114", name: "WeekampGroep Standaard 67x114mm", manufacturer: "WeekampGroep", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame", "door_frame"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "raamwerk-67x114", name: "Raamwerk Standaard 67x114mm", manufacturer: "Het Raamwerk", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+      ].map(withRealSection),
     },
     {
       id: "aluminum",
       label: "Aluminium",
       profiles: [
-        { id: "reynaers-cs77-frame", name: "Reynaers CS 77", manufacturer: "Reynaers Aluminium", series: "CS 77", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 77, depth: 77, sightline: 54, glazingRebate: 28, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 21, position: "midden" } },
-        { id: "reynaers-cs86-frame", name: "Reynaers CS 86-HI", manufacturer: "Reynaers Aluminium", series: "CS 86-HI", material: "aluminum", materialSubtype: "high_insulation", width: 86, depth: 86, sightline: 60, glazingRebate: 34, ufValue: 1.1, applicableAs: ["frame", "sash"], sponning: { width: 22, depth: 24, position: "midden" } },
-        { id: "schuco-aws70-frame", name: "Schuco AWS 70.HI", manufacturer: "Schuco", series: "AWS 70.HI", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 70, depth: 70, sightline: 50, glazingRebate: 26, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 16, depth: 20, position: "midden" } },
-        { id: "schuco-aws75-frame", name: "Schuco AWS 75.SI+", manufacturer: "Schuco", series: "AWS 75.SI+", material: "aluminum", materialSubtype: "super_insulated", width: 75, depth: 75, sightline: 53, glazingRebate: 32, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" } },
+        { id: "reynaers-cs77-standard", name: "Reynaers CS 77", manufacturer: "Reynaers Aluminium", series: "ConceptSystem 77", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 51, depth: 77, ventDepth: 87, sightline: 51, glazingRebate: 25, ufValue: 2.2, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
+        { id: "reynaers-masterline8", name: "Reynaers MasterLine 8", manufacturer: "Reynaers Aluminium", series: "MasterLine 8", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 53, depth: 77, ventDepth: 87, sightline: 53, sightlineVent: 37, sightlineCombination: 97, glazingRebate: 27, thermalBreakWidth: 40, glazingBeadHeight: 25, glaslatHeight: 25, minGlassThickness: 24, maxGlassThickness: 72, ufValue: 1.9, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 27, position: "midden" } },
+        { id: "reynaers-slimline38-classic", name: "Reynaers SlimLine 38 Classic", manufacturer: "Reynaers Aluminium", series: "SlimLine 38", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 33.5, depth: 99, ventDepth: 86, sightline: 33.5, sightlineVent: 23, sightlineCombination: 67, glazingRebate: 13.5, minGlassThickness: 16, maxGlassThickness: 55, ufValue: 1.9, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 13.5, position: "midden" } },
+        { id: "schuco-aws70hi", name: "Schuco AWS 70.HI", manufacturer: "Schuco", series: "AWS 70.HI", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 51, depth: 70, ventDepth: 80, sightline: 51, glazingRebate: 25, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
+        { id: "schuco-aws75si-plus", name: "Schuco AWS 75.SI+", manufacturer: "Schuco", series: "AWS 75.SI+", material: "aluminum", materialSubtype: "super_insulated", width: 41, depth: 75, ventDepth: 85, sightline: 41, sightlineVent: 59, sightlineCombination: 107, glazingRebate: 25, ufValue: 1.2, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
       ].map(withRealSection),
     },
     {
       id: "pvc",
       label: "Kunststof (PVC)",
       profiles: [
-        { id: "gealan-s9000-frame", name: "Gealan S 9000", manufacturer: "Gealan", series: "S 9000", material: "pvc", materialSubtype: "6_kamer", chambers: 6, steelReinforced: true, width: 83, depth: 83, sightline: 62, glazingRebate: 28, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" } },
-        { id: "gealan-kubus-frame", name: "Gealan-KUBUS", manufacturer: "Gealan", series: "KUBUS", material: "pvc", materialSubtype: "7_kamer", chambers: 7, steelReinforced: true, width: 82.5, depth: 82.5, sightline: 0, glazingRebate: 30, ufValue: 0.88, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" } },
-        { id: "veka-softline82-frame", name: "VEKA Softline 82", manufacturer: "VEKA", series: "Softline 82", material: "pvc", materialSubtype: "7_kamer", chambers: 7, steelReinforced: true, width: 82, depth: 82, sightline: 61, glazingRebate: 28, ufValue: 0.95, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" } },
-        { id: "veka-softline70-frame", name: "VEKA Softline 70", manufacturer: "VEKA", series: "Softline 70", material: "pvc", materialSubtype: "5_kamer", chambers: 5, steelReinforced: true, width: 70, depth: 70, sightline: 53, glazingRebate: 24, ufValue: 1.3, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 18, position: "midden" } },
+        { id: "gealan-s9000", name: "Gealan S 9000", manufacturer: "Gealan", series: "S 9000", material: "pvc", materialSubtype: "6_kamer", chambers: 6, sealingLevels: 3, steelReinforced: true, width: 70, depth: 82.5, sightline: 70, sightlineCombination: 110, sightlineMullion: 92, glazingRebate: 28, glasinval: 18, overslagHoogte: 26, falzluft: 12, stulpNaad: 6, maxGlassThickness: 54, ufValue: 0.89, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 28, position: "midden" } },
+        { id: "gealan-kubus", name: "Gealan-KUBUS", manufacturer: "Gealan", series: "KUBUS", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, flushDesign: true, width: 85, depth: 85, sightline: 0, glazingRebate: 30, maxGlassThickness: 54, ufValue: 0.92, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 30, position: "midden" } },
+        { id: "veka-softline82", name: "VEKA Softline 82 MD", manufacturer: "VEKA", series: "Softline 82", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, chambersSash: 6, sealingLevels: 3, steelReinforced: true, width: 73, depth: 82, sightline: 73, sightlineVent: 84, sightlineCombination: 124, sightlineMullion: 94, glazingRebate: 28, glasinval: 20, falzluft: 12, stulpNaad: 8, minGlassThickness: 24, maxGlassThickness: 52, glazingBead: { clipHeight: 25, widthBase: 59.5 }, glaslatHeight: 25, wallThicknessVisible: 2.8, wallThicknessOther: 2.5, ufValue: 1.1, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 28, position: "midden" } },
+        { id: "veka-softline70", name: "VEKA Softline 70", manufacturer: "VEKA", series: "Softline 70", material: "pvc", materialSubtype: "5_kamer", chambers: 5, sealingLevels: 2, steelReinforced: true, width: 70, depth: 70, sightline: 53, glazingRebate: 24, maxGlassThickness: 40, ufValue: 1.3, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 24, position: "midden" } },
+        { id: "kommerling-88md", name: "Kommerling 88 MD", manufacturer: "Kommerling (profine)", series: "88 MD", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, width: 74, depth: 88, sightline: 74, glazingRebate: 30, maxGlassThickness: 58, ufValue: 0.95, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 30, position: "midden" } },
+        { id: "schuco-living82-md", name: "Schüco LivIng 82 MD", manufacturer: "Schüco", series: "LivIng 82", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, width: 70, depth: 82, sightline: 70, sightlineCombination: 120, minGlassThickness: 16, maxGlassThickness: 54, ufValue: 0.96, applicableAs: ["frame", "sash"] },
       ].map(withRealSection),
     },
     {
       id: "wood-aluminum",
       label: "Hout-Aluminium",
       profiles: [
-        { id: "hout-alu-67x114", name: "Hout-Aluminium 67x114mm", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 114, sightline: 54, glazingRebate: 24, aluCapDepth: 25, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" } },
-        { id: "hout-alu-67x130", name: "Hout-Aluminium 67x130mm (zwaar)", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 130, sightline: 54, glazingRebate: 30, aluCapDepth: 25, ufValue: 1.4, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 20, position: "buiten" } },
+        { id: "hout-alu-67x114", name: "Hout-Aluminium 67x114mm", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, aluCapDepth: 25, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "hout-alu-67x130", name: "Hout-Aluminium 67x130mm (zwaar)", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 130, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, aluCapDepth: 25, ufValue: 1.4, applicableAs: ["frame", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" }, aanslagSponning: { depth: 29, clearance: 6 } },
       ].map(withRealSection),
     },
     {
       id: "raamhout",
       label: "Raamhout (draaidelen)",
       profiles: [
-        { id: "raam-meranti-54x67", name: "Raamhout Meranti 54x67mm", manufacturer: "Generiek", series: "54mm", material: "wood", materialSubtype: "meranti", width: 54, depth: 67, sightline: 42, glazingRebate: 15, ufValue: 2.2, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 12, depth: 15, position: "buiten" }, crossSection: generateCrossSection(54, 67, { width: 12, depth: 15, position: "buiten" }) },
-        { id: "raam-meranti-54x78", name: "Raamhout Meranti 54x78mm (HR++)", manufacturer: "Generiek", series: "54mm", material: "wood", materialSubtype: "meranti", width: 54, depth: 78, sightline: 42, glazingRebate: 20, ufValue: 2.0, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 12, depth: 20, position: "buiten" }, crossSection: generateCrossSection(54, 78, { width: 12, depth: 20, position: "buiten" }) },
-        { id: "raam-meranti-54x90", name: "Raamhout Meranti 54x90mm (Triple)", manufacturer: "Generiek", series: "54mm", material: "wood", materialSubtype: "meranti", width: 54, depth: 90, sightline: 42, glazingRebate: 28, ufValue: 1.8, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 12, depth: 28, position: "buiten" }, crossSection: generateCrossSection(54, 90, { width: 12, depth: 28, position: "buiten" }) },
-        { id: "raam-accoya-54x78", name: "Raamhout Accoya 54x78mm", manufacturer: "Generiek", series: "54mm Accoya", material: "wood", materialSubtype: "accoya", width: 54, depth: 78, sightline: 42, glazingRebate: 20, ufValue: 1.8, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 12, depth: 20, position: "buiten" }, crossSection: generateCrossSection(54, 78, { width: 12, depth: 20, position: "buiten" }) },
-      ],
+        { id: "raam-meranti-54x78", name: "Raamhout Meranti 54x78mm", manufacturer: "Generiek", series: "KVT 54mm", material: "wood", materialSubtype: "meranti", width: 54, depth: 78, sightline: 37, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 2.0, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+        { id: "raam-meranti-54x90", name: "Raamhout Meranti 54x90mm (triple)", manufacturer: "Generiek", series: "KVT 54mm", material: "wood", materialSubtype: "meranti", width: 54, depth: 90, sightline: 37, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+        { id: "raam-meranti-69x90", name: "Raamhout Meranti 69x90mm (draaikiep standaard)", manufacturer: "Generiek", series: "Draaikiep", material: "wood", materialSubtype: "meranti", width: 69, depth: 90, sightline: 52, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+        { id: "raam-accoya-54x78", name: "Raamhout Accoya 54x78mm", manufacturer: "Generiek", series: "KVT 54mm Accoya", material: "wood", materialSubtype: "accoya", width: 54, depth: 78, sightline: 37, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["raam_stijl", "raam_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+      ].map(withRealSection),
     },
     {
       id: "deurhout",
       label: "Deurhout",
       profiles: [
-        { id: "deur-meranti-67x114", name: "Deurhout Meranti 67x114mm", manufacturer: "Generiek", series: "67mm", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["deur_stijl", "deur_dorpel", "sash"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "deur-meranti-67x130", name: "Deurhout Meranti 67x130mm (zwaar)", manufacturer: "Generiek", series: "67mm", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 54, glazingRebate: 30, ufValue: 1.7, applicableAs: ["deur_stijl", "deur_dorpel", "sash"], sponning: { width: 15, depth: 20, position: "buiten" }, crossSection: generateCrossSection(67, 130, { width: 15, depth: 20, position: "buiten" }) },
-      ],
+        { id: "deur-meranti-67x114", name: "Deurhout Meranti 67x114mm", manufacturer: "Generiek", series: "67mm", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["deur_stijl", "deur_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+        { id: "deur-meranti-67x130", name: "Deurhout Meranti 67x130mm (zwaar)", manufacturer: "Generiek", series: "67mm", material: "wood", materialSubtype: "meranti", width: 67, depth: 130, sightline: 50, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.7, applicableAs: ["deur_stijl", "deur_dorpel", "sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "binnensponning" } },
+      ].map(withRealSection),
     },
     {
       id: "glaslat-spouwlat",
       label: "Glaslatten & Spouwlatten",
       profiles: [
-        { id: "glaslat-17x17", name: "Glaslat 17x17mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 17, depth: 17, sightline: 17, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"], crossSection: [[0,0],[17,0],[17,17],[0,17]] },
-        { id: "glaslat-17x22", name: "Glaslat 17x22mm (breed)", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "meranti", width: 17, depth: 22, sightline: 17, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"], crossSection: [[0,0],[17,0],[17,22],[0,22]] },
-        { id: "spouwlat-22x100", name: "Spouwlat 22x100mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 100, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"], crossSection: [[0,0],[22,0],[22,100],[0,100]] },
-        { id: "spouwlat-22x120", name: "Spouwlat 22x120mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 120, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"], crossSection: [[0,0],[22,0],[22,120],[0,120]] },
-        { id: "spouwlat-22x140", name: "Spouwlat 22x140mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 140, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"], crossSection: [[0,0],[22,0],[22,140],[0,140]] },
-      ],
+        // Glaslatten: notatie voet×hoogte (KVT 12.3.2: hoogte >= 17 en >=
+        // sponninghoogte; voet >= 13 binnen / 15 buiten). width = hoogte
+        // (aanzicht), depth = voetbreedte (bouwdiepte).
+        { id: "glaslat-15x17", name: "Glaslat 15x17mm (norm-minimum)", manufacturer: "Generiek", series: "KVT", material: "wood", materialSubtype: "meranti", width: 17, depth: 15, sightline: 17, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"] },
+        { id: "glaslat-17x17", name: "Glaslat 17x17mm (fabrieksstandaard)", manufacturer: "Generiek", series: "KVT", material: "wood", materialSubtype: "meranti", width: 17, depth: 17, sightline: 17, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"] },
+        { id: "glaslat-15x28", name: "Glaslat 15x28mm (handelsmaat)", manufacturer: "Generiek", series: "Handel", material: "wood", materialSubtype: "hardhout", width: 28, depth: 15, sightline: 28, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"] },
+        { id: "glaslat-17x28", name: "Glaslat 17x28mm (handelsmaat)", manufacturer: "Generiek", series: "Handel", material: "wood", materialSubtype: "hardhout", width: 28, depth: 17, sightline: 28, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"] },
+        { id: "glaslat-20x34-5", name: "Glaslat 20x34,5mm (isolatie/triple)", manufacturer: "Generiek", series: "Handel", material: "wood", materialSubtype: "hardhout", width: 34.5, depth: 20, sightline: 34.5, glazingRebate: 0, ufValue: 0, applicableAs: ["glaslat"] },
+        { id: "spouwlat-22x100", name: "Spouwlat 22x100mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 100, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"] },
+        { id: "spouwlat-22x120", name: "Spouwlat 22x120mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 120, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"] },
+        { id: "spouwlat-22x140", name: "Spouwlat 22x140mm", manufacturer: "Generiek", series: "Standaard", material: "wood", materialSubtype: "vuren", width: 22, depth: 140, sightline: 0, glazingRebate: 0, ufValue: 0, applicableAs: ["spouwlat"] },
+      ].map(withRealSection),
     },
     {
       id: "draaikiep",
       label: "Draaikiep (kozijn + raam)",
       profiles: [
-        { id: "dk-kozijn-67x114", name: "DK Kozijn 67x114mm", manufacturer: "Generiek", series: "67mm DK", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.8, applicableAs: ["frame"], sponning: { width: 15, depth: 20, position: "buiten", opdek_width: 13, rubber_count: 2 }, crossSection: generateCrossSection(67, 114, { width: 15, depth: 20, position: "buiten" }) },
-        { id: "dk-raam-54x78", name: "DK Raamhout 54x78mm (opdek)", manufacturer: "Generiek", series: "54mm DK", material: "wood", materialSubtype: "meranti", width: 54, depth: 78, sightline: 39, glazingRebate: 20, ufValue: 2.0, applicableAs: ["sash"], sponning: { width: 15, depth: 20, position: "buiten", opdek_width: 13, rubber_count: 2 }, crossSection: generateCrossSection(54, 78, { width: 15, depth: 20, position: "buiten", opdek_width: 13 }, "draaikiep") },
-        { id: "dk-raam-54x90", name: "DK Raamhout 54x90mm Triple (opdek)", manufacturer: "Generiek", series: "54mm DK", material: "wood", materialSubtype: "meranti", width: 54, depth: 90, sightline: 39, glazingRebate: 28, ufValue: 1.8, applicableAs: ["sash"], sponning: { width: 15, depth: 28, position: "buiten", opdek_width: 13, rubber_count: 2 }, crossSection: generateCrossSection(54, 90, { width: 15, depth: 28, position: "buiten", opdek_width: 13 }, "draaikiep") },
-        { id: "dk-kozijn-78x114", name: "DK Kozijn 78x114mm (zwaar)", manufacturer: "Generiek", series: "78mm DK", material: "wood", materialSubtype: "meranti", width: 78, depth: 114, sightline: 63, glazingRebate: 24, ufValue: 1.6, applicableAs: ["frame"], sponning: { width: 15, depth: 20, position: "buiten", opdek_width: 13, rubber_count: 2 }, crossSection: generateCrossSection(78, 114, { width: 15, depth: 20, position: "buiten" }) },
-        { id: "dk-dubbel-67x114", name: "DK Dubbele sponning 67x114mm", manufacturer: "Generiek", series: "67mm Dubbel", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 43, glazingRebate: 20, ufValue: 1.7, applicableAs: ["frame"], sponning: { width: 12, depth: 17, position: "dubbel", second_width: 12, second_depth: 17, kernhout: 22 }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "dubbel", second_width: 12, second_depth: 17, kernhout: 22 }) },
-      ],
+        { id: "dk-kozijn-67x114", name: "DK Kozijn 67x114mm", manufacturer: "Generiek", series: "67mm DK", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 29, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["frame"], sponning: { width: 29, depth: 17, position: "binnen", type: "binnensponning", opdek_width: 13, rubber_count: 2 }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "dk-raam-54x78", name: "DK Raamhout 54x78mm (opdek)", manufacturer: "Generiek", series: "54mm DK", material: "wood", materialSubtype: "meranti", width: 54, depth: 78, sightline: 37, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 2.0, applicableAs: ["sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "draaikiep", opdek_width: 13, rubber_count: 2 } },
+        { id: "dk-raam-54x90", name: "DK Raamhout 54x90mm Triple (opdek)", manufacturer: "Generiek", series: "54mm DK", material: "wood", materialSubtype: "meranti", width: 54, depth: 90, sightline: 37, glazingRebate: 51, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.8, applicableAs: ["sash"], sponning: { width: 51, depth: 17, position: "binnen", type: "draaikiep", opdek_width: 13, rubber_count: 2 } },
+        { id: "dk-kozijn-78x114", name: "DK Kozijn 78x114mm (zwaar)", manufacturer: "Generiek", series: "78mm DK", material: "wood", materialSubtype: "meranti", width: 78, depth: 114, sightline: 61, glazingRebate: 29, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.6, applicableAs: ["frame"], sponning: { width: 29, depth: 17, position: "binnen", type: "binnensponning", opdek_width: 13, rubber_count: 2 }, aanslagSponning: { depth: 29, clearance: 6 } },
+        { id: "dk-dubbel-67x114", name: "DK Dubbele sponning 67x114mm", manufacturer: "Generiek", series: "67mm Dubbel", material: "wood", materialSubtype: "meranti", width: 67, depth: 114, sightline: 50, glazingRebate: 29, glaslatWidth: 17, glaslatHeight: 17, achterhout: 13, ufValue: 1.7, applicableAs: ["frame"], sponning: { width: 29, depth: 17, position: "dubbel", type: "dubbele_sponning", second_width: 29, second_depth: 17, kernhout: 56 } },
+      ].map(withRealSection),
     },
   ];
 }

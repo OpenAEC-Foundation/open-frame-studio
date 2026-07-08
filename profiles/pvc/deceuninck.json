@@ -12,8 +12,9 @@
     "sealingLevels": 3,
     "sightline": 57,
     "glazingRebate": 26,
-    "maxGlassThickness": 70,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [76, 0],
@@ -50,8 +51,19 @@
     "sponning": {
       "width": 15,
       "depth": 26,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "sealingLevels"
+    ],
+    "dataNotes": [
+      "maxGlassThickness verwijderd: de eerdere waarde 70 mm is fysiek onmogelijk in 76 mm bouwdiepte (6 mm rest voor beide schalen); fabriekswaarde nog niet geverifieerd — niet gegokt",
+      "Deceuninck deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],
@@ -122,6 +134,8 @@
     "glazingRebate": 28,
     "maxGlassThickness": 56,
     "steelReinforced": true,
+    "wallThicknessVisible": 2.8,
+    "wallThicknessOther": 2.5,
     "crossSection": [
       [0, 0],
       [84, 0],
@@ -156,8 +170,18 @@
     "sponning": {
       "width": 15,
       "depth": 28,
-      "type": "buitensponning"
+      "type": "binnensponning"
     },
+    "unverifiedFields": [
+      "sightline",
+      "glazingRebate",
+      "sponning.depth",
+      "ufValue",
+      "maxGlassThickness"
+    ],
+    "dataNotes": [
+      "Eforte deze onderzoeksronde niet fabrieksgeverifieerd"
+    ],
     "innerWalls": [
       [
         [2.8, 2.8],

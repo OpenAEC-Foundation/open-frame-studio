@@ -8,17 +8,17 @@
     "materialSubtype": "meranti_alu",
     "width": 67,
     "depth": 114,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "sightline": 50,
+    "glazingRebate": 51,
     "maxGlassWeight": 90,
     "aluCapWidth": 40,
     "aluCapDepth": 25,
     "crossSection": [
       [0, 0],
       [67, 0],
-      [67, 90],
-      [55, 90],
-      [55, 114],
+      [67, 63],
+      [50, 63],
+      [50, 114],
       [0, 114]
     ],
     "ufValue": 1.5,
@@ -39,10 +39,26 @@
       "DB703"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
     },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte houten kern vast 17 mm (zichtlijn 50)",
+      "KVT-tekening 14.01 + DTS: binnensponning vast glas 51x17",
+      "TO-binnendetaillering 2024: aanslagsponning draaiend deel 29 mm, lucht 6 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ],
     "innerWalls": [
       [
         [0, 0],
@@ -71,17 +87,17 @@
     "materialSubtype": "meranti_alu",
     "width": 67,
     "depth": 130,
-    "sightline": 54,
-    "glazingRebate": 30,
+    "sightline": 50,
+    "glazingRebate": 51,
     "maxGlassWeight": 110,
     "aluCapWidth": 40,
     "aluCapDepth": 25,
     "crossSection": [
       [0, 0],
       [67, 0],
-      [67, 100],
-      [55, 100],
-      [55, 130],
+      [67, 79],
+      [50, 79],
+      [50, 130],
       [0, 130]
     ],
     "ufValue": 1.4,
@@ -102,10 +118,28 @@
       "DB703"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 30,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
     },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte 17 mm; sponningbreedte 51 (KVT 14.01/DTS)"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight",
+      "depth"
+    ],
+    "dataNotes": [
+      "diepte 130 valt buiten de KVT-reeks (90/102/114/139) — fabrieksmaat niet geverifieerd"
+    ],
     "innerWalls": [
       [
         [0, 0],
@@ -126,26 +160,26 @@
     ]
   },
   {
-    "id": "hout-alu-67x150-dorpel",
-    "name": "Hout-Aluminium Dorpel 67x150mm",
+    "id": "hout-alu-67x114-dorpel",
+    "name": "Hout-Aluminium Onderdorpel 67x114mm",
     "manufacturer": "Generiek",
     "series": "Hout-Aluminium Combi",
     "material": "wood_aluminum",
     "materialSubtype": "meranti_alu",
     "width": 67,
-    "depth": 150,
-    "sightline": 54,
-    "glazingRebate": 24,
+    "depth": 114,
+    "sightline": 50,
+    "glazingRebate": 53,
     "maxGlassWeight": null,
     "aluCapWidth": 50,
     "aluCapDepth": 30,
     "crossSection": [
       [0, 0],
       [67, 0],
-      [67, 126],
-      [55, 126],
-      [55, 150],
-      [0, 150]
+      [67, 61],
+      [50, 61],
+      [50, 114],
+      [0, 114]
     ],
     "ufValue": 1.5,
     "applicableAs": [
@@ -160,10 +194,22 @@
       "RAL9005"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
-      "type": "binnensponning"
+      "width": 53,
+      "depth": 17,
+      "type": "binnensponning",
+      "slopeDegrees": 10
     },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 61.1 + DTS + TO 2024: standaard onderdorpel 67x114 (verving 67x150 — geen reeks-/handelsmaat)",
+      "KVT 14.2: sponningbodem afwaterend >= 9 graden (praktijk 10); aluminium schaal werkt als lekdorpel"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
     "innerWalls": [
       [
         [0, 0],
@@ -184,28 +230,28 @@
     ]
   },
   {
-    "id": "hout-alu-54x114-tussenstijl",
-    "name": "Hout-Aluminium Tussenstijl 54x114mm",
+    "id": "hout-alu-90x114-tussenstijl",
+    "name": "Hout-Aluminium Tussenstijl 90x114mm",
     "manufacturer": "Generiek",
     "series": "Hout-Aluminium Combi",
     "material": "wood_aluminum",
     "materialSubtype": "meranti_alu",
-    "width": 54,
+    "width": 90,
     "depth": 114,
-    "sightline": 42,
-    "glazingRebate": 24,
+    "sightline": 73,
+    "glazingRebate": 51,
     "maxGlassWeight": null,
-    "aluCapWidth": 30,
+    "aluCapWidth": 40,
     "aluCapDepth": 25,
     "crossSection": [
       [0, 0],
-      [54, 0],
-      [54, 90],
-      [42, 90],
-      [42, 114],
-      [12, 114],
-      [12, 90],
-      [0, 90]
+      [90, 0],
+      [90, 63],
+      [73, 63],
+      [73, 114],
+      [17, 114],
+      [17, 63],
+      [0, 63]
     ],
     "ufValue": 1.5,
     "applicableAs": [
@@ -219,27 +265,36 @@
       "RAL7016"
     ],
     "sponning": {
-      "width": 12,
-      "depth": 24,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
     },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 30.5.3 + TO 2024 p.11-12: tussenstijl 90x114 fabrieksstandaard; 54 mm bestaat niet als kozijn-tussenstijl"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
     "innerWalls": [
       [
         [0, 0],
-        [54, 0],
-        [54, 25],
-        [52, 25],
-        [52, 2],
+        [90, 0],
+        [90, 25],
+        [88, 25],
+        [88, 2],
         [2, 2],
         [2, 25],
         [0, 25]
       ],
       [
         [2, 2],
-        [52, 2],
-        [52, 25],
-        [48, 25],
-        [48, 6],
+        [88, 2],
+        [88, 25],
+        [84, 25],
+        [84, 6],
         [6, 6],
         [6, 25],
         [2, 25]

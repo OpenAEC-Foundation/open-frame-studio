@@ -8,35 +8,17 @@
     "materialSubtype": "meranti",
     "width": 66,
     "depth": 110,
-    "sightline": 54,
-    "glazingRebate": 20,
+    "sightline": 49,
+    "glazingRebate": 51,
     "maxGlassWeight": 70,
     "profileType": "A",
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        66,
-        0
-      ],
-      [
-        66,
-        90
-      ],
-      [
-        54,
-        90
-      ],
-      [
-        54,
-        110
-      ],
-      [
-        0,
-        110
-      ]
+      [0, 0],
+      [66, 0],
+      [66, 59],
+      [49, 59],
+      [49, 110],
+      [0, 110]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -52,12 +34,28 @@
       "RAL9001",
       "RAL9016"
     ],
-    "description": "Stijl en bovendorpel met sponning aan achterzijde voor spouwlat",
+    "description": "Stijl en bovendorpel; bij toepassing als bovendorpel is een waterhol of aluminium lekdorpel verplicht (KVT 13.5/14.5)",
     "sponning": {
-      "width": 12,
-      "depth": 20,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2: sponninghoogte dagkanten vast 17 mm",
+      "KVT-tekening 14.01 + DTS: binnensponning vast glas 51x17",
+      "dekkerhout.nl/bouwsub.nl: A/B/C/D-indeling is handelsjargon voor 66x110-kozijnhout, geen KVT-normterm (KVT gebruikt A-H voor overspanningstabellen)"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight"
+    ]
   },
   {
     "id": "abc-b-66x110",
@@ -68,35 +66,19 @@
     "materialSubtype": "meranti",
     "width": 66,
     "depth": 110,
-    "sightline": 54,
-    "glazingRebate": 20,
+    "sightline": 49,
+    "glazingRebate": 51,
     "maxGlassWeight": null,
     "profileType": "B",
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        66,
-        0
-      ],
-      [
-        66,
-        90
-      ],
-      [
-        54,
-        90
-      ],
-      [
-        54,
-        110
-      ],
-      [
-        0,
-        110
-      ]
+      [0, 0],
+      [66, 0],
+      [66, 59],
+      [49, 59],
+      [49, 110],
+      [17, 110],
+      [17, 59],
+      [0, 59]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -113,10 +95,23 @@
     ],
     "description": "Tussenstijl met dubbele sponning (beide zijden)",
     "sponning": {
-      "width": 12,
-      "depth": 20,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "KVT 12.2 + tekening 14.01: sponning 17x51 aan beide vakzijden",
+      "KVT 30.5.3: tussenstijl 67 of 90 breed toegestaan, verschil met stijlen <= 25 mm; fabrieksstandaard is 90x114"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
+    "dataNotes": [
+      "66 mm tussenstijl is de lichtste toegestane variant; fabrieksstandaard voor tussenstijlen is 90x114 (TO-binnendetaillering 2024)"
+    ]
   },
   {
     "id": "abc-c-66x110",
@@ -127,35 +122,19 @@
     "materialSubtype": "meranti",
     "width": 66,
     "depth": 110,
-    "sightline": 54,
-    "glazingRebate": 20,
+    "sightline": 49,
+    "glazingRebate": 53,
     "maxGlassWeight": null,
     "profileType": "C",
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        66,
-        0
-      ],
-      [
-        66,
-        90
-      ],
-      [
-        54,
-        90
-      ],
-      [
-        54,
-        110
-      ],
-      [
-        0,
-        110
-      ]
+      [0, 0],
+      [66, 0],
+      [66, 57],
+      [41.1, 57],
+      [49, 102],
+      [64, 102],
+      [64, 110],
+      [0, 110]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -170,12 +149,28 @@
       "RAL9010",
       "RAL9001"
     ],
-    "description": "Onderdorpel met schuine onderzijde voor waterafvoer",
+    "description": "Onderdorpel met afwaterende sponningbodem (10 graden) en opstand 8x15",
     "sponning": {
-      "width": 12,
-      "depth": 20,
-      "type": "binnensponning"
-    }
+      "width": 53,
+      "depth": 17,
+      "type": "binnensponning",
+      "slopeDegrees": 10
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 14.2: sponningbodem onder-/tussendorpels afwaterend >= 9 graden (praktijk 10)",
+      "KVT-tekening 14.01: bodem 45 mm + opstand >= 8 breed x >= 15 hoog (sponningbreedte 53 = DTS-reeksmaat)",
+      "KVT 11: 15 mm vrij onder de neus; toegangsdorpel <= 20 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
+    "dataNotes": [
+      "KVT 30.5.3: onderdorpel type C is niet mogelijk in 67 mm dikte — dit 66x110-handelsprofiel is een lichte uitvoering; standaard fabrieksdorpel is 67x114"
+    ]
   },
   {
     "id": "abc-d-66x110",
@@ -186,35 +181,19 @@
     "materialSubtype": "meranti",
     "width": 66,
     "depth": 110,
-    "sightline": 54,
-    "glazingRebate": 20,
+    "sightline": 49,
+    "glazingRebate": 51,
     "maxGlassWeight": null,
     "profileType": "D",
     "crossSection": [
-      [
-        0,
-        0
-      ],
-      [
-        66,
-        0
-      ],
-      [
-        66,
-        90
-      ],
-      [
-        54,
-        90
-      ],
-      [
-        54,
-        110
-      ],
-      [
-        0,
-        110
-      ]
+      [0, 0],
+      [66, 0],
+      [66, 59],
+      [49, 59],
+      [49, 110],
+      [17, 110],
+      [17, 59],
+      [0, 59]
     ],
     "ufValue": 1.8,
     "applicableAs": [
@@ -229,11 +208,22 @@
       "RAL9010",
       "RAL9001"
     ],
-    "description": "Horizontale tussendorpel (kalf) tussen deur en bovenlicht",
+    "description": "Horizontale tussendorpel (kalf) tussen deur en bovenlicht; waterhol of aluminium lekdorpel verplicht",
     "sponning": {
-      "width": 12,
-      "depth": 20,
+      "width": 51,
+      "depth": 17,
       "type": "binnensponning"
-    }
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 13.5/14.5: waterhol of aluminium lekdorpel verplicht in boven- en tussendorpels",
+      "KVT 14.2: bovenkant tussendorpel mag binnensponning 14 / buitensponning 16 mm; dagkant blijft 17"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ]
   }
 ]

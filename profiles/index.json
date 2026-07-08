@@ -1,6 +1,6 @@
 {
-  "version": "2.0",
-  "description": "Open Frame Studio Profielbibliotheek - geverifieerde specificaties",
+  "version": "2.1",
+  "description": "Open Frame Studio Profielbibliotheek - KVT-/systeemgeverifieerde specificaties (zie docs/profielmaten-onderzoek.md; velden 'sources', 'unverifiedFields' en 'dataNotes' per profiel)",
   "categories": [
     {
       "id": "wood",
@@ -10,6 +10,7 @@
         "wood/kvt-standaard.json",
         "wood/abc-profiel.json",
         "wood/raamhout.json",
+        "wood/glaslatten.json",
         "wood/meranti.json",
         "wood/accoya.json",
         "wood/hebo.json",
@@ -39,8 +40,10 @@
         "pvc/gealan.json",
         "pvc/veka.json",
         "pvc/kommerling.json",
+        "pvc/schuco-living.json",
         "pvc/aluplast.json",
         "pvc/deceuninck.json",
+        "pvc/hebo.json",
         "pvc/generic.json"
       ]
     },
