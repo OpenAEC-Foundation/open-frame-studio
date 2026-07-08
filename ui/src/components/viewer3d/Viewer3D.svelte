@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
+  import { allProfiles } from "../../stores/profiles.js";
   import { _ } from "svelte-i18n";
 
   let { visible = true } = $props();
@@ -67,6 +68,67 @@
   function getFrameColor(kozijn) {
     const key = getMaterialKey(kozijn?.frame?.material);
     return MATERIAL_COLORS[key] || MATERIAL_COLORS["wood(meranti)"];
+  }
+
+  // Compact string hash (djb2) — rebuild-signature van grotere deelobjecten
+  // (layout-boom, geometrie-payload) zonder de volledige JSON te bewaren.
+  function hashStr(s) {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+
+  // --- Profiel-doorsnedes (echte kozijnhout-/kamerprofiel-secties) ---
+  //
+  // crossSection-conventie van de profielbibliotheek (profiles/*.json en
+  // ui/src/lib/profileContour.js): [u, v]-punten in mm.
+  //   u: 0 = muurzijde ..... w = vakzijde (dagkant, waar het glas/vak zit)
+  //   v: 0 = buitenzijde ... d = binnenzijde (bouwdiepte)
+  // Klopt met de sponning-metadata op schijf: een "binnensponning" heeft zijn
+  // inkeping op de vakzijde-binnen-hoek (u=w, v=d), een "buitensponning" op
+  // (u=w, v=0). NB: de embedded browser-fallback in stores/profiles.js
+  // (generateCrossSection) is ouder en u-symmetrisch; die rendert hiermee ook,
+  // alleen kan zijn sponningdetail aan de andere dieptezijde uitkomen.
+  //
+  // Een bruikbare doorsnede heeft na opschoning ≥ 5 punten: de bibliotheek-
+  // kozijnhoutsecties (één sponninginkeping) tellen er 6; rechthoekige
+  // placeholders (glaslat, spouwlat) tellen er 4 en renderen als box —
+  // identiek aan een rechthoek-extrusie.
+  // Lookup identiek aan PropertiesPanel: allProfiles bevat bibliotheek +
+  // custom/geïmporteerde profielen (project.custom_profiles).
+  function resolveProfileSection(ref, profiles) {
+    if (!ref?.id || !Array.isArray(profiles)) return null;
+    const def = profiles.find((p) => p.id === ref.id);
+    const cs = def?.crossSection;
+    if (!Array.isArray(cs) || cs.length < 5) return null;
+    const pts = [];
+    for (const p of cs) {
+      const u = Number(p?.[0]);
+      const v = Number(p?.[1]);
+      if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+      // Opeenvolgende dubbele punten overslaan (DXF-import herhaalt punten).
+      const prev = pts[pts.length - 1];
+      if (prev && Math.abs(prev[0] - u) < 1e-6 && Math.abs(prev[1] - v) < 1e-6) continue;
+      pts.push([u, v]);
+    }
+    // Expliciet sluitpunt (gelijk aan startpunt) weglaten.
+    if (pts.length > 2) {
+      const [fu, fv] = pts[0];
+      const [lu, lv] = pts[pts.length - 1];
+      if (Math.abs(fu - lu) < 1e-6 && Math.abs(fv - lv) < 1e-6) pts.pop();
+    }
+    if (pts.length < 5) return null;
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    for (const [u, v] of pts) {
+      if (u < minU) minU = u;
+      if (u > maxU) maxU = u;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+    const w = maxU - minU;
+    const d = maxV - minV;
+    if (!(w > 0.5) || !(d > 0.5)) return null;
+    return { id: def.id, pts, minU, minV, w, d };
   }
 
   async function loadThreeJS() {
@@ -209,7 +271,7 @@
 
   // --- 3D Kozijn Builder ---
 
-  function build3DKozijn(scene, kozijn, geometry) {
+  function build3DKozijn(scene, kozijn, geometry, profiles) {
     // Remove previous kozijn group
     if (kozijnGroup) {
       scene.remove(kozijnGroup);
@@ -314,11 +376,115 @@
       kozijnGroup.add(makeBox({ x: rect.x + rect.width - w, y: rect.y + w, width: w, height: innerH }, depth, material, zOffset));
     }
 
-    // Frame members
-    if (geometry.frameRects) {
-      for (const rect of geometry.frameRects) {
-        kozijnGroup.add(makeBox(rect, frameDepth, frameMat));
+    // --- Echte profiel-extrusies voor kozijnleden ---
+    // Hergebruik binnen deze build: één THREE.Shape per profiel en één
+    // ExtrudeGeometry per uniek (profiel, lengte)-paar — vakken met gelijke
+    // maten delen zo hun geometrie. Meshes mogen geometrie delen: de teardown
+    // in build3DKozijn/onDestroy mag dispose() dan meermaals aanroepen
+    // (BufferGeometry.dispose is idempotent).
+    const sectionCache = new Map(); // profileRef.id -> section | null
+    const shapeCache = new Map(); // section.id -> THREE.Shape
+    const extrudeCache = new Map(); // `${section.id}|${lengte}` -> ExtrudeGeometry
+    const profileList = Array.isArray(profiles) ? profiles : [];
+
+    function getSection(ref) {
+      const key = ref?.id;
+      if (!key) return null;
+      if (sectionCache.has(key)) return sectionCache.get(key);
+      const section = resolveProfileSection(ref, profileList);
+      sectionCache.set(key, section);
+      return section;
+    }
+
+    function getExtrudedGeometry(section, length, mirrored) {
+      const shapeKey = mirrored ? `${section.id}|m` : section.id;
+      const key = `${shapeKey}|${length}`;
+      let geo = extrudeCache.get(key);
+      if (!geo) {
+        let shape = shapeCache.get(shapeKey);
+        if (!shape) {
+          // Gespiegeld: u' = w - u (vakzijde wisselt van kant); ExtrudeGeometry
+          // normaliseert de omgekeerde winding zelf.
+          const su = (u) => (mirrored ? section.w - (u - section.minU) : u - section.minU);
+          shape = new THREE.Shape();
+          shape.moveTo(su(section.pts[0][0]), section.pts[0][1] - section.minV);
+          for (let i = 1; i < section.pts.length; i++) {
+            shape.lineTo(su(section.pts[i][0]), section.pts[i][1] - section.minV);
+          }
+          shape.closePath();
+          shapeCache.set(shapeKey, shape);
+        }
+        geo = new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
+        extrudeCache.set(key, geo);
       }
+      return geo;
+    }
+
+    // Eén kozijnlid als profiel-extrusie.
+    //
+    // Viewer-assen: X = breedte (2D x), Y = hoogte (2D y omgeklapt), Z = diepte
+    // met -Z = buiten en +Z = binnen (glas en muur zitten richting -Z). De
+    // shape leeft lokaal in XY (x = u = aanzichtbreedte, y = v = bouwdiepte,
+    // v=0 = buiten) en wordt langs lokaal +Z over de lidlengte geëxtrudeerd.
+    // De rotaties (Euler-order ZYX, numeriek geverifieerd tegen three r183):
+    //   stijl  ("v"): (u, v, t) -> wereld (u, -t, v) — doorsnede in het
+    //                 XZ-vlak, extrusie langs Y; u loopt naar +X
+    //   dorpel ("h"): (u, v, t) -> wereld (t, u, v)  — doorsnede in het
+    //                 YZ-vlak, extrusie langs X; u loopt naar +Y
+    // `mirrored` klapt de doorsnede in de aanzichtrichting zodat de vakzijde
+    // (u=w) naar het vak wijst: linkerstijl/onderdorpel normaal,
+    // rechterstijl/bovendorpel gespiegeld; tussenleden (glas aan twee kanten)
+    // blijven ongespiegeld/gecentreerd.
+    // Binnenvlakken liggen vlak in één front: v=d (binnen) op Z=+frameDepth/2,
+    // zodat een dieper profiel (bv. onderdorpel met waterhol) aan de
+    // buitenzijde uitsteekt — zoals in het echt. De doorsnede wordt in de
+    // aanzichtrichting gecentreerd op het lid als profiel- en lidbreedte
+    // verschillen. Leden sluiten stomp aan (geen verstek) — zelfde aansluiting
+    // als de oude boxen; verstekken volgen in een latere fase.
+    function makeProfileMember(rect, section, material, orientation, mirrored = false) {
+      const length = orientation === "v" ? rect.height : rect.width;
+      if (!(length > 0) || !(rect.width > 0) || !(rect.height > 0)) return null;
+      const mesh = new THREE.Mesh(getExtrudedGeometry(section, length, mirrored), material);
+      mesh.rotation.order = "ZYX"; // eerst de X-, dan de Z-rotatie op de vector
+      const zBinnen = frameDepth / 2 - section.d; // v=0 hier → v=d op +frameDepth/2
+      if (orientation === "v") {
+        mesh.rotation.set(Math.PI / 2, 0, 0);
+        mesh.position.set(
+          rect.x + (rect.width - section.w) / 2, // aanzicht gecentreerd op het lid
+          -rect.y, // extrusie start bovenaan en loopt omlaag
+          zBinnen
+        );
+      } else {
+        mesh.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+        mesh.position.set(
+          rect.x, // extrusie start links
+          -(rect.y + rect.height) + (rect.height - section.w) / 2,
+          zBinnen
+        );
+      }
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // Frame members — echte profieldoorsnede waar beschikbaar, anders box.
+    // frameRects-volgorde uit compute_2d_geometry: [top, bottom/sill, left,
+    // right]; per lid geldt de override-keten uit PropertiesPanel. Spiegeling:
+    // vakzijde van de doorsnede naar het vak toe (top en rechts gespiegeld).
+    if (geometry.frameRects) {
+      const f = kozijn.frame || {};
+      const members = [
+        { ref: f.topProfile || f.profile, orientation: "h", mirrored: true },
+        { ref: f.bottomProfile || f.sillProfile || f.profile, orientation: "h", mirrored: false },
+        { ref: f.leftProfile || f.profile, orientation: "v", mirrored: false },
+        { ref: f.rightProfile || f.profile, orientation: "v", mirrored: true },
+      ];
+      geometry.frameRects.forEach((rect, i) => {
+        const m = members[i] || { ref: f.profile, orientation: rect.height >= rect.width ? "v" : "h", mirrored: false };
+        const section = getSection(m.ref);
+        const mesh = section && makeProfileMember(rect, section, frameMat, m.orientation, m.mirrored);
+        kozijnGroup.add(mesh || makeBox(rect, frameDepth, frameMat));
+      });
     }
 
     // Cell contents: glass, sash frames, panel fillings, glazing beads
@@ -330,21 +496,45 @@
     if (geometry.cellRects) {
       for (const cellRect of geometry.cellRects) {
         const cell = kozijn.cells?.[cellRect.cellIndex];
-        const panelType = cell?.panelType || "fixed_glass";
+        // Vakvulling: nieuw optioneel veld op cellRect (vrije indeling).
+        // Oude wasm-bundles en matrix-kozijnen leveren het niet mee — dan
+        // bepaalt de matrix-cel (kozijn.cells) het vaktype, zoals voorheen.
+        const vullingType = typeof cellRect.vulling?.type === "string" ? cellRect.vulling.type : null;
+        let kind;
+        if (vullingType) {
+          kind = {
+            glas: "glass",
+            raam: "sash",
+            deur: "door",
+            paneel: "panel",
+            rooster: "ventilation",
+            buiten: "buiten",
+          }[vullingType] || "glass";
+        } else {
+          const panelType = cell?.panelType || "fixed_glass";
+          if (panelType === "panel") kind = "panel";
+          else if (panelType === "ventilation") kind = "ventilation";
+          else if (panelType === "door") kind = "door";
+          else if (OPERABLE_TYPES.has(panelType)) kind = "sash";
+          else kind = "glass";
+        }
+        // Buiten het kozijn (muur, getrapte contour) — geen vulling tekenen.
+        if (kind === "buiten") continue;
+
         const rect = cellRect.rect;
         const cellInset = insetRectBy(rect, GLASS_CLEARANCE);
 
         // Vakvulling (infill panel / ventilation grille)
-        if (panelType === "panel" || panelType === "ventilation") {
+        if (kind === "panel" || kind === "ventilation") {
           const filling = cell?.panelFilling;
           const thickness = filling?.thicknessMm || frameDepth * 0.6;
           const tint = FILLING_COLORS[filling?.fillingType] ||
-            (panelType === "ventilation" ? FILLING_COLORS.ventilation : PANEL_COLOR);
+            (kind === "ventilation" ? FILLING_COLORS.ventilation : PANEL_COLOR);
           const fillMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.8, metalness: 0.0 });
           kozijnGroup.add(makeBox(cellInset, thickness, fillMat, 0));
 
           // Ventilation grille — horizontal louver slats proud of the panel
-          if (panelType === "ventilation") {
+          if (kind === "ventilation") {
             const slatCount = Math.max(2, Math.min(8, Math.floor(cellInset.height / 90)));
             const slatMat = new THREE.MeshStandardMaterial({ color: 0x6B7178, roughness: 0.5, metalness: 0.3 });
             const gap = cellInset.height / (slatCount + 1);
@@ -359,7 +549,7 @@
         }
 
         // Glazed cell (fixed glass, operable sash, or door)
-        const isOperable = OPERABLE_TYPES.has(panelType);
+        const isOperable = kind === "sash" || kind === "door";
         let glassHostRect = cellInset;
 
         if (isOperable) {
@@ -371,7 +561,7 @@
           glassHostRect = insetRectBy(cellInset, sashWidth);
         }
 
-        if (panelType === "door") {
+        if (kind === "door") {
           // Door leaf — opaque infill inside the door sash frame
           kozijnGroup.add(makeBox(glassHostRect, frameDepth * 0.7, doorMat, 0));
         } else {
@@ -394,18 +584,26 @@
       }
     }
 
-    // Vertical dividers
+    // Vertical dividers (tussenstijlen) — divider i zit tussen kolom i en
+    // i+1; ofs-core bewaart zijn profiel op kolom i+1 (zie PropertiesPanel).
+    // Layout-afgeleide dividers zonder grid-kolom volgen het kozijnprofiel.
     if (geometry.vDividers) {
-      for (const rect of geometry.vDividers) {
-        kozijnGroup.add(makeBox(rect, frameDepth, dividerMat));
-      }
+      geometry.vDividers.forEach((rect, i) => {
+        const ref = kozijn.grid?.columns?.[i + 1]?.dividerProfile || kozijn.frame?.profile;
+        const section = getSection(ref);
+        const mesh = section && makeProfileMember(rect, section, dividerMat, "v");
+        kozijnGroup.add(mesh || makeBox(rect, frameDepth, dividerMat));
+      });
     }
 
-    // Horizontal dividers
+    // Horizontal dividers (tussendorpels)
     if (geometry.hDividers) {
-      for (const rect of geometry.hDividers) {
-        kozijnGroup.add(makeBox(rect, frameDepth, dividerMat));
-      }
+      geometry.hDividers.forEach((rect, i) => {
+        const ref = kozijn.grid?.rows?.[i + 1]?.dividerProfile || kozijn.frame?.profile;
+        const section = getSection(ref);
+        const mesh = section && makeProfileMember(rect, section, dividerMat, "h");
+        kozijnGroup.add(mesh || makeBox(rect, frameDepth, dividerMat));
+      });
     }
 
     // Wall context — gray wall behind the kozijn with an opening cutout.
@@ -455,6 +653,7 @@
   $effect(() => {
     const k = $currentKozijn;
     const g = $currentGeometry;
+    const profiles = $allProfiles || [];
     if (!scene || !k || !g) return;
     // Per-cell signature so type / sash / glaslat / filling / glass changes rebuild the model
     const cellSig = (k.cells || []).map((c) => [
@@ -464,10 +663,39 @@
       c.panelFilling ? `${c.panelFilling.fillingType}${c.panelFilling.thicknessMm}` : "",
       c.glazing?.thicknessMm || "",
     ].join(":")).join("|");
-    const newJson = JSON.stringify({ id: k.id, w: k.frame?.outerWidth, h: k.frame?.outerHeight, cells: k.cells?.length, shape: k.frame?.shape?.shapeType, sig: cellSig });
+    // Profiel-signature: gekozen profiel-ids per lid + of er een echte
+    // doorsnede voor beschikbaar is (rebuild zodra custom profielen laden).
+    const f = k.frame || {};
+    const usedRefs = [
+      f.profile, f.sillProfile, f.topProfile, f.bottomProfile, f.leftProfile, f.rightProfile,
+      ...(k.grid?.columns || []).map((c) => c?.dividerProfile),
+      ...(k.grid?.rows || []).map((r) => r?.dividerProfile),
+    ];
+    const profSig = usedRefs.map((ref) => {
+      if (!ref?.id) return "-";
+      const def = profiles.find((p) => p.id === ref.id);
+      return `${ref.id}:${Array.isArray(def?.crossSection) ? def.crossSection.length : 0}`;
+    }).join(",");
+    const newJson = JSON.stringify({
+      id: k.id,
+      w: f.outerWidth,
+      h: f.outerHeight,
+      cells: k.cells?.length,
+      shape: f.shape?.shapeType,
+      sig: cellSig,
+      mat: getMaterialKey(f.material),
+      fw: f.frameWidth,
+      fd: f.frameDepth,
+      prof: profSig,
+      // Vrije indeling: compacte hash van de layout-boom (splits/vullingen).
+      layout: k.layout ? hashStr(JSON.stringify(k.layout)) : "",
+      // Hash van de geometrie-payload zelf — vangt layout-afgeleide vakken en
+      // cellRect.vulling die pas na een async geometrie-refresh binnenkomen.
+      geo: hashStr(JSON.stringify(g)),
+    });
     if (newJson !== prevGeomJson) {
       prevGeomJson = newJson;
-      build3DKozijn(scene, k, g);
+      build3DKozijn(scene, k, g, profiles);
     }
   });
 
@@ -487,7 +715,7 @@
       try {
         initScene();
         if ($currentKozijn && $currentGeometry) {
-          build3DKozijn(scene, $currentKozijn, $currentGeometry);
+          build3DKozijn(scene, $currentKozijn, $currentGeometry, $allProfiles || []);
         }
         resizeObserver = new ResizeObserver(() => handleResize());
         resizeObserver.observe(container);
