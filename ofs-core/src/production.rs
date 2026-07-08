@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::joint::{Joint, JointType, ThroughMember};
 use crate::kozijn::{Kozijn, Material, PanelType};
 
 // ── Cut list constants ─────────────────────────────────────────────
@@ -191,6 +192,169 @@ fn miter_angle(material: &Material) -> f64 {
     }
 }
 
+// ── Corner-joint driven frame member cuts ───────────────────────────
+//
+// `kozijn.frame.corner_joints` holds per-corner joint configurations in the
+// order [top-left, top-right, bottom-left, bottom-right] (see kozijn.rs).
+// When the user has configured them, the saw list is derived from those
+// joints. When they are absent, incomplete, or still the untouched
+// auto-populated default set, we fall back to the historic material-based
+// behaviour so existing projects keep producing identical saw lists.
+
+/// Which way a frame member runs; decides who is the "through" member at a corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameOrientation {
+    /// Vertical member (stijl)
+    Stijl,
+    /// Horizontal member (dorpel)
+    Dorpel,
+}
+
+/// Resolved saw-list numbers for one frame member.
+struct MemberCut {
+    net: f64,
+    gross: f64,
+    /// Cut angle at the first end (top end for stijlen, left end for dorpels).
+    angle_start: f64,
+    /// Cut angle at the second end (bottom end for stijlen, right end for dorpels).
+    angle_end: f64,
+}
+
+/// `Kozijn::new` auto-populates four `Joint::default()` entries (pen/slis,
+/// stijl through, 90 deg, pen 20 mm) regardless of material. An untouched
+/// default set therefore carries no user intent: treat it as "not configured"
+/// so aluminum/PVC frames keep their miter default and wood frames keep the
+/// historic gross lengths.
+fn is_untouched_default_joint(j: &Joint) -> bool {
+    j.joint_type == JointType::PenSlis
+        && j.through_member == ThroughMember::Stijl
+        && (j.angle - 90.0).abs() < 1e-6
+        && (j.pen_length - 20.0).abs() < 1e-6
+}
+
+/// The four corner joints in [TL, TR, BL, BR] order, or `None` when the
+/// material-based fallback should be used.
+fn effective_corner_joints(kozijn: &Kozijn) -> Option<[&Joint; 4]> {
+    let joints = &kozijn.frame.corner_joints;
+    if joints.len() < 4 {
+        return None;
+    }
+    if joints[..4].iter().all(is_untouched_default_joint) {
+        return None;
+    }
+    Some([&joints[0], &joints[1], &joints[2], &joints[3]])
+}
+
+/// How much a member's net length is reduced at one end by the joint there.
+fn joint_end_reduction(orientation: FrameOrientation, joint: &Joint, fw: f64) -> f64 {
+    match joint.joint_type {
+        // Miter: both members stop at the diagonal; net = short (inner) edge.
+        JointType::Verstek => fw,
+        // Pen/slis, contramal, stomp: the through member runs to the outer
+        // edge, the other member fits against/into it.
+        _ => {
+            let is_through = matches!(
+                (orientation, joint.through_member),
+                (FrameOrientation::Stijl, ThroughMember::Stijl)
+                    | (FrameOrientation::Dorpel, ThroughMember::Dorpel)
+            );
+            if is_through {
+                0.0
+            } else {
+                fw
+            }
+        }
+    }
+}
+
+/// Extra gross-length allowance at one end (tenon length, weld overmeasure).
+fn joint_end_allowance(orientation: FrameOrientation, joint: &Joint, material: &Material) -> f64 {
+    match joint.joint_type {
+        JointType::PenSlis => {
+            let is_through = matches!(
+                (orientation, joint.through_member),
+                (FrameOrientation::Stijl, ThroughMember::Stijl)
+                    | (FrameOrientation::Dorpel, ThroughMember::Dorpel)
+            );
+            // The pen (tenon) sits on the non-through member; the through
+            // member only receives the slis (mortise) and needs no extra length.
+            if is_through {
+                0.0
+            } else {
+                joint.pen_length.max(0.0)
+            }
+        }
+        JointType::Verstek => match material {
+            Material::Pvc => PVC_WELD_OVERMEASURE_MM,
+            _ => 0.0,
+        },
+        JointType::Contramal | JointType::Stomp => 0.0,
+    }
+}
+
+/// Saw angle at one end. Verstek uses the configured angle (45 deg when the
+/// stored angle is missing/implausible); all other joints are square cuts.
+fn joint_end_angle(joint: &Joint) -> f64 {
+    match joint.joint_type {
+        JointType::Verstek => {
+            if joint.angle > 0.0 && joint.angle < 90.0 {
+                joint.angle
+            } else {
+                45.0
+            }
+        }
+        _ => 90.0,
+    }
+}
+
+/// Compute net/gross length and end angles for one outer-frame member.
+///
+/// `ends` is `Some((start, end))` with the corner joints at both ends of the
+/// member (top/bottom for stijlen, left/right for dorpels). `None` selects the
+/// historic material-based fallback, which must stay byte-identical to the old
+/// behaviour for regression safety.
+fn frame_member_cut(
+    orientation: FrameOrientation,
+    outer_span: f64,
+    ends: Option<(&Joint, &Joint)>,
+    material: &Material,
+    fw: f64,
+    default_is_miter: bool,
+    default_angle: f64,
+) -> MemberCut {
+    match ends {
+        Some((start, end)) => {
+            let net = outer_span
+                - joint_end_reduction(orientation, start, fw)
+                - joint_end_reduction(orientation, end, fw);
+            let gross = net
+                + SAW_KERF_MM
+                + joint_end_allowance(orientation, start, material)
+                + joint_end_allowance(orientation, end, material);
+            MemberCut {
+                net,
+                gross,
+                angle_start: joint_end_angle(start),
+                angle_end: joint_end_angle(end),
+            }
+        }
+        None => {
+            // Historic behaviour: mitered members (alu/PVC) lose fw at both
+            // ends; wood stijlen run full height, wood dorpels fit between.
+            let net = match (orientation, default_is_miter) {
+                (FrameOrientation::Stijl, false) => outer_span,
+                _ => outer_span - 2.0 * fw,
+            };
+            MemberCut {
+                net,
+                gross: gross_length(net, material, default_is_miter),
+                angle_start: default_angle,
+                angle_end: default_angle,
+            }
+        }
+    }
+}
+
 fn material_name(material: &Material) -> &'static str {
     match material {
         Material::Wood(w) => match w {
@@ -228,39 +392,59 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
 
     // ── Frame members ──────────────────────────────────────────
 
-    // For wood: stiles run full height, rails fit between stiles
-    // For aluminum/PVC: all mitered, net = outer dimension - 2 * profile width (for rails) or outer dim (for stiles)
-    let (stile_net, rail_net) = if is_miter {
-        // Mitered: all members cut to outer dimensions minus profile width on each end
-        (kozijn.frame.outer_height - 2.0 * fw, kozijn.frame.outer_width - 2.0 * fw)
-    } else {
-        // Wood: stiles full height, rails between stiles
-        (kozijn.frame.outer_height, inner_w)
-    };
+    // Corner joints in [top-left, top-right, bottom-left, bottom-right] order,
+    // or None → historic material-based fallback (wood: stiles full height,
+    // rails between; alu/PVC: all mitered at 45°).
+    let corner_joints = effective_corner_joints(kozijn);
 
-    // Left stile
+    let left_stile = frame_member_cut(
+        FrameOrientation::Stijl,
+        kozijn.frame.outer_height,
+        corner_joints.map(|j| (j[0], j[2])), // top-left, bottom-left
+        mat, fw, is_miter, angle,
+    );
+    let right_stile = frame_member_cut(
+        FrameOrientation::Stijl,
+        kozijn.frame.outer_height,
+        corner_joints.map(|j| (j[1], j[3])), // top-right, bottom-right
+        mat, fw, is_miter, angle,
+    );
+    let top_rail = frame_member_cut(
+        FrameOrientation::Dorpel,
+        kozijn.frame.outer_width,
+        corner_joints.map(|j| (j[0], j[1])), // top-left, top-right
+        mat, fw, is_miter, angle,
+    );
+    let bottom_rail = frame_member_cut(
+        FrameOrientation::Dorpel,
+        kozijn.frame.outer_width,
+        corner_joints.map(|j| (j[2], j[3])), // bottom-left, bottom-right
+        mat, fw, is_miter, angle,
+    );
+
+    // Left stile (angles: left = top end, right = bottom end)
     cut_list.push(CutListItem {
         piece_id: format!("{}-SL", mark),
         member_type: MemberType::FrameLeft,
         profile_name: profile_name.clone(),
         material: mat_name.clone(),
-        net_length_mm: stile_net,
-        gross_length_mm: gross_length(stile_net, mat, is_miter),
-        miter_left_deg: angle,
-        miter_right_deg: angle,
+        net_length_mm: left_stile.net,
+        gross_length_mm: left_stile.gross,
+        miter_left_deg: left_stile.angle_start,
+        miter_right_deg: left_stile.angle_end,
         quantity: 1,
     });
 
-    // Right stile
+    // Right stile (angles: left = top end, right = bottom end)
     cut_list.push(CutListItem {
         piece_id: format!("{}-SR", mark),
         member_type: MemberType::FrameRight,
         profile_name: profile_name.clone(),
         material: mat_name.clone(),
-        net_length_mm: stile_net,
-        gross_length_mm: gross_length(stile_net, mat, is_miter),
-        miter_left_deg: angle,
-        miter_right_deg: angle,
+        net_length_mm: right_stile.net,
+        gross_length_mm: right_stile.gross,
+        miter_left_deg: right_stile.angle_start,
+        miter_right_deg: right_stile.angle_end,
         quantity: 1,
     });
 
@@ -270,10 +454,10 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         member_type: MemberType::FrameTop,
         profile_name: profile_name.clone(),
         material: mat_name.clone(),
-        net_length_mm: rail_net,
-        gross_length_mm: gross_length(rail_net, mat, is_miter),
-        miter_left_deg: angle,
-        miter_right_deg: angle,
+        net_length_mm: top_rail.net,
+        gross_length_mm: top_rail.gross,
+        miter_left_deg: top_rail.angle_start,
+        miter_right_deg: top_rail.angle_end,
         quantity: 1,
     });
 
@@ -288,10 +472,10 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         member_type: MemberType::FrameBottom,
         profile_name: sill_profile,
         material: mat_name.clone(),
-        net_length_mm: rail_net,
-        gross_length_mm: gross_length(rail_net, mat, is_miter),
-        miter_left_deg: angle,
-        miter_right_deg: angle,
+        net_length_mm: bottom_rail.net,
+        gross_length_mm: bottom_rail.gross,
+        miter_left_deg: bottom_rail.angle_start,
+        miter_right_deg: bottom_rail.angle_end,
         quantity: 1,
     });
 
@@ -673,5 +857,189 @@ mod tests {
         assert!(stile.gross_length_mm > stile.net_length_mm);
         let expected_gross = stile.net_length_mm + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM;
         assert!((stile.gross_length_mm - expected_gross).abs() < 0.01);
+    }
+
+    fn find<'a>(prod: &'a ProductionData, mt: MemberType) -> &'a CutListItem {
+        prod.cut_list.iter().find(|c| c.member_type == mt).unwrap()
+    }
+
+    #[test]
+    fn test_empty_corner_joints_matches_legacy_output() {
+        // (a) Empty corner_joints must produce exactly the historic
+        // material-based saw list — and be identical to the untouched
+        // auto-populated default joint set.
+        let k_default = Kozijn::new("Test", "T03", 900.0, 1400.0);
+        let mut k_empty = k_default.clone();
+        k_empty.frame.corner_joints = vec![];
+
+        let prod_default = compute_production_data(&k_default);
+        let prod_empty = compute_production_data(&k_empty);
+
+        assert_eq!(prod_default.cut_list.len(), prod_empty.cut_list.len());
+        for (a, b) in prod_default.cut_list.iter().zip(prod_empty.cut_list.iter()) {
+            assert_eq!(a.member_type, b.member_type);
+            assert!((a.net_length_mm - b.net_length_mm).abs() < 0.01);
+            assert!((a.gross_length_mm - b.gross_length_mm).abs() < 0.01);
+            assert!((a.miter_left_deg - b.miter_left_deg).abs() < 0.01);
+            assert!((a.miter_right_deg - b.miter_right_deg).abs() < 0.01);
+        }
+
+        // Historic wood numbers: stiles full height, rails between stiles,
+        // gross = net + 2 * pen allowance + kerf, square cuts.
+        let fw = k_empty.frame.frame_width;
+        let stile = find(&prod_empty, MemberType::FrameLeft);
+        assert!((stile.net_length_mm - k_empty.frame.outer_height).abs() < 0.01);
+        assert!((stile.gross_length_mm
+            - (stile.net_length_mm + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM)).abs() < 0.01);
+        assert!((stile.miter_left_deg - 90.0).abs() < 0.01);
+        let rail = find(&prod_empty, MemberType::FrameTop);
+        assert!((rail.net_length_mm - (k_empty.frame.outer_width - 2.0 * fw)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_pen_slis_joints_drive_cut_list() {
+        // (b) Configured pen/slis (stijl through, pen 30 mm): dorpels shorter
+        // than the outer width, stijlen run through full height, and the pen
+        // allowance sits on the dorpels only.
+        let mut k = Kozijn::new("Test", "T04", 900.0, 1400.0);
+        let pen = crate::joint::Joint {
+            joint_type: JointType::PenSlis,
+            through_member: ThroughMember::Stijl,
+            angle: 90.0,
+            pen_length: 30.0, // non-default → joint-driven path
+        };
+        k.frame.corner_joints = vec![pen.clone(), pen.clone(), pen.clone(), pen];
+
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+
+        // Stijlen doorlopend: full outer height, no pen allowance (slis side).
+        for mt in [MemberType::FrameLeft, MemberType::FrameRight] {
+            let stile = find(&prod, mt);
+            assert!((stile.net_length_mm - k.frame.outer_height).abs() < 0.01);
+            assert!((stile.gross_length_mm - (stile.net_length_mm + SAW_KERF_MM)).abs() < 0.01);
+            assert!((stile.miter_left_deg - 90.0).abs() < 0.01);
+            assert!((stile.miter_right_deg - 90.0).abs() < 0.01);
+        }
+        // Dorpels tussen de stijlen + pen allowance on both ends.
+        for mt in [MemberType::FrameTop, MemberType::FrameBottom] {
+            let rail = find(&prod, mt);
+            assert!(rail.net_length_mm < k.frame.outer_width);
+            assert!((rail.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.01);
+            assert!((rail.gross_length_mm
+                - (rail.net_length_mm + 2.0 * 30.0 + SAW_KERF_MM)).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn test_verstek_joints_give_45_degree_cuts() {
+        // (c) Verstek joints on a wood kozijn: joints beat the material
+        // default — 45° cuts on both ends of every member, net = short edge.
+        let mut k = Kozijn::new("Test", "T05", 900.0, 1400.0);
+        let verstek = crate::joint::Joint {
+            joint_type: JointType::Verstek,
+            through_member: ThroughMember::Stijl,
+            angle: 45.0,
+            pen_length: 0.0,
+        };
+        k.frame.corner_joints = vec![verstek.clone(), verstek.clone(), verstek.clone(), verstek];
+
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+
+        for mt in [
+            MemberType::FrameLeft, MemberType::FrameRight,
+            MemberType::FrameTop, MemberType::FrameBottom,
+        ] {
+            let item = find(&prod, mt);
+            assert!((item.miter_left_deg - 45.0).abs() < 0.01);
+            assert!((item.miter_right_deg - 45.0).abs() < 0.01);
+            let outer = match mt {
+                MemberType::FrameLeft | MemberType::FrameRight => k.frame.outer_height,
+                _ => k.frame.outer_width,
+            };
+            assert!((item.net_length_mm - (outer - 2.0 * fw)).abs() < 0.01);
+            // Wood miter: no weld overmeasure, just kerf.
+            assert!((item.gross_length_mm - (item.net_length_mm + SAW_KERF_MM)).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn test_pvc_verstek_adds_weld_overmeasure() {
+        let mut k = Kozijn::new("Test", "T06", 900.0, 1400.0);
+        k.frame.material = Material::Pvc;
+        let verstek = crate::joint::Joint {
+            joint_type: JointType::Verstek,
+            through_member: ThroughMember::Stijl,
+            angle: 45.0,
+            pen_length: 0.0,
+        };
+        k.frame.corner_joints = vec![verstek.clone(), verstek.clone(), verstek.clone(), verstek];
+
+        let prod = compute_production_data(&k);
+        let stile = find(&prod, MemberType::FrameLeft);
+        assert!((stile.gross_length_mm
+            - (stile.net_length_mm + 2.0 * PVC_WELD_OVERMEASURE_MM + SAW_KERF_MM)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_aluminum_untouched_defaults_keep_miter() {
+        // Regression guard: alu/PVC kozijnen whose corner_joints are still the
+        // auto-populated pen/slis defaults must keep the material-based miter.
+        let mut k = Kozijn::new("Test", "T07", 900.0, 1400.0);
+        k.frame.material = Material::Aluminum;
+        // Kozijn::new already populated 4 default joints; leave them untouched.
+        assert_eq!(k.frame.corner_joints.len(), 4);
+
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+        let stile = find(&prod, MemberType::FrameLeft);
+        assert!((stile.net_length_mm - (k.frame.outer_height - 2.0 * fw)).abs() < 0.01);
+        assert!((stile.miter_left_deg - 45.0).abs() < 0.01);
+        // Historic alu gross: net + 2 * kerf.
+        assert!((stile.gross_length_mm - (stile.net_length_mm + 2.0 * SAW_KERF_MM)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_mixed_corners_and_dorpel_through() {
+        // Bottom corners: dorpel runs through (onderdorpel doorlopend);
+        // top corners: default pen/slis with stijl through.
+        let mut k = Kozijn::new("Test", "T08", 900.0, 1400.0);
+        let top = crate::joint::Joint {
+            joint_type: JointType::PenSlis,
+            through_member: ThroughMember::Stijl,
+            angle: 90.0,
+            pen_length: 20.0,
+        };
+        let bottom = crate::joint::Joint {
+            joint_type: JointType::PenSlis,
+            through_member: ThroughMember::Dorpel,
+            angle: 90.0,
+            pen_length: 20.0,
+        };
+        // Order: [top-left, top-right, bottom-left, bottom-right]
+        k.frame.corner_joints = vec![top.clone(), top, bottom.clone(), bottom];
+
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+
+        // Stijlen: through at the top (no reduction), cut short at the bottom
+        // where the onderdorpel runs through.
+        let stile = find(&prod, MemberType::FrameLeft);
+        assert!((stile.net_length_mm - (k.frame.outer_height - fw)).abs() < 0.01);
+        // Pen at the bottom end only (stijl is the non-through member there).
+        assert!((stile.gross_length_mm - (stile.net_length_mm + 20.0 + SAW_KERF_MM)).abs() < 0.01);
+
+        // Bovendorpel: between the stijlen, pens both ends.
+        let top_rail = find(&prod, MemberType::FrameTop);
+        assert!((top_rail.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.01);
+        assert!((top_rail.gross_length_mm
+            - (top_rail.net_length_mm + 2.0 * 20.0 + SAW_KERF_MM)).abs() < 0.01);
+
+        // Onderdorpel: runs through full width, no pen allowance.
+        let bottom_rail = find(&prod, MemberType::FrameBottom);
+        assert!((bottom_rail.net_length_mm - k.frame.outer_width).abs() < 0.01);
+        assert!((bottom_rail.gross_length_mm
+            - (bottom_rail.net_length_mm + SAW_KERF_MM)).abs() < 0.01);
     }
 }
