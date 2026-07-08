@@ -28,10 +28,18 @@ pub enum Vakvulling {
     Raam {
         #[serde(default, rename = "openType")]
         open_type: String,
+        /// Hinge side ("links"/"rechts"), set by the canvas editor. Optional
+        /// with `skip_serializing_if` so payloads without it stay byte-equal
+        /// (old bundles/.ofs files roundtrip unchanged).
+        #[serde(default, rename = "hingeSide", skip_serializing_if = "Option::is_none")]
+        hinge_side: Option<String>,
     },
     Deur {
         #[serde(default, rename = "doorKind")]
         door_kind: String,
+        /// Hinge side ("links"/"rechts"); optional, see `Raam::hinge_side`.
+        #[serde(default, rename = "hingeSide", skip_serializing_if = "Option::is_none")]
+        hinge_side: Option<String>,
     },
     Paneel,
     Rooster,
@@ -43,6 +51,20 @@ impl Vakvulling {
     /// A real vak contributes frame/geometry; `Buiten` does not.
     pub fn is_buiten(&self) -> bool {
         matches!(self, Vakvulling::Buiten)
+    }
+
+    /// Serialized tag of this vulling ("glas", "raam", "deur", "paneel",
+    /// "rooster", "buiten") — the same string the JSON payload carries in
+    /// `type`, for consumers that only need the kind.
+    pub fn type_str(&self) -> &'static str {
+        match self {
+            Vakvulling::Glas => "glas",
+            Vakvulling::Raam { .. } => "raam",
+            Vakvulling::Deur { .. } => "deur",
+            Vakvulling::Paneel => "paneel",
+            Vakvulling::Rooster => "rooster",
+            Vakvulling::Buiten => "buiten",
+        }
     }
 }
 
@@ -88,6 +110,12 @@ pub struct LayoutRect {
 pub struct LayoutLeaf {
     pub rect: LayoutRect,
     pub vulling: Vakvulling,
+    /// Stable depth-first index of this leaf in the split tree. Every leaf
+    /// counts (`Buiten` included), so the index depends only on the tree
+    /// structure — changing a vulling never renumbers. Downstream geometry
+    /// uses it as `cell_index` (with gaps where `Buiten` leaves sit).
+    #[serde(default)]
+    pub leaf_index: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +143,10 @@ pub fn compute_layout_geometry(node: &VakNode, rect: LayoutRect, divider_w: f64)
 fn layout_rec(node: &VakNode, rect: LayoutRect, divider_w: f64, out: &mut LayoutGeometry) {
     match node {
         VakNode::Leaf { vulling, .. } => {
-            out.leaves.push(LayoutLeaf { rect, vulling: vulling.clone() });
+            // Leaves arrive here in depth-first order, so the running length
+            // of the output is exactly the stable depth-first leaf index.
+            let leaf_index = out.leaves.len();
+            out.leaves.push(LayoutLeaf { rect, vulling: vulling.clone(), leaf_index });
         }
         VakNode::Split { direction, children, .. } => {
             let horiz = matches!(direction, SplitDirection::Row);
@@ -168,10 +199,10 @@ pub fn glas() -> VakNode {
     leaf(Vakvulling::Glas)
 }
 pub fn raam(open_type: &str) -> VakNode {
-    leaf(Vakvulling::Raam { open_type: open_type.to_string() })
+    leaf(Vakvulling::Raam { open_type: open_type.to_string(), hinge_side: None })
 }
 pub fn deur(door_kind: &str) -> VakNode {
-    leaf(Vakvulling::Deur { door_kind: door_kind.to_string() })
+    leaf(Vakvulling::Deur { door_kind: door_kind.to_string(), hinge_side: None })
 }
 pub fn paneel() -> VakNode {
     leaf(Vakvulling::Paneel)
@@ -249,5 +280,35 @@ mod tests {
         assert_eq!(geom.dividers.len(), 1);
         assert_eq!(geom.dividers[0].direction, "v");
         assert!(geom.leaves[0].rect.x < geom.leaves[1].rect.x);
+    }
+
+    #[test]
+    fn leaves_carry_stable_depth_first_indices() {
+        // melkmeisje1: raam (0), then zijlicht glas (1), then buiten (2) —
+        // buiten counts in the numbering so vulling changes never renumber.
+        let geom = compute_layout_geometry(&melkmeisje1(), FULL, 90.0);
+        let idx: Vec<usize> = geom.leaves.iter().map(|l| l.leaf_index).collect();
+        assert_eq!(idx, vec![0, 1, 2]);
+        assert!(matches!(geom.leaves[0].vulling, Vakvulling::Raam { .. }));
+        assert!(matches!(geom.leaves[2].vulling, Vakvulling::Buiten));
+        assert_eq!(geom.leaves[0].vulling.type_str(), "raam");
+    }
+
+    #[test]
+    fn vulling_hinge_side_roundtrips_and_stays_optional() {
+        // hingeSide from the canvas editor survives the Rust roundtrip
+        let json = r#"{"kind":"leaf","vulling":{"type":"raam","openType":"draai","hingeSide":"links"}}"#;
+        let node: VakNode = serde_json::from_str(json).unwrap();
+        match &node {
+            VakNode::Leaf { vulling: Vakvulling::Raam { open_type, hinge_side }, .. } => {
+                assert_eq!(open_type, "draai");
+                assert_eq!(hinge_side.as_deref(), Some("links"));
+            }
+            other => panic!("expected raam leaf, got {:?}", other),
+        }
+        assert!(serde_json::to_string(&node).unwrap().contains("\"hingeSide\":\"links\""));
+        // ...and payloads without it stay byte-equal (no null field appears)
+        let plain = serde_json::to_string(&raam("draai")).unwrap();
+        assert!(!plain.contains("hingeSide"), "plain raam grew a hingeSide field: {}", plain);
     }
 }

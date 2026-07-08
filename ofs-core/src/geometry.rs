@@ -1,4 +1,5 @@
 use crate::kozijn::{GridDivision, Kozijn, ShapeType};
+use crate::layout::{compute_layout_geometry, LayoutGeometry, LayoutRect, Vakvulling};
 use serde::{Deserialize, Serialize};
 
 /// 2D rectangle for SVG rendering
@@ -70,6 +71,12 @@ pub struct CellRect {
     pub col: usize,
     pub row: usize,
     pub cell_index: usize,
+    /// Vakvulling carried along on the free-subdivision layout path, so
+    /// consumers no longer need to index `kozijn.cells[cell_index]` (which is
+    /// grid-shaped and does not match a layout tree). `None` on the grid path;
+    /// omitted from the payload when absent (old payloads stay byte-equal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vulling: Option<Vakvulling>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +122,23 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         width: ow - 2.0 * fw,
         height: oh - 2.0 * fw,
     };
+
+    // Free-subdivision layout (kozijn.layout) — when present it supersedes the
+    // rectangular grid as the source of dividers, cells and the level-1
+    // dimension chains. The tree is laid out in the plain rectangular
+    // binnenrect with divider width = frame width, exactly mirroring the
+    // frontend canvas (layoutToRects in ui/src/lib/layout.js), so backend
+    // geometry and the canvas overlay coincide. Documented follow-ups, out of
+    // scope here: a stepped frame outline around `Buiten` leaves (the outer
+    // frame stays the full rectangle for now) and arch-aware (spring-line)
+    // placement of the tree for arched/round shapes.
+    let layout_geom = kozijn.layout.as_ref().map(|node| {
+        compute_layout_geometry(
+            node,
+            LayoutRect { x: fw, y: fw, width: ow - 2.0 * fw, height: oh - 2.0 * fw },
+            divider_width,
+        )
+    });
 
     // Frame members — adjust for arched/special shapes
     let is_arched = kozijn.frame.shape.shape_type == ShapeType::Arched
@@ -190,58 +214,67 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         }
     }
 
-    // Vertical dividers
-    let mut v_dividers = Vec::new();
-    let mut vx = fw;
-    for i in 0..kozijn.grid.columns.len() {
-        vx += kozijn.grid.columns[i].size;
-        if i < kozijn.grid.columns.len() - 1 {
-            v_dividers.push(Rect2D {
-                x: vx,
-                y: row_area_top,
-                width: divider_width,
-                height: oh - row_area_top - fw,
-            });
-            vx += divider_width;
+    // Dividers + cell rects — from the layout tree when present (cell_index =
+    // stable depth-first leaf index, `Buiten` leaves yield no cell), otherwise
+    // from the rectangular grid (legacy path, unchanged).
+    let (v_dividers, h_dividers, cell_rects) = if let Some(lg) = &layout_geom {
+        layout_dividers_and_cells(lg)
+    } else {
+        // Vertical dividers
+        let mut v_dividers = Vec::new();
+        let mut vx = fw;
+        for i in 0..kozijn.grid.columns.len() {
+            vx += kozijn.grid.columns[i].size;
+            if i < kozijn.grid.columns.len() - 1 {
+                v_dividers.push(Rect2D {
+                    x: vx,
+                    y: row_area_top,
+                    width: divider_width,
+                    height: oh - row_area_top - fw,
+                });
+                vx += divider_width;
+            }
         }
-    }
 
-    // Horizontal dividers (follow the displayed — possibly scaled — row heights)
-    let mut h_dividers = Vec::new();
-    let mut hy = row_area_top;
-    for (i, size) in row_display_sizes.iter().enumerate() {
-        hy += size;
-        if i < num_rows - 1 {
-            h_dividers.push(Rect2D {
-                x: fw,
-                y: hy,
-                width: ow - 2.0 * fw,
-                height: divider_width,
-            });
-            hy += divider_width;
+        // Horizontal dividers (follow the displayed — possibly scaled — row heights)
+        let mut h_dividers = Vec::new();
+        let mut hy = row_area_top;
+        for (i, size) in row_display_sizes.iter().enumerate() {
+            hy += size;
+            if i < num_rows - 1 {
+                h_dividers.push(Rect2D {
+                    x: fw,
+                    y: hy,
+                    width: ow - 2.0 * fw,
+                    height: divider_width,
+                });
+                hy += divider_width;
+            }
         }
-    }
 
-    // Cell rects
-    let num_cols = kozijn.grid.columns.len();
-    let mut cell_rects = Vec::new();
-    for row_idx in 0..num_rows {
-        for (col_idx, col) in kozijn.grid.columns.iter().enumerate() {
-            let cx = col_positions[col_idx];
-            let cy = row_positions[row_idx];
-            cell_rects.push(CellRect {
-                rect: Rect2D {
-                    x: cx,
-                    y: cy,
-                    width: col.size,
-                    height: row_display_sizes[row_idx],
-                },
-                col: col_idx,
-                row: row_idx,
-                cell_index: row_idx * num_cols + col_idx,
-            });
+        // Cell rects
+        let num_cols = kozijn.grid.columns.len();
+        let mut cell_rects = Vec::new();
+        for row_idx in 0..num_rows {
+            for (col_idx, col) in kozijn.grid.columns.iter().enumerate() {
+                let cx = col_positions[col_idx];
+                let cy = row_positions[row_idx];
+                cell_rects.push(CellRect {
+                    rect: Rect2D {
+                        x: cx,
+                        y: cy,
+                        width: col.size,
+                        height: row_display_sizes[row_idx],
+                    },
+                    col: col_idx,
+                    row: row_idx,
+                    cell_index: row_idx * num_cols + col_idx,
+                    vulling: None,
+                });
+            }
         }
-    }
+        (v_dividers, h_dividers, cell_rects)
+    };
 
     // ── Dimension lines (NEN 3576 / GA Kozijn style) ──
     // Level 1 (closest): houtdiktes + vakmaten (stijl, kolommen, stijl)
@@ -261,36 +294,49 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // dagmaat + buitenwerkse maat apply)
     let bot_y1 = oh + dim_start;
     if !(is_round || is_elliptical) {
-        // Left stijl
-        dimensions.push(DimensionLine {
-            x1: 0.0, y1: bot_y1, x2: fw, y2: bot_y1,
-            label: format!("{:.0}", fw),
-            side: DimensionSide::Bottom,
-        });
-        // Column widths (vakmaten)
-        for (i, col) in kozijn.grid.columns.iter().enumerate() {
-            let cx = col_positions[i];
-            dimensions.push(DimensionLine {
-                x1: cx, y1: bot_y1, x2: cx + col.size, y2: bot_y1,
-                label: format!("{:.0}", col.size),
-                side: DimensionSide::Bottom,
-            });
-            // Divider width (tussenstijl)
-            if i < num_cols - 1 {
-                let dx = cx + col.size;
+        if let Some(lg) = &layout_geom {
+            // Layout chain: stijl + segments derived from the leaves that
+            // touch the bottom of the opening (+ divider/rest gaps) + stijl.
+            // Contiguous by construction: the segments sum to the buitenmaat.
+            for pair in layout_chain_bounds(lg, true, ow, oh, fw).windows(2) {
                 dimensions.push(DimensionLine {
-                    x1: dx, y1: bot_y1, x2: dx + divider_width, y2: bot_y1,
-                    label: format!("{:.0}", divider_width),
+                    x1: pair[0], y1: bot_y1, x2: pair[1], y2: bot_y1,
+                    label: format!("{:.0}", pair[1] - pair[0]),
                     side: DimensionSide::Bottom,
                 });
             }
+        } else {
+            // Left stijl
+            dimensions.push(DimensionLine {
+                x1: 0.0, y1: bot_y1, x2: fw, y2: bot_y1,
+                label: format!("{:.0}", fw),
+                side: DimensionSide::Bottom,
+            });
+            // Column widths (vakmaten)
+            for (i, col) in kozijn.grid.columns.iter().enumerate() {
+                let cx = col_positions[i];
+                dimensions.push(DimensionLine {
+                    x1: cx, y1: bot_y1, x2: cx + col.size, y2: bot_y1,
+                    label: format!("{:.0}", col.size),
+                    side: DimensionSide::Bottom,
+                });
+                // Divider width (tussenstijl)
+                if i < num_cols - 1 {
+                    let dx = cx + col.size;
+                    dimensions.push(DimensionLine {
+                        x1: dx, y1: bot_y1, x2: dx + divider_width, y2: bot_y1,
+                        label: format!("{:.0}", divider_width),
+                        side: DimensionSide::Bottom,
+                    });
+                }
+            }
+            // Right stijl
+            dimensions.push(DimensionLine {
+                x1: ow - fw, y1: bot_y1, x2: ow, y2: bot_y1,
+                label: format!("{:.0}", fw),
+                side: DimensionSide::Bottom,
+            });
         }
-        // Right stijl
-        dimensions.push(DimensionLine {
-            x1: ow - fw, y1: bot_y1, x2: ow, y2: bot_y1,
-            label: format!("{:.0}", fw),
-            side: DimensionSide::Bottom,
-        });
     }
 
     // ── Bottom Level 2: dagmaat ──
@@ -313,48 +359,61 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // Suppressed for round/elliptical frames (only dagmaat + buitenwerkse maat)
     let right_x1 = ow + dim_start;
     if !(is_round || is_elliptical) {
-        // Bovendorpel (0 for arched — the arc replaces it)
-        let top_h = top_rect_height;
-        if top_h > 0.0 {
-            dimensions.push(DimensionLine {
-                x1: right_x1, y1: 0.0, x2: right_x1, y2: top_h,
-                label: format!("{:.0}", top_h),
-                side: DimensionSide::Right,
-            });
-        }
-        // Boogpijl (arch rise) for arched frames
-        if is_arched {
-            dimensions.push(DimensionLine {
-                x1: right_x1, y1: 0.0, x2: right_x1, y2: stile_top_y,
-                label: format!("{:.0}", stile_top_y),
-                side: DimensionSide::Right,
-            });
-        }
-        // Row heights (vakmaten) — displayed sizes (scaled for arched frames)
-        for i in 0..num_rows {
-            let cy = row_positions[i];
-            let size = row_display_sizes[i];
-            dimensions.push(DimensionLine {
-                x1: right_x1, y1: cy, x2: right_x1, y2: cy + size,
-                label: format!("{:.0}", size),
-                side: DimensionSide::Right,
-            });
-            // Divider height (tussendorpel)
-            if i < num_rows - 1 {
-                let dy = cy + size;
+        if let Some(lg) = &layout_geom {
+            // Layout chain: dorpel + segments derived from the leaves that
+            // touch the right side of the opening (+ divider/rest gaps) +
+            // dorpel. Same level (offset) as the grid chain.
+            for pair in layout_chain_bounds(lg, false, ow, oh, fw).windows(2) {
                 dimensions.push(DimensionLine {
-                    x1: right_x1, y1: dy, x2: right_x1, y2: dy + divider_width,
-                    label: format!("{:.0}", divider_width),
+                    x1: right_x1, y1: pair[0], x2: right_x1, y2: pair[1],
+                    label: format!("{:.0}", pair[1] - pair[0]),
                     side: DimensionSide::Right,
                 });
             }
+        } else {
+            // Bovendorpel (0 for arched — the arc replaces it)
+            let top_h = top_rect_height;
+            if top_h > 0.0 {
+                dimensions.push(DimensionLine {
+                    x1: right_x1, y1: 0.0, x2: right_x1, y2: top_h,
+                    label: format!("{:.0}", top_h),
+                    side: DimensionSide::Right,
+                });
+            }
+            // Boogpijl (arch rise) for arched frames
+            if is_arched {
+                dimensions.push(DimensionLine {
+                    x1: right_x1, y1: 0.0, x2: right_x1, y2: stile_top_y,
+                    label: format!("{:.0}", stile_top_y),
+                    side: DimensionSide::Right,
+                });
+            }
+            // Row heights (vakmaten) — displayed sizes (scaled for arched frames)
+            for i in 0..num_rows {
+                let cy = row_positions[i];
+                let size = row_display_sizes[i];
+                dimensions.push(DimensionLine {
+                    x1: right_x1, y1: cy, x2: right_x1, y2: cy + size,
+                    label: format!("{:.0}", size),
+                    side: DimensionSide::Right,
+                });
+                // Divider height (tussendorpel)
+                if i < num_rows - 1 {
+                    let dy = cy + size;
+                    dimensions.push(DimensionLine {
+                        x1: right_x1, y1: dy, x2: right_x1, y2: dy + divider_width,
+                        label: format!("{:.0}", divider_width),
+                        side: DimensionSide::Right,
+                    });
+                }
+            }
+            // Onderdorpel
+            dimensions.push(DimensionLine {
+                x1: right_x1, y1: oh - fw, x2: right_x1, y2: oh,
+                label: format!("{:.0}", fw),
+                side: DimensionSide::Right,
+            });
         }
-        // Onderdorpel
-        dimensions.push(DimensionLine {
-            x1: right_x1, y1: oh - fw, x2: right_x1, y2: oh,
-            label: format!("{:.0}", fw),
-            side: DimensionSide::Right,
-        });
     }
 
     // ── Right Level 2: dagmaat ──
@@ -640,6 +699,82 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     }
 }
 
+/// Map the free-subdivision layout geometry onto renderable dividers + cells.
+/// `cell_index` is the stable depth-first leaf index in the tree (with gaps
+/// where `Buiten` leaves sit — those yield no cell); `col`/`row` are grid
+/// concepts and stay 0 on this path: consumers key layout cells by
+/// `cell_index` and read the vulling straight from the cell.
+fn layout_dividers_and_cells(lg: &LayoutGeometry) -> (Vec<Rect2D>, Vec<Rect2D>, Vec<CellRect>) {
+    let to_rect = |r: &LayoutRect| Rect2D { x: r.x, y: r.y, width: r.width, height: r.height };
+    let v_dividers = lg
+        .dividers
+        .iter()
+        .filter(|d| d.direction == "v")
+        .map(|d| to_rect(&d.rect))
+        .collect();
+    let h_dividers = lg
+        .dividers
+        .iter()
+        .filter(|d| d.direction == "h")
+        .map(|d| to_rect(&d.rect))
+        .collect();
+    let cell_rects = lg
+        .leaves
+        .iter()
+        .filter(|l| !l.vulling.is_buiten())
+        .map(|l| CellRect {
+            rect: to_rect(&l.rect),
+            col: 0,
+            row: 0,
+            cell_index: l.leaf_index,
+            vulling: Some(l.vulling.clone()),
+        })
+        .collect();
+    (v_dividers, h_dividers, cell_rects)
+}
+
+/// Boundaries of the level-1 dimension chain along one axis, derived from the
+/// layout tree: the fixed frame edges (0, fw, total-fw, total) plus the edges
+/// of every non-`Buiten` leaf that touches the chain's inner edge — the bottom
+/// of the opening for the horizontal chain, the right side for the vertical
+/// one. Consecutive boundaries form the chain segments (stijl/dorpel, vak,
+/// divider or unanchored rest). Mirrors `layoutChain()` in the frontend
+/// (ui/src/components/editor/KozijnCanvas.svelte) — keep the two in sync,
+/// including the 1.0 mm touch tolerance and 0.5 mm dedup.
+fn layout_chain_bounds(lg: &LayoutGeometry, horizontal: bool, ow: f64, oh: f64, fw: f64) -> Vec<f64> {
+    let total = if horizontal { ow } else { oh };
+    let inner_edge = if horizontal { oh - fw } else { ow - fw };
+    let mut bounds = vec![0.0, fw, total - fw, total];
+    for l in &lg.leaves {
+        if l.vulling.is_buiten() {
+            continue;
+        }
+        let touches = if horizontal {
+            (l.rect.y + l.rect.height - inner_edge).abs() < 1.0
+        } else {
+            (l.rect.x + l.rect.width - inner_edge).abs() < 1.0
+        };
+        if !touches {
+            continue;
+        }
+        let (a, len) = if horizontal {
+            (l.rect.x, l.rect.width)
+        } else {
+            (l.rect.y, l.rect.height)
+        };
+        bounds.push(a);
+        bounds.push(a + len);
+    }
+    bounds.sort_by(|p, q| p.total_cmp(q));
+    let mut uniq: Vec<f64> = Vec::new();
+    for v in bounds {
+        if uniq.last().map_or(true, |u| v - *u >= 0.5) {
+            uniq.push(v);
+        }
+    }
+    uniq
+}
+
 /// Closed polygon [[x,y], ...] for the arched top band: outer arc sampled from
 /// the left spring point over the peak to the right spring point, then the
 /// inner arc back from right to left. The straight closing segments between
@@ -700,6 +835,7 @@ pub fn normalize_grid_single_cell(kozijn: &mut Kozijn) {
 mod tests {
     use super::*;
     use crate::kozijn::FrameShape;
+    use crate::layout::{glas, melkmeisje1, raam, split_row, VakChild};
 
     fn arched_kozijn(w: f64, h: f64, arch_height: f64) -> Kozijn {
         let mut k = Kozijn::new("Test", "K01", w, h);
@@ -806,5 +942,175 @@ mod tests {
         let g = compute_2d_geometry(&k);
         assert_eq!(g.cell_rects.len(), 1);
         assert!(g.v_dividers.is_empty() && g.h_dividers.is_empty());
+    }
+
+    // ── Free-subdivision layout as the geometry source ──
+
+    /// Two-vaks kozijn: fw + vak + tussenstijl + vak + fw over the width.
+    fn layout_kozijn_2vaks() -> Kozijn {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.layout = Some(split_row(vec![
+            VakChild { size: 1.0, node: glas() },
+            VakChild { size: 1.0, node: raam("draaikiep") },
+        ]));
+        k // grid stays the default 1×1 — the tree must win
+    }
+
+    #[test]
+    fn layout_cell_rects_follow_tree_not_grid() {
+        let k = layout_kozijn_2vaks();
+        let g = compute_2d_geometry(&k);
+        let fw = k.frame.frame_width; // 67
+        let vak_w = (1200.0 - 2.0 * fw - fw) / 2.0; // 499.5
+
+        // The 1×1 grid would give a single cell; the tree gives two + a stijl
+        assert_eq!(g.cell_rects.len(), 2);
+        assert_eq!(g.v_dividers.len(), 1);
+        assert!(g.h_dividers.is_empty());
+        let c0 = &g.cell_rects[0];
+        let c1 = &g.cell_rects[1];
+        assert!((c0.rect.x - fw).abs() < 1e-6);
+        assert!((c0.rect.width - vak_w).abs() < 1e-6);
+        assert!((c1.rect.x - (fw + vak_w + fw)).abs() < 1e-6);
+        assert!((c1.rect.x + c1.rect.width - (1200.0 - fw)).abs() < 1e-6);
+        assert!((g.v_dividers[0].x - (fw + vak_w)).abs() < 1e-6);
+        // cell_index = stable depth-first leaf index; vulling rides along
+        assert_eq!((c0.cell_index, c1.cell_index), (0, 1));
+        assert!(matches!(c0.vulling, Some(Vakvulling::Glas)));
+        assert!(matches!(
+            &c1.vulling,
+            Some(Vakvulling::Raam { open_type, .. }) if open_type == "draaikiep"
+        ));
+    }
+
+    #[test]
+    fn layout_dimension_chains_close() {
+        let k = layout_kozijn_2vaks();
+        let g = compute_2d_geometry(&k);
+        let fw = k.frame.frame_width;
+        let (ow, oh) = (1200.0, 1500.0);
+
+        // Bottom level-1 chain (at oh + 20): contiguous 0 → ow
+        let bot_y1 = oh + 20.0;
+        let chain: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
+            .collect();
+        assert_eq!(chain.len(), 5, "stijl+vak+tussenstijl+vak+stijl: {:?}", chain);
+        assert!((chain[0].x1 - 0.0).abs() < 1e-6);
+        assert!((chain.last().unwrap().x2 - ow).abs() < 1e-6);
+        for w in chain.windows(2) {
+            assert!((w[0].x2 - w[1].x1).abs() < 1e-6, "chain gap: {:?} → {:?}", w[0], w[1]);
+        }
+        let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
+        assert!((sum - ow).abs() < 1e-6, "chain sums to buitenmaat");
+        // Interior segments (without the two stijlen) sum to the dagmaat
+        let interior: f64 = chain[1..chain.len() - 1].iter().map(|d| d.x2 - d.x1).sum();
+        assert!((interior - (ow - 2.0 * fw)).abs() < 1e-6, "interior = binnenmaat");
+
+        // Right level-1 chain (at ow + 20): both leaves are full height, only
+        // the one bordering the right stijl anchors → dorpel + dagmaat + dorpel
+        let right_x1 = ow + 20.0;
+        let rchain: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Right) && (d.x1 - right_x1).abs() < 1e-6)
+            .collect();
+        assert_eq!(rchain.len(), 3, "dorpel+vak+dorpel: {:?}", rchain);
+        assert!((rchain[0].y1 - 0.0).abs() < 1e-6);
+        assert!((rchain.last().unwrap().y2 - oh).abs() < 1e-6);
+        let rsum: f64 = rchain.iter().map(|d| d.y2 - d.y1).sum();
+        assert!((rsum - oh).abs() < 1e-6);
+        // Dagmaat (level 2) and buitenwerkse maat (level 3) still present
+        assert!(g.dimensions.iter().any(|d| {
+            matches!(d.side, DimensionSide::Bottom) && (d.y1 - (oh + 55.0)).abs() < 1e-6
+        }));
+        assert!(g.dimensions.iter().any(|d| {
+            matches!(d.side, DimensionSide::Bottom) && (d.y1 - (oh + 90.0)).abs() < 1e-6
+        }));
+    }
+
+    #[test]
+    fn layout_melkmeisje_buiten_gets_no_cell_and_chain_skips_side_light() {
+        let mut k = Kozijn::new("Test", "K01", 1400.0, 1900.0);
+        k.layout = Some(melkmeisje1());
+        let g = compute_2d_geometry(&k);
+        let fw = k.frame.frame_width;
+        let (ow, oh) = (1400.0, 1900.0);
+        let inner_w = ow - 2.0 * fw;
+        let inner_h = oh - 2.0 * fw;
+        let raam_w = (inner_w - fw) * 900.0 / 1400.0;
+        let glas_h = (inner_h - fw) * 900.0 / 1900.0;
+
+        // Buiten leaf yields no cell rect; leaf indices keep their gaps
+        assert_eq!(g.cell_rects.len(), 2);
+        assert_eq!(g.cell_rects[0].cell_index, 0); // raam (full height)
+        assert_eq!(g.cell_rects[1].cell_index, 1); // zijlicht glas (buiten = 2)
+        assert!(matches!(g.cell_rects[0].vulling, Some(Vakvulling::Raam { .. })));
+        // One tussenstijl + the zijlicht onderdorpel as h-divider
+        assert_eq!(g.v_dividers.len(), 1);
+        assert_eq!(g.h_dividers.len(), 1);
+
+        // Bottom chain: zijlicht doesn't reach the bottom of the opening, so
+        // its area stays one unanchored segment — chain still closes to ow
+        let bot_y1 = oh + 20.0;
+        let chain: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
+            .collect();
+        assert_eq!(chain.len(), 4, "stijl+raam+rest+stijl: {:?}", chain);
+        assert!((chain[1].x2 - chain[1].x1 - raam_w).abs() < 1e-6);
+        let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
+        assert!((sum - ow).abs() < 1e-6);
+
+        // Right chain: the zijlicht glass anchors → its height appears
+        let right_x1 = ow + 20.0;
+        let rchain: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Right) && (d.x1 - right_x1).abs() < 1e-6)
+            .collect();
+        assert_eq!(rchain.len(), 4, "dorpel+zijlicht+rest+dorpel: {:?}", rchain);
+        assert!((rchain[1].y2 - rchain[1].y1 - glas_h).abs() < 1e-6);
+        let rsum: f64 = rchain.iter().map(|d| d.y2 - d.y1).sum();
+        assert!((rsum - oh).abs() < 1e-6);
+    }
+
+    #[test]
+    fn grid_path_without_layout_is_unchanged() {
+        // Regression: a kozijn without layout must keep the exact pre-layout
+        // grid behavior — geometry values, dim chain and serialized payload.
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.add_column(400.0); // columns [400, 666] (grid semantics untouched)
+        assert!(k.layout.is_none());
+        let g = compute_2d_geometry(&k);
+
+        assert_eq!(g.cell_rects.len(), 2);
+        let c0 = &g.cell_rects[0];
+        let c1 = &g.cell_rects[1];
+        assert_eq!((c0.col, c0.row, c0.cell_index), (0, 0, 0));
+        assert_eq!((c1.col, c1.row, c1.cell_index), (1, 0, 1));
+        assert!((c0.rect.x - 67.0).abs() < 1e-6 && (c0.rect.width - 400.0).abs() < 1e-6);
+        assert!((c1.rect.x - 534.0).abs() < 1e-6 && (c1.rect.width - 666.0).abs() < 1e-6);
+        assert_eq!(g.v_dividers.len(), 1);
+        assert!((g.v_dividers[0].x - 467.0).abs() < 1e-6);
+
+        // Grid-walk dim chain exactly as before (incl. the historical overlap
+        // quirk where added columns keep their pre-divider sizes)
+        let bottom: Vec<_> = g
+            .dimensions
+            .iter()
+            .filter(|d| matches!(d.side, DimensionSide::Bottom))
+            .collect();
+        let labels: Vec<&str> = bottom.iter().map(|d| d.label.as_str()).collect();
+        assert_eq!(labels, vec!["67", "400", "67", "666", "67", "1066", "1200"]);
+
+        // No vulling on the grid path, and the payload stays byte-identical:
+        // the optional field is skipped entirely when absent
+        assert!(g.cell_rects.iter().all(|c| c.vulling.is_none()));
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(!json.contains("vulling"), "grid payload must not grow a vulling key");
     }
 }
