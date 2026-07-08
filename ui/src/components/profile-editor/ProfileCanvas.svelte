@@ -1,5 +1,5 @@
 <script>
-  import { profileEditor, editorVertices, editorBounds, editorSelectedVertex, editorSnap } from "../../stores/profileEditor.js";
+  import { profileEditor, editorVertices, editorInnerWalls, editorBounds, editorSelectedVertex, editorSnap } from "../../stores/profileEditor.js";
   import VertexHandles from "./VertexHandles.svelte";
   import EdgeSegments from "./EdgeSegments.svelte";
 
@@ -176,6 +176,14 @@
     return d;
   });
 
+  // Binnenstructuur (kamers, staalversterking, isolatoren, alu-schaal):
+  // impliciet gesloten polygonen uit profiel.innerWalls
+  let innerWallPaths = $derived(
+    ($editorInnerWalls || [])
+      .filter((poly) => Array.isArray(poly) && poly.length > 2)
+      .map((poly) => "M " + poly.map((p) => `${p[0]} ${p[1]}`).join(" L ") + " Z")
+  );
+
   // Dimension labels
   let dims = $derived.by(() => {
     const b = $editorBounds;
@@ -234,6 +242,20 @@
         />
 
         <!-- Sponningzone overlay verwijderd — profielvorm toont de inkeping al -->
+
+        <!-- Binnenstructuur: kamer-holtes, staal, isolatoren (niet interactief) -->
+        {#each innerWallPaths as wallD}
+          <path
+            d={wallD}
+            fill="var(--bg-app, #17171c)"
+            fill-opacity="0.45"
+            stroke="var(--amber, #D97706)"
+            stroke-width={0.8 / zoom}
+            stroke-linejoin="miter"
+            opacity="0.85"
+            pointer-events="none"
+          />
+        {/each}
       {/if}
 
       <!-- Dimension labels -->

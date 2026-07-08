@@ -6,6 +6,7 @@
  */
 import { writable, derived } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
+import { generateProfileGeometry } from "../lib/profileContour.js";
 
 // Statische bibliotheek uit de profiles/ directory (of embedded fallback)
 const libraryCategories = writable([]);
@@ -167,6 +168,15 @@ function generateCrossSection(w, d, sp, type) {
   return [[0,0],[w,0],[w,d-sd],[w-sw,d-sd],[w-sw,d],[sw,d],[sw,d-sd],[0,d-sd]];
 }
 
+/**
+ * Verrijk een profielspec met een realistische doorsnede uit de
+ * parametrische generator (kunststof/aluminium/hout-aluminium):
+ * buitencontour + innerWalls (kamers, staal, isolatoren, alu-schaal).
+ */
+function withRealSection(p) {
+  return { ...p, ...(generateProfileGeometry(p) || {}) };
+}
+
 function getEmbeddedProfiles() {
   return [
     {
@@ -188,29 +198,29 @@ function getEmbeddedProfiles() {
       id: "aluminum",
       label: "Aluminium",
       profiles: [
-        { id: "reynaers-cs77-frame", name: "Reynaers CS 77", manufacturer: "Reynaers Aluminium", series: "CS 77", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 77, depth: 77, sightline: 54, glazingRebate: 28, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 21, position: "midden" }, crossSection: generateCrossSection(77, 77, { width: 18, depth: 21, position: "midden" }) },
-        { id: "reynaers-cs86-frame", name: "Reynaers CS 86-HI", manufacturer: "Reynaers Aluminium", series: "CS 86-HI", material: "aluminum", materialSubtype: "high_insulation", width: 86, depth: 86, sightline: 60, glazingRebate: 34, ufValue: 1.1, applicableAs: ["frame", "sash"], sponning: { width: 22, depth: 24, position: "midden" }, crossSection: generateCrossSection(86, 86, { width: 22, depth: 24, position: "midden" }) },
-        { id: "schuco-aws70-frame", name: "Schuco AWS 70.HI", manufacturer: "Schuco", series: "AWS 70.HI", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 70, depth: 70, sightline: 50, glazingRebate: 26, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 16, depth: 20, position: "midden" }, crossSection: generateCrossSection(70, 70, { width: 16, depth: 20, position: "midden" }) },
-        { id: "schuco-aws75-frame", name: "Schuco AWS 75.SI+", manufacturer: "Schuco", series: "AWS 75.SI+", material: "aluminum", materialSubtype: "super_insulated", width: 75, depth: 75, sightline: 53, glazingRebate: 32, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" }, crossSection: generateCrossSection(75, 75, { width: 20, depth: 22, position: "midden" }) },
-      ],
+        { id: "reynaers-cs77-frame", name: "Reynaers CS 77", manufacturer: "Reynaers Aluminium", series: "CS 77", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 77, depth: 77, sightline: 54, glazingRebate: 28, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 21, position: "midden" } },
+        { id: "reynaers-cs86-frame", name: "Reynaers CS 86-HI", manufacturer: "Reynaers Aluminium", series: "CS 86-HI", material: "aluminum", materialSubtype: "high_insulation", width: 86, depth: 86, sightline: 60, glazingRebate: 34, ufValue: 1.1, applicableAs: ["frame", "sash"], sponning: { width: 22, depth: 24, position: "midden" } },
+        { id: "schuco-aws70-frame", name: "Schuco AWS 70.HI", manufacturer: "Schuco", series: "AWS 70.HI", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 70, depth: 70, sightline: 50, glazingRebate: 26, ufValue: 1.6, applicableAs: ["frame", "sash"], sponning: { width: 16, depth: 20, position: "midden" } },
+        { id: "schuco-aws75-frame", name: "Schuco AWS 75.SI+", manufacturer: "Schuco", series: "AWS 75.SI+", material: "aluminum", materialSubtype: "super_insulated", width: 75, depth: 75, sightline: 53, glazingRebate: 32, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" } },
+      ].map(withRealSection),
     },
     {
       id: "pvc",
       label: "Kunststof (PVC)",
       profiles: [
-        { id: "gealan-s9000-frame", name: "Gealan S 9000", manufacturer: "Gealan", series: "S 9000", material: "pvc", materialSubtype: "6_kamer", width: 83, depth: 83, sightline: 62, glazingRebate: 28, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" }, crossSection: generateCrossSection(83, 83, { width: 18, depth: 20, position: "midden" }) },
-        { id: "gealan-kubus-frame", name: "Gealan-KUBUS", manufacturer: "Gealan", series: "KUBUS", material: "pvc", materialSubtype: "7_kamer", width: 82.5, depth: 82.5, sightline: 0, glazingRebate: 30, ufValue: 0.88, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" }, crossSection: generateCrossSection(82.5, 82.5, { width: 20, depth: 22, position: "midden" }) },
-        { id: "veka-softline82-frame", name: "VEKA Softline 82", manufacturer: "VEKA", series: "Softline 82", material: "pvc", materialSubtype: "7_kamer", width: 82, depth: 82, sightline: 61, glazingRebate: 28, ufValue: 0.95, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" }, crossSection: generateCrossSection(82, 82, { width: 18, depth: 20, position: "midden" }) },
-        { id: "veka-softline70-frame", name: "VEKA Softline 70", manufacturer: "VEKA", series: "Softline 70", material: "pvc", materialSubtype: "5_kamer", width: 70, depth: 70, sightline: 53, glazingRebate: 24, ufValue: 1.3, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 18, position: "midden" }, crossSection: generateCrossSection(70, 70, { width: 15, depth: 18, position: "midden" }) },
-      ],
+        { id: "gealan-s9000-frame", name: "Gealan S 9000", manufacturer: "Gealan", series: "S 9000", material: "pvc", materialSubtype: "6_kamer", chambers: 6, steelReinforced: true, width: 83, depth: 83, sightline: 62, glazingRebate: 28, ufValue: 1.0, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" } },
+        { id: "gealan-kubus-frame", name: "Gealan-KUBUS", manufacturer: "Gealan", series: "KUBUS", material: "pvc", materialSubtype: "7_kamer", chambers: 7, steelReinforced: true, width: 82.5, depth: 82.5, sightline: 0, glazingRebate: 30, ufValue: 0.88, applicableAs: ["frame", "sash"], sponning: { width: 20, depth: 22, position: "midden" } },
+        { id: "veka-softline82-frame", name: "VEKA Softline 82", manufacturer: "VEKA", series: "Softline 82", material: "pvc", materialSubtype: "7_kamer", chambers: 7, steelReinforced: true, width: 82, depth: 82, sightline: 61, glazingRebate: 28, ufValue: 0.95, applicableAs: ["frame", "sash"], sponning: { width: 18, depth: 20, position: "midden" } },
+        { id: "veka-softline70-frame", name: "VEKA Softline 70", manufacturer: "VEKA", series: "Softline 70", material: "pvc", materialSubtype: "5_kamer", chambers: 5, steelReinforced: true, width: 70, depth: 70, sightline: 53, glazingRebate: 24, ufValue: 1.3, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 18, position: "midden" } },
+      ].map(withRealSection),
     },
     {
       id: "wood-aluminum",
       label: "Hout-Aluminium",
       profiles: [
-        { id: "hout-alu-67x114", name: "Hout-Aluminium 67x114mm", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 114, sightline: 54, glazingRebate: 24, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" }, crossSection: generateCrossSection(67, 114, { width: 12, depth: 17, position: "buiten" }) },
-        { id: "hout-alu-67x130", name: "Hout-Aluminium 67x130mm (zwaar)", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 130, sightline: 54, glazingRebate: 30, ufValue: 1.4, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 20, position: "buiten" }, crossSection: generateCrossSection(67, 130, { width: 15, depth: 20, position: "buiten" }) },
-      ],
+        { id: "hout-alu-67x114", name: "Hout-Aluminium 67x114mm", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 114, sightline: 54, glazingRebate: 24, aluCapDepth: 25, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 12, depth: 17, position: "buiten" } },
+        { id: "hout-alu-67x130", name: "Hout-Aluminium 67x130mm (zwaar)", manufacturer: "Generiek", series: "Combi", material: "wood_aluminum", materialSubtype: "meranti_alu", width: 67, depth: 130, sightline: 54, glazingRebate: 30, aluCapDepth: 25, ufValue: 1.4, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 20, position: "buiten" } },
+      ].map(withRealSection),
     },
     {
       id: "raamhout",

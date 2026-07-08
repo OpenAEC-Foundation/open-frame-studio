@@ -10,6 +10,7 @@ function createProfileEditorStore() {
   const { subscribe, set, update } = writable({
     profile: null,
     vertices: [],
+    innerWalls: [],
     selectedVertex: -1,
     tool: "select",
     snap: true,
@@ -24,9 +25,13 @@ function createProfileEditorStore() {
     referenceLines: [],
   });
 
+  function cloneWalls(walls) {
+    return (walls || []).map((poly) => poly.map(([x, y]) => [x, y]));
+  }
+
   function pushUndo(state) {
     update((s) => {
-      const snapshot = JSON.stringify(s.vertices);
+      const snapshot = JSON.stringify({ vertices: s.vertices, innerWalls: s.innerWalls });
       const stack = [...s.undoStack, snapshot].slice(-MAX_UNDO);
       return { ...s, undoStack: stack, redoStack: [] };
     });
@@ -42,6 +47,8 @@ function createProfileEditorStore() {
       set({
         profile: { ...profile },
         vertices: verts,
+        // Binnenstructuur (kamers/staal/isolatoren) — decoratieve tekenlaag
+        innerWalls: cloneWalls(profile.innerWalls),
         selectedVertex: -1,
         tool: "select",
         snap: true,
@@ -85,6 +92,7 @@ function createProfileEditorStore() {
           applicableAs: ["frame"],
         },
         vertices: defaultVerts,
+        innerWalls: [],
         selectedVertex: -1,
         tool: "select",
         snap: true,
@@ -174,7 +182,8 @@ function createProfileEditorStore() {
       update((s) => {
         const maxX = Math.max(...s.vertices.map((v) => v.x));
         const verts = s.vertices.map((v) => ({ x: maxX - v.x, y: v.y }));
-        return { ...s, vertices: verts, isDirty: true };
+        const walls = (s.innerWalls || []).map((poly) => poly.map(([x, y]) => [maxX - x, y]));
+        return { ...s, vertices: verts, innerWalls: walls, isDirty: true };
       });
     },
 
@@ -183,7 +192,8 @@ function createProfileEditorStore() {
       update((s) => {
         const maxY = Math.max(...s.vertices.map((v) => v.y));
         const verts = s.vertices.map((v) => ({ x: v.x, y: maxY - v.y }));
-        return { ...s, vertices: verts, isDirty: true };
+        const walls = (s.innerWalls || []).map((poly) => poly.map(([x, y]) => [x, maxY - y]));
+        return { ...s, vertices: verts, innerWalls: walls, isDirty: true };
       });
     },
 
@@ -206,6 +216,12 @@ function createProfileEditorStore() {
           x: Math.round((minX + (v.x - minX) * sx) * 10) / 10,
           y: Math.round((minY + (v.y - minY) * sy) * 10) / 10,
         })),
+        innerWalls: (s.innerWalls || []).map((poly) =>
+          poly.map(([x, y]) => [
+            Math.round((minX + (x - minX) * sx) * 10) / 10,
+            Math.round((minY + (y - minY) * sy) * 10) / 10,
+          ])
+        ),
         isDirty: true,
       }));
     },
@@ -214,11 +230,12 @@ function createProfileEditorStore() {
       update((s) => {
         if (s.undoStack.length === 0) return s;
         const stack = [...s.undoStack];
-        const prev = stack.pop();
-        const redo = [...s.redoStack, JSON.stringify(s.vertices)];
+        const prev = JSON.parse(stack.pop());
+        const redo = [...s.redoStack, JSON.stringify({ vertices: s.vertices, innerWalls: s.innerWalls })];
         return {
           ...s,
-          vertices: JSON.parse(prev),
+          vertices: prev.vertices || [],
+          innerWalls: prev.innerWalls || [],
           undoStack: stack,
           redoStack: redo,
           selectedVertex: -1,
@@ -231,11 +248,12 @@ function createProfileEditorStore() {
       update((s) => {
         if (s.redoStack.length === 0) return s;
         const stack = [...s.redoStack];
-        const next = stack.pop();
-        const undo = [...s.undoStack, JSON.stringify(s.vertices)];
+        const next = JSON.parse(stack.pop());
+        const undo = [...s.undoStack, JSON.stringify({ vertices: s.vertices, innerWalls: s.innerWalls })];
         return {
           ...s,
-          vertices: JSON.parse(next),
+          vertices: next.vertices || [],
+          innerWalls: next.innerWalls || [],
           undoStack: undo,
           redoStack: stack,
           selectedVertex: -1,
@@ -269,6 +287,9 @@ function createProfileEditorStore() {
         sightline: Math.round((width - s.sponning.width) * 10) / 10,
         glazingRebate: s.sponning.depth,
         crossSection: s.vertices.map((v) => [v.x, v.y]),
+        // Meegespiegeld/-geschaald met de contour; bij losse punt-edits
+        // blijft de binnenstructuur als decoratieve laag ongewijzigd.
+        innerWalls: cloneWalls(s.innerWalls),
         sponning: { ...s.sponning },
       };
     },
@@ -279,6 +300,7 @@ export const profileEditor = createProfileEditorStore();
 
 // Derived stores for convenience
 export const editorVertices = derived(profileEditor, ($s) => $s.vertices);
+export const editorInnerWalls = derived(profileEditor, ($s) => $s.innerWalls || []);
 export const editorTool = derived(profileEditor, ($s) => $s.tool);
 export const editorSnap = derived(profileEditor, ($s) => $s.snap);
 export const editorSelectedVertex = derived(profileEditor, ($s) => $s.selectedVertex);

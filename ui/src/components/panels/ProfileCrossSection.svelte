@@ -1,8 +1,15 @@
 <script>
   import { _ } from "svelte-i18n";
-  let { crossSection = [], width = 80, height = 60, sponning = null } = $props();
+  let { crossSection = [], innerWalls = [], width = 80, height = 60, sponning = null } = $props();
 
   let points = $derived(crossSection && crossSection.length > 2 ? crossSection : null);
+
+  // Binnenstructuur (kamers/staal/isolatoren) — impliciet gesloten polygonen
+  let wallPaths = $derived(
+    (innerWalls || [])
+      .filter((poly) => Array.isArray(poly) && poly.length > 2)
+      .map((poly) => `M ${poly.map((p) => `${p[0]} ${p[1]}`).join(" L ")} Z`)
+  );
 
   let viewBox = $derived((() => {
     if (!points) return "0 0 80 60";
@@ -34,6 +41,9 @@
         </pattern>
       </defs>
       <path d={pathD} fill="url(#wood-hatch)" stroke="none" />
+      {#each wallPaths as wp}
+        <path d={wp} fill="var(--bg-surface)" fill-opacity="0.6" stroke="var(--amber)" stroke-width="0.5" opacity="0.9" />
+      {/each}
       {#if sponning}
         {@const xs = points.map(p => p[0])}
         {@const ys = points.map(p => p[1])}

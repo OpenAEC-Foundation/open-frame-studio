@@ -78,7 +78,7 @@
         <div class="profile-item" onclick={() => loadProfile(p)}>
           <div class="profile-thumb">
             {#if p.crossSection}
-              <ProfileCrossSection crossSection={p.crossSection} />
+              <ProfileCrossSection crossSection={p.crossSection} innerWalls={p.innerWalls} />
             {:else}
               <div class="no-thumb">{p.width}×{p.depth}</div>
             {/if}
@@ -116,7 +116,7 @@
               <div class="profile-item" onclick={() => loadProfile(p)}>
                 <div class="profile-thumb">
                   {#if p.crossSection}
-                    <ProfileCrossSection crossSection={p.crossSection} />
+                    <ProfileCrossSection crossSection={p.crossSection} innerWalls={p.innerWalls} />
                   {:else}
                     <div class="no-thumb">{p.width}×{p.depth}</div>
                   {/if}

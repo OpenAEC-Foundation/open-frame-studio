@@ -427,6 +427,7 @@
               <label>{$_('member.crossSection')}</label>
               <ProfileCrossSection
                 crossSection={profileDef.crossSection}
+                innerWalls={profileDef.innerWalls}
                 sponning={profileDef.sponning}
               />
             </div>
