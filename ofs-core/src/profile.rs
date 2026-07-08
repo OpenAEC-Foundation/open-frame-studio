@@ -1,3 +1,4 @@
+use crate::kozijn::Material;
 use serde::{Deserialize, Serialize};
 
 /// Reference to a profile in the library
@@ -45,12 +46,13 @@ pub struct ProfileSnapshot {
     /// bouwdiepte direction (source: `ProfileDefinition.glazing_rebate`).
     #[serde(default)]
     pub sponning_diepte: Option<f64>,
-    /// Sponninghoogte in mm — glass edge cover in the face plane, KVT
-    /// minimum 17 mm (source: `SponningInfo.depth`). Drives the sponning
-    /// hidden line in the 2D front view (previously hard-coded 17 mm).
+    /// Sponninghoogte in mm — full rebate height in the face plane, KVT
+    /// minimum 17 mm for wood (source: `SponningInfo.depth`). For PVC this is
+    /// the Glasfalzhöhe (VEKA Softline 82 MD: 28 mm), which is larger than
+    /// the drawn glass edge cover — see `glasinval`.
     #[serde(default)]
     pub sponning_hoogte: Option<f64>,
-    /// Glaslat (glazing bead) face width in mm (source:
+    /// Glaslat (glazing bead) face width (oplegbreedte) in mm (source:
     /// `ProfileDefinition.glaslat_width`, KVT min 13 binnen / 15 buiten).
     #[serde(default)]
     pub glaslat_breedte: Option<f64>,
@@ -58,6 +60,90 @@ pub struct ProfileSnapshot {
     /// (source: `ProfileDefinition.sightline`).
     #[serde(default)]
     pub aanzichtbreedte: Option<f64>,
+    /// Glasinval (Glaseinstand) in mm — how far the profile covers the glass
+    /// edge in the face plane, where that differs from the full rebate
+    /// height. PVC systems list both (VEKA Softline 82 MD datasheet:
+    /// "Glasfalzhöhe 28 / Glaseinstand 20" — the front view must show 20,
+    /// not 28). Wood profiles leave this empty: there `sponning_hoogte`
+    /// *is* the glasinval (KVT 12.2). Source: `ProfileDefinition.glasinval`.
+    #[serde(default)]
+    pub glasinval: Option<f64>,
+    /// Glaslathoogte in mm — bead height in the face plane (source:
+    /// `ProfileDefinition.glaslat_height`; KVT 12.3.2: >= 17 mm and >= the
+    /// sponninghoogte). Drives the bead line in the front view (offset
+    /// glaslathoogte − sponninghoogte inside the day line: 0 for a 17x17
+    /// bead on a 17 mm sponning, 11 for a 28 mm handelslat) and the KVT
+    /// bead cut lengths in production.
+    #[serde(default)]
+    pub glaslat_hoogte: Option<f64>,
+}
+
+/// Norm/system fallback for the glasinval (glass edge cover) per frame
+/// material, in mm. Applied when a kozijn *has* a profile snapshot whose
+/// sponning values are missing; kozijnen without any snapshot emit nothing
+/// (the frontend keeps its classic 17 mm fallback) so old projects render
+/// byte-identically.
+///
+/// Sources (onderzoeksronde 2026-07):
+/// - Hout en hout-aluminium (houten kern): 17 mm norm-minimum
+///   (KVT 12.2; Uitleg NPR 3577, Kenniscentrum Glas 2018).
+/// - PVC: geen universele norm — systeemwaarden 18-20 mm (VEKA Softline 82
+///   MD datasheet: Glaseinstand 20 mm; GEALAN S 9000: glasaanslag 18 mm).
+///   Fallback 20 mm (VEKA); systemen horen hun eigen waarde in de
+///   profieldata te zetten.
+/// - Aluminium: systeem-specifiek 13,5-27 mm (Reynaers SlimLine 38: 13,5;
+///   MasterLine 8: 27 per reynaers.com/ATG 3067). Fallback 25 mm = de
+///   bestaande bibliotheekwaarde voor CS 77 / Schüco AWS, waarvan de echte
+///   sponninghoogte niet publiek geverifieerd is.
+pub fn norm_glasinval(material: &Material) -> f64 {
+    match material {
+        Material::Wood(_) | Material::WoodAluminum => 17.0,
+        Material::Pvc => 20.0,
+        Material::Aluminum => 25.0,
+    }
+}
+
+/// Fallback glaslat (glazing bead) height per frame material, in mm.
+///
+/// - Hout / hout-aluminium: KVT 12.3.2 — hoogte >= 17 mm én >= de
+///   sponninghoogte (fabrieksstandaard 17x17 op een 17 mm sponning).
+/// - PVC: VEKA-glaslatten hebben een vaste cliphoogte van 25 mm; de breedte
+///   volgt uit de glasdikte (Baltic Technikheft VEKA 82MD p.35 — één bron).
+/// - Aluminium: Reynaers MasterLine 8 kliklat 25 mm (reynaers.com technical
+///   info + ML8-bestek).
+pub fn norm_glaslat_hoogte(material: &Material, sponning_hoogte: f64) -> f64 {
+    match material {
+        Material::Wood(_) | Material::WoodAluminum => sponning_hoogte.max(17.0),
+        Material::Pvc | Material::Aluminum => 25.0,
+    }
+}
+
+impl ProfileSnapshot {
+    /// Glass edge cover for the 2D front view, in mm: the explicit
+    /// `glasinval` when the profile carries one (PVC: Glaseinstand), else the
+    /// sponninghoogte (identical for wood), else the material norm.
+    pub fn resolved_glasinval(&self, material: &Material) -> f64 {
+        self.glasinval
+            .or(self.sponning_hoogte)
+            .unwrap_or_else(|| norm_glasinval(material))
+    }
+
+    /// Physical rebate height for size chains, in mm — the sponningmaat is
+    /// dagmaat + 2 × this value (KVT 12.2). Prefers the full sponninghoogte
+    /// (PVC: Falzhöhe) over the glasinval; falls back to the material norm.
+    pub fn resolved_sponning_hoogte(&self, material: &Material) -> f64 {
+        self.sponning_hoogte
+            .or(self.glasinval)
+            .unwrap_or_else(|| norm_glasinval(material))
+    }
+
+    /// Glazing bead height in mm: the profile's own value, else the material
+    /// fallback (wood: max(17, sponninghoogte) per KVT 12.3.2).
+    pub fn resolved_glaslat_hoogte(&self, material: &Material) -> f64 {
+        self.glaslat_hoogte.unwrap_or_else(|| {
+            norm_glaslat_hoogte(material, self.resolved_sponning_hoogte(material))
+        })
+    }
 }
 
 /// A profile definition from the library
@@ -106,6 +192,13 @@ pub struct ProfileDefinition {
     /// Achterhout (remaining wood behind sponning) in mm — min 13mm
     #[serde(default)]
     pub achterhout: Option<f64>,
+    /// Glasinval (Glaseinstand) in mm — glass edge cover in the face plane
+    /// where it differs from the full sponning height. PVC systems document
+    /// both (VEKA Softline 82 MD: Glasfalzhöhe 28 / Glaseinstand 20); wood
+    /// profiles omit it (`sponning.depth` is the glasinval there, KVT 12.2).
+    /// JSON key: `glasinval`.
+    #[serde(default)]
+    pub glasinval: Option<f64>,
 }
 
 /// Sponning type classification per KVT
@@ -249,4 +342,109 @@ pub enum ProfileApplication {
     Glaslat,
     /// Spouwlat (cavity batten)
     Spouwlat,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kozijn::WoodType;
+
+    const WOOD: Material = Material::Wood(WoodType::Meranti);
+
+    #[test]
+    fn norm_glasinval_per_material() {
+        // Hout: KVT 12.2 norm-minimum 17; PVC: VEKA Glaseinstand 20 (geen
+        // universele norm); alu: 25 = bestaande bibliotheekwaarde (systemen
+        // lopen 13,5-27).
+        assert_eq!(norm_glasinval(&WOOD), 17.0);
+        assert_eq!(norm_glasinval(&Material::WoodAluminum), 17.0);
+        assert_eq!(norm_glasinval(&Material::Pvc), 20.0);
+        assert_eq!(norm_glasinval(&Material::Aluminum), 25.0);
+    }
+
+    #[test]
+    fn resolved_glasinval_prefers_explicit_then_sponning_then_norm() {
+        // Empty snapshot → material norm.
+        let empty = ProfileSnapshot::default();
+        assert_eq!(empty.resolved_glasinval(&WOOD), 17.0);
+        assert_eq!(empty.resolved_glasinval(&Material::Pvc), 20.0);
+        assert_eq!(empty.resolved_glasinval(&Material::Aluminum), 25.0);
+
+        // Only sponninghoogte set (wood library data) → that value.
+        let wood = ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        };
+        assert_eq!(wood.resolved_glasinval(&WOOD), 17.0);
+
+        // PVC with Falzhöhe + Glaseinstand (VEKA 82 MD: 28/20): the drawn
+        // glass edge cover is the Glaseinstand, not the Falzhöhe.
+        let veka = ProfileSnapshot {
+            sponning_hoogte: Some(28.0),
+            glasinval: Some(20.0),
+            ..Default::default()
+        };
+        assert_eq!(veka.resolved_glasinval(&Material::Pvc), 20.0);
+        // ...while size chains (sponningmaat) keep the full rebate height.
+        assert_eq!(veka.resolved_sponning_hoogte(&Material::Pvc), 28.0);
+    }
+
+    #[test]
+    fn resolved_sponning_hoogte_falls_back_to_glasinval_then_norm() {
+        let only_glasinval = ProfileSnapshot {
+            glasinval: Some(18.0),
+            ..Default::default()
+        };
+        assert_eq!(only_glasinval.resolved_sponning_hoogte(&Material::Pvc), 18.0);
+        assert_eq!(
+            ProfileSnapshot::default().resolved_sponning_hoogte(&WOOD),
+            17.0
+        );
+    }
+
+    #[test]
+    fn resolved_glaslat_hoogte_wood_follows_kvt_12_3_2() {
+        // Fabrieksstandaard 17x17 on the 17 mm sponning.
+        assert_eq!(ProfileSnapshot::default().resolved_glaslat_hoogte(&WOOD), 17.0);
+        // KVT 12.3.2: bead height >= sponninghoogte — a 20 mm sponning
+        // (KVT-alternatief) lifts the fallback bead to 20.
+        let deep = ProfileSnapshot {
+            sponning_hoogte: Some(20.0),
+            ..Default::default()
+        };
+        assert_eq!(deep.resolved_glaslat_hoogte(&WOOD), 20.0);
+        // An explicit bead height (28 mm handelslat) wins.
+        let handelslat = ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            glaslat_hoogte: Some(28.0),
+            ..Default::default()
+        };
+        assert_eq!(handelslat.resolved_glaslat_hoogte(&WOOD), 28.0);
+        // PVC/alu kliklat: 25 mm constant.
+        assert_eq!(
+            ProfileSnapshot::default().resolved_glaslat_hoogte(&Material::Pvc),
+            25.0
+        );
+        assert_eq!(
+            ProfileSnapshot::default().resolved_glaslat_hoogte(&Material::Aluminum),
+            25.0
+        );
+    }
+
+    #[test]
+    fn profile_definition_glasinval_deserializes_and_defaults() {
+        // Library JSONs without the new key keep working (None)...
+        let json = r#"{
+            "id": "test", "name": "Test", "material": "pvc",
+            "materialSubtype": null, "width": 82.0, "depth": 82.0,
+            "sightline": 61.0, "glazingRebate": 28.0, "crossSection": [],
+            "ufValue": 1.1, "applicableAs": ["frame"]
+        }"#;
+        let p: ProfileDefinition = serde_json::from_str(json).unwrap();
+        assert_eq!(p.glasinval, None);
+        // ...and the new key lands in the field.
+        let json2 = json.replace("\"ufValue\"", "\"glasinval\": 20.0, \"ufValue\"");
+        let p2: ProfileDefinition = serde_json::from_str(&json2).unwrap();
+        assert_eq!(p2.glasinval, Some(20.0));
+    }
 }

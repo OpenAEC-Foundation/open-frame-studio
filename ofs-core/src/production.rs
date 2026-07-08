@@ -605,7 +605,16 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             }
         }
 
-        // Glaslatten (glazing beads) — emit a bead cut entry per glazed cell that has one.
+        // Glaslatten (glazing beads) — emit a bead cut entry per glazed cell
+        // that has one. Cut lengths per KVT 12.3.2 when the frame profile
+        // snapshot is present: sponningmaat = dagmaat + 2 × sponninghoogte;
+        // horizontale latten lopen door (sponningmaat − 1), verticale latten
+        // passen ertussen (sponningmaat − 2 × lathoogte − 1, binnenbeglazing);
+        // in verstek (mitered) lopen alle vier tot de hoek (sponningmaat − 1).
+        // Voor draaiende delen benaderen we de vleugelsponning met de
+        // kozijnsnapshot-waarde (een eigen vleugelprofiel-snapshot is een
+        // gedocumenteerde follow-up). Kozijnen zonder snapshot houden de
+        // historische dagmaat-omtrek, zodat oude projecten identiek blijven.
         if let Some(gl) = cell.glaslat.as_ref() {
             let (gw, gh) = if cell.panel_type.is_operable() {
                 let sw = cell.sash_width.unwrap_or(67.0);
@@ -613,7 +622,21 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             } else {
                 (cell_w, cell_h)
             };
-            let total_length = 2.0 * (gw.max(0.0) + gh.max(0.0));
+            let total_length = match kozijn.frame.profile_snapshot.as_ref() {
+                Some(snap) => {
+                    let sh = snap.resolved_sponning_hoogte(mat);
+                    let sponningmaat_w = gw.max(0.0) + 2.0 * sh;
+                    let sponningmaat_h = gh.max(0.0) + 2.0 * sh;
+                    let horizontaal = (sponningmaat_w - 1.0).max(0.0);
+                    let verticaal = if gl.mitered {
+                        (sponningmaat_h - 1.0).max(0.0)
+                    } else {
+                        (sponningmaat_h - 2.0 * gl.height_mm - 1.0).max(0.0)
+                    };
+                    2.0 * horizontaal + 2.0 * verticaal
+                }
+                None => 2.0 * (gw.max(0.0) + gh.max(0.0)),
+            };
             glaslat_list.push(GlaslatListItem {
                 piece_id: cell_id.clone(),
                 cell_index: i,
@@ -1041,5 +1064,68 @@ mod tests {
         assert!((bottom_rail.net_length_mm - k.frame.outer_width).abs() < 0.01);
         assert!((bottom_rail.gross_length_mm
             - (bottom_rail.net_length_mm + SAW_KERF_MM)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_glaslat_lengths_without_snapshot_keep_legacy_perimeter() {
+        // Regression: pre-snapshot kozijnen keep the historic day-size
+        // perimeter for the bead cut length.
+        let mut k = Kozijn::new("Test", "T09", 900.0, 1400.0);
+        k.cells[0].glaslat = Some(crate::glaslat::Glaslat::default()); // 15x17, verstek
+        assert!(k.frame.profile_snapshot.is_none());
+
+        let prod = compute_production_data(&k);
+        assert_eq!(prod.glaslat_list.len(), 1);
+        let item = &prod.glaslat_list[0];
+        let gw = 900.0 - 2.0 * 67.0; // 766
+        let gh = 1400.0 - 2.0 * 67.0; // 1266
+        assert!((item.total_length_mm - 2.0 * (gw + gh)).abs() < 0.01);
+        assert_eq!(item.quantity, 4);
+    }
+
+    #[test]
+    fn test_glaslat_lengths_follow_kvt_when_snapshot_present() {
+        // KVT 12.3.2 with a 17 mm sponning (sponningmaat = dagmaat + 34):
+        // verstek → all four beads sponningmaat − 1; stomp → horizontals run
+        // through, verticals fit between them (− 2 × lathoogte − 1).
+        let mut k = Kozijn::new("Test", "T10", 900.0, 1400.0);
+        k.cells[0].glaslat = Some(crate::glaslat::Glaslat::default()); // 15x17, verstek
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        });
+
+        let gw = 900.0 - 2.0 * 67.0; // dagmaat breed: 766
+        let gh = 1400.0 - 2.0 * 67.0; // dagmaat hoog: 1266
+        let sm_w = gw + 2.0 * 17.0; // sponningmaat 800
+        let sm_h = gh + 2.0 * 17.0; // sponningmaat 1300
+
+        let prod = compute_production_data(&k);
+        let verstek = 2.0 * (sm_w - 1.0) + 2.0 * (sm_h - 1.0);
+        assert!((prod.glaslat_list[0].total_length_mm - verstek).abs() < 0.01);
+
+        // Stomp (butt): verticale latten = sponningmaat − 2 × lathoogte − 1
+        // → met een 17-lat exact dagmaat − 1.
+        k.cells[0].glaslat.as_mut().unwrap().mitered = false;
+        let prod = compute_production_data(&k);
+        let stomp = 2.0 * (sm_w - 1.0) + 2.0 * (sm_h - 2.0 * 17.0 - 1.0);
+        assert!((prod.glaslat_list[0].total_length_mm - stomp).abs() < 0.01);
+        assert!((sm_h - 2.0 * 17.0 - 1.0 - (gh - 1.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_glaslat_lengths_use_material_norm_when_snapshot_empty() {
+        // Empty snapshot on a wood kozijn resolves to the 17 mm KVT norm —
+        // identical to an explicit 17 — so imported profiles without
+        // sponning data still produce plausible bead lengths.
+        let mut k = Kozijn::new("Test", "T11", 900.0, 1400.0);
+        k.cells[0].glaslat = Some(crate::glaslat::Glaslat::default());
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot::default());
+
+        let gw = 900.0 - 2.0 * 67.0;
+        let gh = 1400.0 - 2.0 * 67.0;
+        let expected = 2.0 * (gw + 34.0 - 1.0) + 2.0 * (gh + 34.0 - 1.0);
+        let prod = compute_production_data(&k);
+        assert!((prod.glaslat_list[0].total_length_mm - expected).abs() < 0.01);
     }
 }

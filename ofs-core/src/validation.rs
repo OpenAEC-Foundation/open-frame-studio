@@ -1,4 +1,4 @@
-use crate::kozijn::Kozijn;
+use crate::kozijn::{Kozijn, Material};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,6 +21,8 @@ pub enum ValidationError {
     InsufficientHinges(usize, u8, u8),
     #[error("Cel {0}: glaslat hoogte {1}mm is kleiner dan KVT-minimum {2}mm")]
     GlaslatTooShallow(usize, f64, f64),
+    #[error("Glasinval {0}mm is kleiner dan KVT-minimum {1}mm (sponninghoogte dagkant)")]
+    GlasinvalTooSmall(f64, f64),
     #[error("Cel {0}: vluchtraam moet beweegbaar (te openen) zijn")]
     EscapeWindowNotOperable(usize),
     #[error("Cel {0}: vluchtraam vrije opening {1:.0}x{2:.0}mm is kleiner dan minimum {3:.0}mm")]
@@ -29,6 +31,12 @@ pub enum ValidationError {
 
 /// Minimum free opening (width and height) for an escape window in mm.
 const MIN_ESCAPE_OPENING: f64 = 600.0;
+
+/// KVT 12.2 minimum glasinval (sponninghoogte) at the day sides of stiles and
+/// head for wood frames, in mm. Tops of bottom/intermediate rails may go down
+/// to 14/16 mm (KVT 13.2/14.2), but those sit in separate sill profiles
+/// outside the frame snapshot, so they are not judged here.
+const MIN_GLASINVAL_WOOD: f64 = 17.0;
 
 const MIN_WIDTH: f64 = 200.0;
 const MIN_HEIGHT: f64 = 200.0;
@@ -53,6 +61,26 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
     }
     if h > MAX_HEIGHT {
         errors.push(ValidationError::HeightTooLarge(h, MAX_HEIGHT));
+    }
+
+    // Glasinval plausibility (hout en hout-aluminium): KVT 12.2 stelt 17 mm
+    // minimum voor de glasranddekking op stijlen en bovendorpel. PVC en
+    // aluminium kennen geen universele norm — onderzochte systemen lopen van
+    // 13,5 mm (Reynaers SlimLine 38) tot 27 mm (MasterLine 8) — dus daar
+    // wordt niet gevlagd. Alleen expliciete snapshotwaarden worden
+    // beoordeeld: kozijnen zonder snapshot (of zonder sponningdata in de
+    // snapshot) blijven ongemoeid.
+    if matches!(kozijn.frame.material, Material::Wood(_) | Material::WoodAluminum) {
+        if let Some(gi) = kozijn
+            .frame
+            .profile_snapshot
+            .as_ref()
+            .and_then(|s| s.glasinval.or(s.sponning_hoogte))
+        {
+            if gi < MIN_GLASINVAL_WOOD {
+                errors.push(ValidationError::GlasinvalTooSmall(gi, MIN_GLASINVAL_WOOD));
+            }
+        }
     }
 
     let expected_cells = kozijn.grid.columns.len() * kozijn.grid.rows.len();
@@ -111,4 +139,71 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
     }
 
     errors
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kozijn::Kozijn;
+    use crate::profile::ProfileSnapshot;
+
+    fn has_glasinval_error(errors: &[ValidationError]) -> bool {
+        errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::GlasinvalTooSmall(_, _)))
+    }
+
+    #[test]
+    fn glasinval_below_kvt_minimum_flags_wood() {
+        let mut k = Kozijn::new("Test", "T01", 900.0, 1400.0); // hout (meranti)
+
+        // Zonder snapshot: geen oordeel (regressieveilig voor oude projecten).
+        assert!(!has_glasinval_error(&validate(&k)));
+
+        // Snapshot zonder sponningdata: geen oordeel.
+        k.frame.profile_snapshot = Some(ProfileSnapshot::default());
+        assert!(!has_glasinval_error(&validate(&k)));
+
+        // Expliciete sponninghoogte onder de KVT 12.2-grens van 17 mm.
+        k.frame.profile_snapshot = Some(ProfileSnapshot {
+            sponning_hoogte: Some(12.0),
+            ..Default::default()
+        });
+        let errors = validate(&k);
+        assert!(has_glasinval_error(&errors));
+        assert!(errors
+            .iter()
+            .any(|e| e.to_string().contains("Glasinval 12mm")));
+
+        // Op de grens (17) is het goed.
+        k.frame.profile_snapshot = Some(ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        });
+        assert!(!has_glasinval_error(&validate(&k)));
+
+        // Expliciete glasinval gaat vóór de sponninghoogte.
+        k.frame.profile_snapshot = Some(ProfileSnapshot {
+            sponning_hoogte: Some(28.0),
+            glasinval: Some(12.0),
+            ..Default::default()
+        });
+        assert!(has_glasinval_error(&validate(&k)));
+    }
+
+    #[test]
+    fn glasinval_check_skips_pvc_and_aluminum() {
+        // Reynaers SlimLine 38 heeft legitiem 13,5 mm — geen universele norm
+        // voor PVC/alu, dus daar geen melding.
+        let mut k = Kozijn::new("Test", "T02", 900.0, 1400.0);
+        k.frame.material = crate::kozijn::Material::Aluminum;
+        k.frame.profile_snapshot = Some(ProfileSnapshot {
+            sponning_hoogte: Some(13.5),
+            ..Default::default()
+        });
+        assert!(!has_glasinval_error(&validate(&k)));
+
+        k.frame.material = crate::kozijn::Material::Pvc;
+        assert!(!has_glasinval_error(&validate(&k)));
+    }
 }

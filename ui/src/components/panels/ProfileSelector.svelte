@@ -17,14 +17,25 @@
   /**
    * Resolve the drawing-relevant dimensions from the full ProfileDefinition.
    * Field semantics follow ofs-core::profile: SponningInfo.depth is the
-   * sponninghoogte (KVT min 17 mm — the front-view rebate line) and
-   * glazingRebate the sponningdiepte (bouwdiepte direction).
+   * sponninghoogte (face plane; for PVC the Falzhöhe), glazingRebate the
+   * sponningdiepte (bouwdiepte direction), glasinval the glass edge cover
+   * where it differs from the sponninghoogte (PVC: VEKA 82 MD Glaseinstand
+   * 20 vs Falzhöhe 28), and glaslatHeight the bead height (KVT 12.3.2).
+   *
+   * Values the profile does not carry stay null: ofs-core resolves them to
+   * the norm for the kozijn material (hout 17 / PVC 20 / alu 25 — see
+   * profile::norm_glasinval). The former `sponningHoogte ?? glazingRebate`
+   * crutch is gone deliberately: glazingRebate is the sponningDIEPTE
+   * (bouwdiepte, e.g. 51 mm for wood fixed glazing after the 2026-07 data
+   * correction) and must never be drawn as the 17 mm face rebate.
    */
   function resolveSnapshot(p) {
     return {
       sponningDiepte: mm(p.glazingRebate),
-      sponningHoogte: mm(p.sponning?.depth) ?? mm(p.glazingRebate),
+      sponningHoogte: mm(p.sponning?.depth),
+      glasinval: mm(p.glasinval),
       glaslatBreedte: mm(p.glaslatWidth),
+      glaslatHoogte: mm(p.glaslatHeight),
       aanzichtbreedte: mm(p.sightline),
     };
   }

@@ -62,17 +62,31 @@ pub struct KozijnGeometry2D {
     /// Trapezoid inner polygon points [[x,y], ...] (for trapezoid frame shapes)
     #[serde(default)]
     pub trapezoid_inner: Vec<[f64; 2]>,
-    /// Sponninghoogte in mm from the frame profile snapshot — offset of the
-    /// front-view rebate hidden line inside each frame member. Omitted when
-    /// the kozijn has no snapshot (old payloads stay byte-equal); the
-    /// frontend then falls back to the classic 17 mm.
+    /// Getekende sponninghoogte (glasinval) in mm from the frame profile
+    /// snapshot — offset of the front-view rebate hidden line inside each
+    /// frame member. This is the glass edge cover: for PVC the Glaseinstand
+    /// (VEKA 82 MD: 20), not the Falzhöhe (28). When the snapshot lacks
+    /// sponning values it resolves to the material norm (hout 17 / PVC 20 /
+    /// alu 25 — see `profile::norm_glasinval`). Omitted when the kozijn has
+    /// no snapshot at all (old payloads stay byte-equal); the frontend then
+    /// falls back to the classic 17 mm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sponning_hoogte: Option<f64>,
-    /// Glaslat face width in mm from the frame profile snapshot — inset of
-    /// the glaslat line relative to the sponning line. Omitted when absent;
-    /// the frontend falls back to its classic constant.
+    /// Glaslat face width (oplegbreedte, KVT min 13 binnen / 15 buiten) in mm
+    /// from the frame profile snapshot. NB: this is NOT the bead line offset —
+    /// per KVT 12.3.2 the front-view bead line sits `glaslat_hoogte −
+    /// sponning_hoogte` inside the day line (see `glaslat_hoogte`). Kept for
+    /// existing consumers; omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glaslat_breedte: Option<f64>,
+    /// Glaslathoogte in mm (face plane) — drives the front-view bead line:
+    /// offset `glaslat_hoogte − sponning_hoogte` inside the day line (0 for
+    /// a 17x17 bead on a 17 mm sponning, 11 for a 28 mm handelslat, KVT
+    /// 12.3.2). Resolves to the material fallback when the snapshot lacks it
+    /// (hout max(17, sponninghoogte) / PVC & alu kliklat 25); omitted when
+    /// the kozijn has no snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glaslat_hoogte: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -697,7 +711,13 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
 
     // Profile snapshot (resolved at selection time): sponning/glaslat values
     // ride along in the payload so the frontend no longer hard-codes 17 mm.
+    // Fields the snapshot does not carry resolve to the norm per kozijn
+    // material (hout 17 mm KVT 12.2 / PVC 20 mm VEKA Glaseinstand / alu 25 mm
+    // bibliotheekwaarde — see profile::norm_glasinval). Kozijnen without any
+    // snapshot emit no values: old payloads stay byte-identical and the
+    // frontend keeps its classic 17 mm fallback.
     let snap = kozijn.frame.profile_snapshot.as_ref();
+    let material = &kozijn.frame.material;
 
     KozijnGeometry2D {
         outer_rect,
@@ -711,8 +731,9 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         arch_band,
         trapezoid_outer,
         trapezoid_inner,
-        sponning_hoogte: snap.and_then(|s| s.sponning_hoogte),
+        sponning_hoogte: snap.map(|s| s.resolved_glasinval(material)),
         glaslat_breedte: snap.and_then(|s| s.glaslat_breedte),
+        glaslat_hoogte: snap.map(|s| s.resolved_glaslat_hoogte(material)),
     }
 }
 
@@ -1105,14 +1126,54 @@ mod tests {
             sponning_hoogte: Some(20.0),
             glaslat_breedte: Some(15.0),
             aanzichtbreedte: Some(54.0),
+            glasinval: None,
+            glaslat_hoogte: None,
         });
         let g = compute_2d_geometry(&k);
         assert_eq!(g.sponning_hoogte, Some(20.0));
         assert_eq!(g.glaslat_breedte, Some(15.0));
+        // Wood fallback bead height follows KVT 12.3.2: >= sponninghoogte.
+        assert_eq!(g.glaslat_hoogte, Some(20.0));
         // camelCase on the wire, like the rest of the payload
         let json = serde_json::to_string(&g).unwrap();
         assert!(json.contains("\"sponningHoogte\":20.0"), "payload: {}", json);
         assert!(json.contains("\"glaslatBreedte\":15.0"), "payload: {}", json);
+        assert!(json.contains("\"glaslatHoogte\":20.0"), "payload: {}", json);
+    }
+
+    #[test]
+    fn snapshot_missing_values_resolve_to_material_norms() {
+        // A snapshot without sponning data (e.g. imported profile) resolves
+        // to the norm for the kozijn material: hout 17 (KVT 12.2) / PVC 20
+        // (VEKA Glaseinstand) / alu 25 (bibliotheekwaarde CS77/AWS), bead
+        // fallback hout 17 (KVT 12.3.2) / PVC & alu 25 (kliklat).
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot::default());
+
+        let g = compute_2d_geometry(&k); // default material: wood (meranti)
+        assert_eq!(g.sponning_hoogte, Some(17.0));
+        assert_eq!(g.glaslat_hoogte, Some(17.0));
+
+        k.frame.material = crate::kozijn::Material::Pvc;
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.sponning_hoogte, Some(20.0));
+        assert_eq!(g.glaslat_hoogte, Some(25.0));
+
+        k.frame.material = crate::kozijn::Material::Aluminum;
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.sponning_hoogte, Some(25.0));
+        assert_eq!(g.glaslat_hoogte, Some(25.0));
+
+        // PVC met Falzhöhe én Glaseinstand (VEKA 82 MD: 28/20): de tekening
+        // toont de glasinval, niet de Falzhöhe.
+        k.frame.material = crate::kozijn::Material::Pvc;
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(28.0),
+            glasinval: Some(20.0),
+            ..Default::default()
+        });
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.sponning_hoogte, Some(20.0));
     }
 
     #[test]
@@ -1123,6 +1184,8 @@ mod tests {
             sponning_hoogte: Some(17.0),
             glaslat_breedte: None,
             aanzichtbreedte: Some(54.0),
+            glasinval: None,
+            glaslat_hoogte: Some(17.0),
         });
         let json = serde_json::to_string(&k).unwrap();
         assert!(json.contains("\"profileSnapshot\":{"), "model: {}", json);
@@ -1132,14 +1195,26 @@ mod tests {
         assert_eq!(s.sponning_hoogte, Some(17.0));
         assert_eq!(s.glaslat_breedte, None);
         assert_eq!(s.aanzichtbreedte, Some(54.0));
+        assert_eq!(s.glasinval, None);
+        assert_eq!(s.glaslat_hoogte, Some(17.0));
 
         // Frontend-shaped payloads: nulls, integers and missing keys all parse
+        // (old snapshots without the 2026-07 fields included)
         let js = r#"{"sponningHoogte":20,"glaslatBreedte":null}"#;
         let s2: crate::profile::ProfileSnapshot = serde_json::from_str(js).unwrap();
         assert_eq!(s2.sponning_hoogte, Some(20.0));
         assert_eq!(s2.sponning_diepte, None);
         assert_eq!(s2.glaslat_breedte, None);
         assert_eq!(s2.aanzichtbreedte, None);
+        assert_eq!(s2.glasinval, None);
+        assert_eq!(s2.glaslat_hoogte, None);
+
+        // New frontend fields parse too
+        let js3 = r#"{"sponningHoogte":28,"glasinval":20,"glaslatHoogte":25}"#;
+        let s3: crate::profile::ProfileSnapshot = serde_json::from_str(js3).unwrap();
+        assert_eq!(s3.sponning_hoogte, Some(28.0));
+        assert_eq!(s3.glasinval, Some(20.0));
+        assert_eq!(s3.glaslat_hoogte, Some(25.0));
     }
 
     #[test]
@@ -1153,8 +1228,10 @@ mod tests {
         let g = compute_2d_geometry(&k);
         assert_eq!(g.sponning_hoogte, None);
         assert_eq!(g.glaslat_breedte, None);
+        assert_eq!(g.glaslat_hoogte, None);
         let gj = serde_json::to_string(&g).unwrap();
         assert!(!gj.contains("sponningHoogte") && !gj.contains("glaslatBreedte"));
+        assert!(!gj.contains("glaslatHoogte"));
 
         let kj = serde_json::to_string(&k).unwrap();
         assert!(!kj.contains("profileSnapshot"), "model must not grow a key: {}", kj);
