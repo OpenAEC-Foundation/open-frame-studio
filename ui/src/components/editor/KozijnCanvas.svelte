@@ -29,6 +29,18 @@
     return t === "deur" ? "#b98b5e" : t === "paneel" ? "#c9c2b2" : t === "rooster" ? "#9aa0a8" : "var(--editor-glass)";
   }
 
+  // R3 (KVT 12.3.2, docs/profielmaten-onderzoek.md §5): de glaslatlijn ligt
+  // glaslathoogte − sponninghoogte binnen de sponninglijn — 0 bij een
+  // 17×17-lat op een 17 mm sponning (lijnen vallen samen), 11 bij een
+  // 28 mm handelslat. Dus géén vaste 5/6 mm en niet de voetbreedte
+  // (glaslatBreedte) als offset. De klassieke vaste inset blijft alleen als
+  // fallback voor payloads zonder de snapshotvelden (oude wasm/backend).
+  function glaslatOffset(fallback) {
+    return geometry?.glaslatHoogte != null
+      ? Math.max(0, geometry.glaslatHoogte - (geometry.sponningHoogte ?? 17))
+      : fallback;
+  }
+
   // ── Drag a layout divider (tussenstijl/-dorpel) to resize the two vakken ────
   // Mirrors GridHandles' screen→mm mapping (deltaMm = deltaPx / zoom); the vak
   // sizes are relative within their split, so a mm delta maps to a size delta
@@ -638,7 +650,7 @@
           <rect x={r.x + sb} y={r.y + sb} width={Math.max(1, r.width - sb * 2)} height={Math.max(1, r.height - sb * 2)} fill="none" stroke="var(--amber)" stroke-width={1.2} opacity="0.7" pointer-events="none" />
         {/if}
         {#if v.glaslat}
-          {@const gi = sb + (geometry.glaslatBreedte ?? 6)}
+          {@const gi = sb + glaslatOffset(6)}
           <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
         {/if}
         <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
@@ -970,9 +982,11 @@
       <rect x={sx + spInset} y={sy + spInset}
         width={Math.max(1, sashW - spInset * 2)} height={Math.max(1, sashH - spInset * 2)}
         fill="none" stroke="var(--amber)" stroke-width={0.4} opacity="0.4" pointer-events="none" />
-      <!-- Glaslat line (strip holding glass) — glaslatbreedte uit het
-           profielsnapshot; klassieke 5mm inset als fallback -->
-      {@const glInset = spInset + (geometry.glaslatBreedte ?? 5)}
+      <!-- Glaslat line (strip holding glass) — offset t.o.v. de sponninglijn
+           = glaslathoogte − sponninghoogte (KVT 12.3.2, R3): 0 bij een
+           17×17-lat op een 17-sponning; klassieke 5mm inset alleen als
+           fallback voor payloads zonder snapshotvelden -->
+      {@const glInset = spInset + glaslatOffset(5)}
       {@const hasGl = !!cell.glaslat}
       {@const glColor = cell.glaslat?.position === "buiten" ? "#3B82F6" : "var(--amber)"}
       <rect x={sx + glInset} y={sy + glInset}

@@ -8,7 +8,8 @@ use crate::kozijn::{Kozijn, Material, PanelType};
 const WOOD_PEN_ALLOWANCE_MM: f64 = 20.0;   // tenon allowance per side
 const SAW_KERF_MM: f64 = 4.0;              // saw blade width
 const PVC_WELD_OVERMEASURE_MM: f64 = 4.0;  // weld overmeasure per side
-const GLASS_CLEARANCE_MM: f64 = 4.0;       // glass clearance per side
+const GLASS_CLEARANCE_MM: f64 = 4.0;       // legacy glass/panel clearance per side (kozijnen zonder profielsnapshot; panelen altijd)
+const GLASS_EDGE_CLEARANCE_MM: f64 = 5.0;  // omtrekspeling per zijde in de sponning (NPR 3577-minimum, steldikte; R2)
 const GASKET_OVERLAP_MM: f64 = 20.0;       // gasket overlap at corners
 
 // ── Data structures ────────────────────────────────────────────────
@@ -536,16 +537,34 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             PanelType::FixedGlass | PanelType::TurnTilt | PanelType::Turn
             | PanelType::Tilt | PanelType::Sliding | PanelType::Door
             | PanelType::TopHung | PanelType::BottomHung | PanelType::LiftSlide | PanelType::Pivot => {
-                // Glass — for operable cells, subtract sash frame width
-                let glass_w = if has_sash && sash_fw > 0.0 {
-                    cell_w - 2.0 * sash_fw - 2.0 * GLASS_CLEARANCE_MM
+                // Glasmaat per R2 (KVT 12.2 / NPR 3577-uitleg /
+                // glasdiscount-inmeetregel, zie docs/profielmaten-onderzoek.md
+                // §5): het glas valt in de sponning — sponningmaat = dagmaat +
+                // 2 × sponninghoogte; glasmaat = sponningmaat − 2 × omtrek-
+                // speling met 5 mm speling per zijde (NPR-minimum, steldikte;
+                // = dagmaat + 24 bij de 17 mm houtsponning, en altijd binnen
+                // de praktijkcheck "sponningmaat − 6 à 10"). De dagmaat is de
+                // celmaat, bij draaiende delen minus het raamhout; de vleugel-
+                // sponning benaderen we met de kozijnsnapshot-waarde (zelfde
+                // gedocumenteerde benadering als de glaslatlengtes hieronder).
+                // Kozijnen zonder snapshot houden de historische dagmaat −
+                // 2 × GLASS_CLEARANCE_MM, zodat oude projecten identiek
+                // blijven.
+                let (day_w, day_h) = if has_sash && sash_fw > 0.0 {
+                    (cell_w - 2.0 * sash_fw, cell_h - 2.0 * sash_fw)
                 } else {
-                    cell_w - 2.0 * GLASS_CLEARANCE_MM
+                    (cell_w, cell_h)
                 };
-                let glass_h = if has_sash && sash_fw > 0.0 {
-                    cell_h - 2.0 * sash_fw - 2.0 * GLASS_CLEARANCE_MM
-                } else {
-                    cell_h - 2.0 * GLASS_CLEARANCE_MM
+                let (glass_w, glass_h) = match kozijn.frame.profile_snapshot.as_ref() {
+                    Some(snap) => {
+                        let sh = snap.resolved_sponning_hoogte(mat);
+                        let oversize = 2.0 * sh - 2.0 * GLASS_EDGE_CLEARANCE_MM;
+                        ((day_w + oversize).max(0.0), (day_h + oversize).max(0.0))
+                    }
+                    None => (
+                        day_w - 2.0 * GLASS_CLEARANCE_MM,
+                        day_h - 2.0 * GLASS_CLEARANCE_MM,
+                    ),
                 };
                 let area = (glass_w / 1000.0) * (glass_h / 1000.0);
                 glass_list.push(GlassListItem {
@@ -1111,6 +1130,72 @@ mod tests {
         let stomp = 2.0 * (sm_w - 1.0) + 2.0 * (sm_h - 2.0 * 17.0 - 1.0);
         assert!((prod.glaslat_list[0].total_length_mm - stomp).abs() < 0.01);
         assert!((sm_h - 2.0 * 17.0 - 1.0 - (gh - 1.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_glass_size_without_snapshot_keeps_legacy_clearance() {
+        // Regression: pre-snapshot kozijnen keep the historic
+        // dagmaat − 2 × GLASS_CLEARANCE_MM glass size.
+        let k = Kozijn::new("Test", "T12", 900.0, 1400.0);
+        assert!(k.frame.profile_snapshot.is_none());
+
+        let prod = compute_production_data(&k);
+        let glass = &prod.glass_list[0];
+        let day_w = 900.0 - 2.0 * 67.0; // 766
+        let day_h = 1400.0 - 2.0 * 67.0; // 1266
+        assert!((glass.width_mm - (day_w - 2.0 * GLASS_CLEARANCE_MM)).abs() < 0.01);
+        assert!((glass.height_mm - (day_h - 2.0 * GLASS_CLEARANCE_MM)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_glass_size_follows_r2_when_snapshot_present() {
+        // R2 (KVT 12.2 / NPR 3577-uitleg / glasdiscount-inmeetregel):
+        // glasmaat = sponningmaat − 2 × omtrekspeling met 5 mm speling per
+        // zijde. Bij een 17 mm sponning: dagmaat + 34 − 10 = dagmaat + 24.
+        let mut k = Kozijn::new("Test", "T13", 900.0, 1400.0);
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        });
+
+        let prod = compute_production_data(&k);
+        let glass = &prod.glass_list[0];
+        let day_w = 900.0 - 2.0 * 67.0; // 766
+        let day_h = 1400.0 - 2.0 * 67.0; // 1266
+        assert!((glass.width_mm - (day_w + 24.0)).abs() < 0.01);
+        assert!((glass.height_mm - (day_h + 24.0)).abs() < 0.01);
+
+        // Diepere sponning (PVC-Falzhöhe 28): dagmaat + 56 − 10 = dagmaat
+        // + 46 — de aftrek van de sponningmaat blijft 10 (praktijkcheck
+        // "sponningmaat − 6 à 10").
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(28.0),
+            ..Default::default()
+        });
+        let prod = compute_production_data(&k);
+        let glass = &prod.glass_list[0];
+        assert!((glass.width_mm - (day_w + 2.0 * 28.0 - 2.0 * GLASS_EDGE_CLEARANCE_MM)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_glass_size_operable_uses_sash_day_size() {
+        // Draaiend deel met snapshot: dagmaat = celmaat − 2 × raamhout,
+        // daarna dezelfde R2-keten (vleugelsponning benaderd met de
+        // kozijnsnapshot-waarde).
+        let mut k = Kozijn::new("Test", "T14", 900.0, 1400.0);
+        k.cells[0].panel_type = PanelType::TurnTilt;
+        k.cells[0].sash_width = Some(69.0);
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        });
+
+        let prod = compute_production_data(&k);
+        let glass = &prod.glass_list[0];
+        let day_w = (900.0 - 2.0 * 67.0) - 2.0 * 69.0; // 628
+        let day_h = (1400.0 - 2.0 * 67.0) - 2.0 * 69.0; // 1128
+        assert!((glass.width_mm - (day_w + 24.0)).abs() < 0.01);
+        assert!((glass.height_mm - (day_h + 24.0)).abs() < 0.01);
     }
 
     #[test]

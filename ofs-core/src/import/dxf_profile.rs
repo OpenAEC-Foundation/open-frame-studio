@@ -142,7 +142,16 @@ pub(crate) fn profile_from_polys(polys: &[Poly], name: &str) -> Result<ImportedP
 
     // Estimates where geometry doesn't give it directly.
     let sightline = round1(width * 0.8);
-    let glazing_rebate = sponning.as_ref().map(|s| s.depth).unwrap_or_else(|| round1(width * 0.36));
+    // R12 (docs/profielmaten-onderzoek.md §5): geen `width × 0,36`-fallback
+    // meer — die heuristiek schaalde mee met de profielbreedte en was de root
+    // cause van systemische fout #1 (sponningwaarden 17 → 38 mm in de
+    // houtdata). Zonder gedetecteerde sponning schrijven we 0 = "niet
+    // gespecificeerd" (bibliotheekconventie, vgl. de glaslat-/spouwlatentries):
+    // het materiaal is op DXF-niveau onbekend, en alle consumenten
+    // (profielcontour, snapshot-keten → `profile::norm_glasinval`) vallen dan
+    // per materiaal terug op de vaste R1-normwaarden in plaats van op een
+    // meeschalende gok.
+    let glazing_rebate = sponning.as_ref().map(|s| s.depth).unwrap_or(0.0);
 
     let id = format!("imported-{}", name.to_lowercase().replace(' ', "-"));
 

@@ -295,6 +295,40 @@ fn get_float(row: &HashMap<String, String>, key: &str, default: f64) -> f64 {
         .unwrap_or(default)
 }
 
+/// R12 (docs/profielmaten-onderzoek.md §5): vaste sponning-default per
+/// materiaal wanneer de catalogus geen sponningkolom heeft. De oude
+/// heuristiek `width × 0,36` schaalde mee met de profielbreedte en was de
+/// root cause van systemische fout #1 (sponningwaarden 17 → 38 mm in de
+/// houtdata); een import mag die schaalfout niet herintroduceren.
+///
+/// Veldsemantiek volgt de bibliotheekdata (profiles/*.json,
+/// ui/src/lib/profileContour.js): voor hout/hout-alu is `glazing_rebate` de
+/// sponningBREEDTE in de bouwdiepterichting — 51 mm bij vast glas
+/// (KVT-tekening 14.01; DTS-folder); voor PVC de Glasfalzhöhe — 28 mm (VEKA
+/// TPI Softline 82 MD 07/2020: "Glasfalzhöhe 28"; Gealan S 9000
+/// STOLMA-sneden idem); voor aluminium de sponninghoogte van het systeem —
+/// 25 mm (bestaande bibliotheekwaarde CS 77/Schüco AWS, unverified-vlag,
+/// zie R1). Onbekend materiaal krijgt 0 = "niet gespecificeerd"
+/// (bibliotheekconventie): consumenten vallen dan per materiaal terug op de
+/// R1-normwaarden (`profile::norm_glasinval`) in plaats van op een gegokte
+/// maat. `material` is al gelowercased; "kunststof" matcht ook het Duitse
+/// "kunststoff", de houttermen dekken NL/EN/DE-catalogi.
+fn default_glazing_rebate(material: &str) -> f64 {
+    if material.contains("hout")
+        || material.contains("wood")
+        || material.contains("holz")
+        || material.contains("timber")
+    {
+        51.0
+    } else if material.contains("pvc") || material.contains("kunststof") {
+        28.0
+    } else if material.contains("alu") {
+        25.0
+    } else {
+        0.0
+    }
+}
+
 fn map_profile(
     row: &HashMap<String, String>,
     mapping: &ColumnMapping,
@@ -321,11 +355,11 @@ fn map_profile(
     );
 
     let sightline = get_float(row, mapping.sightline, (width * 0.8 * 10.0).round() / 10.0);
-    let glazing_rebate = get_float(row, mapping.glazing_rebate, (width * 0.36 * 10.0).round() / 10.0);
     let uf_value = get_float(row, mapping.uf_value, 2.0);
     let material = get_val(row, mapping.material)
         .unwrap_or_else(|| "unknown".into())
         .to_lowercase();
+    let glazing_rebate = get_float(row, mapping.glazing_rebate, default_glazing_rebate(&material));
 
     let sp_width = get_float(row, mapping.sponning_width, 0.0);
     let sp_depth = get_float(row, mapping.sponning_depth, 0.0);
