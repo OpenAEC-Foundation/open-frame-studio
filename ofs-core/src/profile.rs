@@ -31,6 +31,35 @@ impl ProfileRef {
     }
 }
 
+/// Resolved profile dimensions captured on the `Frame` at selection time.
+///
+/// The 2D drawing, certification checks and future production logic read
+/// these instead of hard-coded defaults, so the chosen profile really
+/// propagates into the kozijn. Every field is optional: a missing value (or
+/// a missing snapshot altogether — every pre-snapshot project) falls back to
+/// the classic defaults, keeping old projects and old wasm bundles working.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileSnapshot {
+    /// Sponningdiepte in mm — depth of the glass/panel pocket in the
+    /// bouwdiepte direction (source: `ProfileDefinition.glazing_rebate`).
+    #[serde(default)]
+    pub sponning_diepte: Option<f64>,
+    /// Sponninghoogte in mm — glass edge cover in the face plane, KVT
+    /// minimum 17 mm (source: `SponningInfo.depth`). Drives the sponning
+    /// hidden line in the 2D front view (previously hard-coded 17 mm).
+    #[serde(default)]
+    pub sponning_hoogte: Option<f64>,
+    /// Glaslat (glazing bead) face width in mm (source:
+    /// `ProfileDefinition.glaslat_width`, KVT min 13 binnen / 15 buiten).
+    #[serde(default)]
+    pub glaslat_breedte: Option<f64>,
+    /// Aanzichtbreedte (sightline) in mm — visible face width after glazing
+    /// (source: `ProfileDefinition.sightline`).
+    #[serde(default)]
+    pub aanzichtbreedte: Option<f64>,
+}
+
 /// A profile definition from the library
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

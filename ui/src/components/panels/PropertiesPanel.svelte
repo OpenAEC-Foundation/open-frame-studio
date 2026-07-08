@@ -254,7 +254,7 @@
         label={$_('props.frameProfile')}
         filter="frame"
         value={$currentKozijn.frame.profile}
-        onchange={(detail) => updateFrameProfile(detail.id, detail.name, detail.width, detail.depth)}
+        onchange={(detail) => updateFrameProfile(detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
       />
       <ProfileSelector
         label={$_('props.sillProfile')}

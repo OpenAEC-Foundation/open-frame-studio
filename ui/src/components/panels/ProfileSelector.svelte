@@ -9,6 +9,26 @@
     return (p.applicableAs || []).includes(filter);
   }));
 
+  // Positive finite number or null — 0 means "not specified" in library data.
+  function mm(v) {
+    return typeof v === "number" && isFinite(v) && v > 0 ? v : null;
+  }
+
+  /**
+   * Resolve the drawing-relevant dimensions from the full ProfileDefinition.
+   * Field semantics follow ofs-core::profile: SponningInfo.depth is the
+   * sponninghoogte (KVT min 17 mm — the front-view rebate line) and
+   * glazingRebate the sponningdiepte (bouwdiepte direction).
+   */
+  function resolveSnapshot(p) {
+    return {
+      sponningDiepte: mm(p.glazingRebate),
+      sponningHoogte: mm(p.sponning?.depth) ?? mm(p.glazingRebate),
+      glaslatBreedte: mm(p.glaslatWidth),
+      aanzichtbreedte: mm(p.sightline),
+    };
+  }
+
   function handleChange(e) {
     const selectedId = e.target.value;
     const profile = filteredProfiles.find(p => p.id === selectedId);
@@ -18,6 +38,10 @@
         name: profile.name,
         width: profile.width,
         depth: profile.depth,
+        // Resolved profile values: consumers that apply the profile to the
+        // frame store these as profile_snapshot so the drawing follows the
+        // real profile instead of hard-coded defaults.
+        snapshot: resolveSnapshot(profile),
       });
     }
   }

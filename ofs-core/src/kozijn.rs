@@ -87,6 +87,7 @@ impl Kozijn {
                 color_outside: "RAL9010".into(),
                 frame_width: 67.0,
                 frame_depth: 114.0,
+                profile_snapshot: None,
                 sill: None,
                 top_profile: None,
                 bottom_profile: None,
@@ -141,6 +142,7 @@ impl Kozijn {
                 color_outside: sj.color_outside.clone(),
                 frame_width: fw,
                 frame_depth: sj.frame_depth,
+                profile_snapshot: None,
                 sill: None,
                 top_profile: Some(sj.bovendorpel_profile.clone()),
                 bottom_profile: Some(sj.onderdorpel_profile.clone()),
@@ -274,6 +276,12 @@ pub struct Frame {
     pub frame_width: f64,
     /// Frame member depth in mm
     pub frame_depth: f64,
+    /// Resolved dimensions of the selected frame profile (sponning, glaslat,
+    /// aanzichtbreedte), captured when the profile is chosen. `None` on
+    /// pre-snapshot projects — drawing and checks fall back to the classic
+    /// defaults. Skipped when absent so old payloads stay byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_snapshot: Option<crate::profile::ProfileSnapshot>,
     /// Structured sill configuration (v1.3+)
     #[serde(default)]
     pub sill: Option<crate::sill::Sill>,

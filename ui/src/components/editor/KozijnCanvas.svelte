@@ -638,7 +638,7 @@
           <rect x={r.x + sb} y={r.y + sb} width={Math.max(1, r.width - sb * 2)} height={Math.max(1, r.height - sb * 2)} fill="none" stroke="var(--amber)" stroke-width={1.2} opacity="0.7" pointer-events="none" />
         {/if}
         {#if v.glaslat}
-          {@const gi = sb + 6}
+          {@const gi = sb + (geometry.glaslatBreedte ?? 6)}
           <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
         {/if}
         <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
@@ -805,8 +805,10 @@
         role="button"
         tabindex="0"
       />
-      <!-- Sponning line (inner edge of rebate, ~17mm offset from glass side) -->
-      {@const sp = 17}
+      <!-- Sponning line (inner edge of rebate) — sponninghoogte uit het
+           profielsnapshot via de geometry-payload; klassieke 17mm als
+           fallback voor kozijnen zonder snapshot of een oude wasm-bundle -->
+      {@const sp = geometry.sponningHoogte ?? 17}
       {#if memberType === "frame_top" && rect.height > sp}
         <line x1={rect.x} y1={rect.y + rect.height - sp} x2={rect.x + rect.width} y2={rect.y + rect.height - sp}
           stroke="var(--text-muted)" stroke-width={0.5} opacity="0.3" pointer-events="none" />
@@ -950,7 +952,7 @@
     {@const cell = kozijn.cells?.[cellRect.cellIndex]}
     {#if cell && cell.sashWidth && cell.sashWidth > 0 && ["turn_tilt", "turn", "tilt", "sliding", "door", "top_hung", "bottom_hung", "lift_slide", "pivot"].includes(cell.panelType)}
       {@const sw = cell.sashWidth || 54}
-      {@const sp = 17}
+      {@const sp = geometry.sponningHoogte ?? 17}
       {@const opdek = 13}
       {@const gap = 2}
       {@const r = cellRect.rect}
@@ -968,8 +970,9 @@
       <rect x={sx + spInset} y={sy + spInset}
         width={Math.max(1, sashW - spInset * 2)} height={Math.max(1, sashH - spInset * 2)}
         fill="none" stroke="var(--amber)" stroke-width={0.4} opacity="0.4" pointer-events="none" />
-      <!-- Glaslat line (strip holding glass, ~5mm inside sponning) — clearer + position-tinted when configured -->
-      {@const glInset = spInset + 5}
+      <!-- Glaslat line (strip holding glass) — glaslatbreedte uit het
+           profielsnapshot; klassieke 5mm inset als fallback -->
+      {@const glInset = spInset + (geometry.glaslatBreedte ?? 5)}
       {@const hasGl = !!cell.glaslat}
       {@const glColor = cell.glaslat?.position === "buiten" ? "#3B82F6" : "var(--amber)"}
       <rect x={sx + glInset} y={sy + glInset}

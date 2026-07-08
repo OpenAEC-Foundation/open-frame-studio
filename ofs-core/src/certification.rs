@@ -99,12 +99,21 @@ pub fn check_skh_komo(kozijn: &crate::kozijn::Kozijn) -> CertificationResult {
             passed: kozijn.frame.frame_width >= 54.0,
         });
 
-        // Sponning depth >= 17mm
+        // Sponning depth >= 17mm — real value from the profile snapshot when
+        // the frame profile has been applied; assumed for legacy kozijnen.
+        let sponning_hoogte = kozijn
+            .frame
+            .profile_snapshot
+            .as_ref()
+            .and_then(|s| s.sponning_hoogte);
         checks.push(CertCheck {
             requirement: "Sponninghoogte >= 17mm".into(),
-            value: "17mm (aangenomen)".into(),
+            value: match sponning_hoogte {
+                Some(v) => format!("{:.0}mm", v),
+                None => "17mm (aangenomen)".into(),
+            },
             expected: ">= 17mm".into(),
-            passed: true,
+            passed: sponning_hoogte.map_or(true, |v| v >= 17.0),
         });
 
         // Corner joints

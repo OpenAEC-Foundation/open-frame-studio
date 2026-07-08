@@ -180,7 +180,7 @@ export async function autoSelectHardware(cellIndex) {
   await refreshProject();
 }
 
-export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth) {
+export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth, profileSnapshot) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
@@ -188,6 +188,9 @@ export async function updateFrameProfile(profileId, profileName, profileWidth, p
     id: k.id, profileId, profileName,
     profileWidth: profileWidth || null,
     profileDepth: profileDepth || null,
+    // Resolved sponning/glaslat/aanzicht values from the ProfileDefinition;
+    // null leaves the stored snapshot untouched (old backends ignore the arg).
+    profileSnapshotJson: profileSnapshot ? JSON.stringify(profileSnapshot) : null,
   });
   currentKozijn.set(updated);
   await refreshProject();

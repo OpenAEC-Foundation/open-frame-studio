@@ -229,6 +229,13 @@ function wasmCommand(cmd, args) {
         return typeof wasm.update_kozijn_layout === "function"
           ? J(wasm.update_kozijn_layout(args?.id, args?.layoutJson))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_frame_profile":
+        // Applies profile + resolved snapshot (sponning/glaslat) once the
+        // (rebuilt) wasm exposes it; old bundles return the kozijn unchanged.
+        return typeof wasm.update_frame_profile === "function"
+          ? J(wasm.update_frame_profile(args?.id, args?.profileId, args?.profileName,
+              args?.profileWidth ?? null, args?.profileDepth ?? null, args?.profileSnapshotJson ?? null))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "add_column": return J(wasm.add_column(args?.id, args?.position));
       case "add_row": return J(wasm.add_row(args?.id, args?.position));
 
@@ -240,7 +247,6 @@ function wasmCommand(cmd, args) {
 
       // Commands that return unchanged kozijn (updates not yet in WASM)
       case "update_grid_sizes":
-      case "update_frame_profile":
       case "update_sill_profile":
       case "update_member_profile":
       case "update_cell_hardware":

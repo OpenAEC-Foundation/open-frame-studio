@@ -62,6 +62,17 @@ pub struct KozijnGeometry2D {
     /// Trapezoid inner polygon points [[x,y], ...] (for trapezoid frame shapes)
     #[serde(default)]
     pub trapezoid_inner: Vec<[f64; 2]>,
+    /// Sponninghoogte in mm from the frame profile snapshot — offset of the
+    /// front-view rebate hidden line inside each frame member. Omitted when
+    /// the kozijn has no snapshot (old payloads stay byte-equal); the
+    /// frontend then falls back to the classic 17 mm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sponning_hoogte: Option<f64>,
+    /// Glaslat face width in mm from the frame profile snapshot — inset of
+    /// the glaslat line relative to the sponning line. Omitted when absent;
+    /// the frontend falls back to its classic constant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glaslat_breedte: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -684,6 +695,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         ];
     }
 
+    // Profile snapshot (resolved at selection time): sponning/glaslat values
+    // ride along in the payload so the frontend no longer hard-codes 17 mm.
+    let snap = kozijn.frame.profile_snapshot.as_ref();
+
     KozijnGeometry2D {
         outer_rect,
         inner_rect,
@@ -696,6 +711,8 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         arch_band,
         trapezoid_outer,
         trapezoid_inner,
+        sponning_hoogte: snap.and_then(|s| s.sponning_hoogte),
+        glaslat_breedte: snap.and_then(|s| s.glaslat_breedte),
     }
 }
 
@@ -1076,6 +1093,73 @@ mod tests {
         assert!((rchain[1].y2 - rchain[1].y1 - glas_h).abs() < 1e-6);
         let rsum: f64 = rchain.iter().map(|d| d.y2 - d.y1).sum();
         assert!((rsum - oh).abs() < 1e-6);
+    }
+
+    // ── Profile snapshot → model serde + geometry payload ──
+
+    #[test]
+    fn profile_snapshot_flows_into_geometry_payload() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_diepte: Some(24.0),
+            sponning_hoogte: Some(20.0),
+            glaslat_breedte: Some(15.0),
+            aanzichtbreedte: Some(54.0),
+        });
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.sponning_hoogte, Some(20.0));
+        assert_eq!(g.glaslat_breedte, Some(15.0));
+        // camelCase on the wire, like the rest of the payload
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(json.contains("\"sponningHoogte\":20.0"), "payload: {}", json);
+        assert!(json.contains("\"glaslatBreedte\":15.0"), "payload: {}", json);
+    }
+
+    #[test]
+    fn profile_snapshot_serde_roundtrip_and_partial_json() {
+        let mut k = Kozijn::new("Test", "K01", 1000.0, 1000.0);
+        k.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_diepte: Some(24.0),
+            sponning_hoogte: Some(17.0),
+            glaslat_breedte: None,
+            aanzichtbreedte: Some(54.0),
+        });
+        let json = serde_json::to_string(&k).unwrap();
+        assert!(json.contains("\"profileSnapshot\":{"), "model: {}", json);
+        let back: Kozijn = serde_json::from_str(&json).unwrap();
+        let s = back.frame.profile_snapshot.expect("snapshot survives roundtrip");
+        assert_eq!(s.sponning_diepte, Some(24.0));
+        assert_eq!(s.sponning_hoogte, Some(17.0));
+        assert_eq!(s.glaslat_breedte, None);
+        assert_eq!(s.aanzichtbreedte, Some(54.0));
+
+        // Frontend-shaped payloads: nulls, integers and missing keys all parse
+        let js = r#"{"sponningHoogte":20,"glaslatBreedte":null}"#;
+        let s2: crate::profile::ProfileSnapshot = serde_json::from_str(js).unwrap();
+        assert_eq!(s2.sponning_hoogte, Some(20.0));
+        assert_eq!(s2.sponning_diepte, None);
+        assert_eq!(s2.glaslat_breedte, None);
+        assert_eq!(s2.aanzichtbreedte, None);
+    }
+
+    #[test]
+    fn no_snapshot_keeps_model_and_payload_byte_compatible() {
+        // Regression: kozijnen without a snapshot behave exactly as before —
+        // no new keys in the model JSON or the geometry payload, and old JSON
+        // (without the key) still deserializes to None.
+        let k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        assert!(k.frame.profile_snapshot.is_none());
+
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.sponning_hoogte, None);
+        assert_eq!(g.glaslat_breedte, None);
+        let gj = serde_json::to_string(&g).unwrap();
+        assert!(!gj.contains("sponningHoogte") && !gj.contains("glaslatBreedte"));
+
+        let kj = serde_json::to_string(&k).unwrap();
+        assert!(!kj.contains("profileSnapshot"), "model must not grow a key: {}", kj);
+        let back: Kozijn = serde_json::from_str(&kj).unwrap();
+        assert!(back.frame.profile_snapshot.is_none());
     }
 
     #[test]

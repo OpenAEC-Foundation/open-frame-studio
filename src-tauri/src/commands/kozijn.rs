@@ -2,7 +2,7 @@ use crate::state::AppState;
 use ofs_core::geometry::{compute_2d_geometry, normalize_grid_single_cell, KozijnGeometry2D};
 use ofs_core::hardware::{self, HardwareSet, SecurityClass};
 use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, PanelType, OpeningDirection, ShapeType};
-use ofs_core::profile::ProfileRef;
+use ofs_core::profile::{ProfileRef, ProfileSnapshot};
 use ofs_core::thermal;
 use ofs_core::template::{self, KozijnSjabloon};
 use ofs_core::edge::EdgeConfig;
@@ -286,6 +286,7 @@ pub fn update_frame_profile(
     profile_name: String,
     profile_width: Option<f64>,
     profile_depth: Option<f64>,
+    profile_snapshot_json: Option<String>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -315,6 +316,21 @@ pub fn update_frame_profile(
     }
     if let Some(d) = profile_depth {
         kozijn.frame.frame_depth = d;
+    }
+    // Resolved profile snapshot (sponning/glaslat/aanzicht) — sent by the
+    // frontend from the full ProfileDefinition at selection time. An explicit
+    // "null"/empty string clears it; an omitted argument leaves the stored
+    // snapshot untouched so old frontends keep working.
+    if let Some(json) = profile_snapshot_json {
+        let trimmed = json.trim();
+        kozijn.frame.profile_snapshot = if trimmed.is_empty() || trimmed == "null" {
+            None
+        } else {
+            Some(
+                serde_json::from_str::<ProfileSnapshot>(trimmed)
+                    .map_err(|e| format!("Ongeldig profielsnapshot JSON: {}", e))?,
+            )
+        };
     }
     Ok(kozijn.clone())
 }

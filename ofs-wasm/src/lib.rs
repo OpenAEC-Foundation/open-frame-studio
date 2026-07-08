@@ -344,6 +344,64 @@ pub fn update_frame_shape(
 }
 
 #[wasm_bindgen]
+pub fn update_frame_profile(
+    id: &str,
+    profile_id: &str,
+    profile_name: &str,
+    profile_width: Option<f64>,
+    profile_depth: Option<f64>,
+    profile_snapshot_json: Option<String>,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        k.frame.profile = ofs_core::profile::ProfileRef {
+            id: profile_id.to_string(),
+            name: profile_name.to_string(),
+        };
+        if let Some(w) = profile_width {
+            let old_fw = k.frame.frame_width;
+            k.frame.frame_width = w;
+            // Rescale the grid to the new frame width (same semantics as the
+            // Tauri command).
+            let old_inner = k.frame.outer_width - 2.0 * old_fw;
+            let new_inner = k.frame.outer_width - 2.0 * w;
+            if old_inner > 0.0 && new_inner > 0.0 {
+                let scale = new_inner / old_inner;
+                for col in &mut k.grid.columns {
+                    col.size *= scale;
+                }
+            }
+            let old_inner_h = k.frame.outer_height - 2.0 * old_fw;
+            let new_inner_h = k.frame.outer_height - 2.0 * w;
+            if old_inner_h > 0.0 && new_inner_h > 0.0 {
+                let scale_h = new_inner_h / old_inner_h;
+                for row in &mut k.grid.rows {
+                    row.size *= scale_h;
+                }
+            }
+        }
+        if let Some(d) = profile_depth {
+            k.frame.frame_depth = d;
+        }
+        // Resolved snapshot: explicit "null"/empty clears it, an omitted
+        // argument leaves the stored snapshot untouched.
+        if let Some(json) = profile_snapshot_json {
+            let trimmed = json.trim();
+            k.frame.profile_snapshot = if trimmed.is_empty() || trimmed == "null" {
+                None
+            } else {
+                Some(
+                    serde_json::from_str::<ofs_core::profile::ProfileSnapshot>(trimmed)
+                        .map_err(|e| format!("Ongeldig profielsnapshot JSON: {}", e))?,
+                )
+            };
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn add_column(id: &str, position: f64) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
