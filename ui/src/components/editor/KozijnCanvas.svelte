@@ -1,9 +1,16 @@
 <script>
   import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
-  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, ensureIds } from "../../lib/layout.js";
+  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
+  import { ralToHex } from "../../lib/ral-colors.js";
 
   let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
+
+  // #8: reflect the chosen RAL frame colour in the drawing instead of a fixed
+  // token. The front elevation shows the inside face colour (colorInside); the
+  // selection highlight stays a separate stroke overlay (see below) so colour
+  // and selection coexist. Falls back to the editor token when no RAL is set.
+  let frameColor = $derived(kozijn?.frame?.colorInside ? ralToHex(kozijn.frame.colorInside) : "var(--editor-frame)");
 
   // ── Free-subdivision layout: editable render of the split tree ──────────────
   // While a divider is being dragged we render a local working copy so the drag
@@ -11,6 +18,9 @@
   let workingTree = $state(null);
   let layoutDrag = $state(null);
   let selectedLeafId = $state(null);
+  // #9: "vakken uitwisselen". When a swap is armed (via the ⇄ button) this holds
+  // the source vak id; the next vak click swaps the two vakken's contents.
+  let swapSourceId = $state(null);
   // ensureIds is defensive: old .ofs files or a stale wasm bundle may hand us a
   // tree without node ids, while all canvas editing is id-based. It is memoized
   // so the same input yields the same object (stable selection).
@@ -88,17 +98,36 @@
 
   function selectLeaf(id, e) {
     e?.stopPropagation();
+    // If a swap is armed and a *different* vak is clicked, complete the swap.
+    if (swapSourceId && id !== swapSourceId && activeTree) {
+      setKozijnLayout(swapVullingen(activeTree, swapSourceId, id));
+      swapSourceId = null;
+      selectedLeafId = id;
+      selectedCellIndex.set(null);
+      selectedMember.set(null);
+      return;
+    }
+    swapSourceId = null; // clicking (the same or any) vak cancels an armed swap
     selectedLeafId = id;
     selectedCellIndex.set(null);
     selectedMember.set(null);
   }
   function doSplitLayout(dir, e) {
     e?.stopPropagation();
+    swapSourceId = null;
     if (selectedLeafId && activeTree) setKozijnLayout(splitLeaf(activeTree, selectedLeafId, dir));
   }
   function doMergeLayout(e) {
     e?.stopPropagation();
+    swapSourceId = null;
     if (selectedLeafId && activeTree) setKozijnLayout(mergeAt(activeTree, selectedLeafId));
+  }
+  // Arm a swap: the next vak click will exchange its contents with this vak.
+  // Toggling on the same vak disarms it.
+  function doSwapLayout(e) {
+    e?.stopPropagation();
+    if (!selectedLeafId) return;
+    swapSourceId = swapSourceId === selectedLeafId ? null : selectedLeafId;
   }
 
   // ── Round/elliptical frame: donut geometry + inner clip ─────────────────────
@@ -106,6 +135,9 @@
   // inner opening, so the decoration never paints over vak content and never
   // steals pointer events.
   const clipId = `ofs-inner-clip-${Math.random().toString(36).slice(2, 9)}`;
+  // Running-bond brick pattern for the borstwering (masonry) under a melkmeisje
+  // side light — makes the `buiten` zone read as a wall instead of an empty hole.
+  const brickPatternId = `ofs-brick-${Math.random().toString(36).slice(2, 9)}`;
   let roundClip = $derived.by(() => {
     const f = kozijn?.frame;
     if (!f?.shape) return null;
@@ -598,14 +630,35 @@
 </script>
 
 <g>
-  <!-- Frame members background (drawn first, behind cells) -->
-  {#each geometry.frameRects as rect}
-    <rect
-      x={rect.x} y={rect.y}
-      width={rect.width} height={rect.height}
-      fill="var(--editor-frame)"
-    />
-  {/each}
+  <defs>
+    <!-- Metselwerk (borstwering) — running bond, in mm user-space so it scales. -->
+    <pattern id={brickPatternId} width="120" height="60" patternUnits="userSpaceOnUse">
+      <rect width="120" height="60" fill="#9c876d" />
+      <g stroke="#cabfa8" stroke-width="4" stroke-linecap="square">
+        <line x1="0" y1="0" x2="120" y2="0" />
+        <line x1="0" y1="30" x2="120" y2="30" />
+        <line x1="0" y1="0" x2="0" y2="30" />
+        <line x1="60" y1="30" x2="60" y2="60" />
+      </g>
+    </pattern>
+  </defs>
+  <!-- Frame members background (drawn first, behind cells). Mitered (verstek)
+       and stepped (melkmeisje) frames arrive as closed polygons in
+       geometry.framePolygons; fall back to the plain rects otherwise (older
+       wasm bundle / plain butt frame) so the canvas renders either shape. -->
+  {#if geometry.framePolygons?.length}
+    {#each geometry.framePolygons as poly}
+      <polygon points={poly.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={frameColor} />
+    {/each}
+  {:else}
+    {#each geometry.frameRects as rect}
+      <rect
+        x={rect.x} y={rect.y}
+        width={rect.width} height={rect.height}
+        fill={frameColor}
+      />
+    {/each}
+  {/if}
 
   <!-- Round/elliptical frame: donut drawn UNDER the cell layer (decoration only,
        no pointer events); the cell layer below is clipped to the inner opening -->
@@ -619,12 +672,12 @@
     </clipPath>
     {#if roundClip.kind === "circle"}
       <circle cx={roundClip.cx} cy={roundClip.cy} r={roundClip.rOuter}
-        fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+        fill={frameColor} stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
       <circle cx={roundClip.cx} cy={roundClip.cy} r={roundClip.rInner}
         fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
     {:else}
       <ellipse cx={roundClip.cx} cy={roundClip.cy} rx={roundClip.rx} ry={roundClip.ry}
-        fill="var(--editor-frame)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
+        fill={frameColor} stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
       {#if roundClip.irx > 0 && roundClip.iry > 0}
         <ellipse cx={roundClip.cx} cy={roundClip.cy} rx={roundClip.irx} ry={roundClip.iry}
           fill="var(--editor-glass)" stroke="var(--editor-frame)" stroke-width="1" pointer-events="none" />
@@ -636,7 +689,7 @@
   {#if kozijn?.layout && layoutGeom}
     <!-- Free-subdivision layout (editable: click a vak, drag the dividers) -->
     {#each layoutGeom.dividers as d}
-      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill="var(--editor-frame)" pointer-events="none" />
+      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill={frameColor} pointer-events="none" />
     {/each}
     {#each layoutGeom.leaves as l}
       {#if l.node.vulling.type !== "buiten"}
@@ -663,6 +716,16 @@
           <rect x={r.x + 2} y={r.y + 2} width={Math.max(1, r.width - 4)} height={Math.max(1, r.height - 4)}
                 fill="none" stroke="var(--editor-selected, #D97706)" stroke-width={3 / zoom} pointer-events="none" />
         {/if}
+      {:else}
+        <!-- Borstwering: het lage muurtje onder een melkmeisje-zijlicht. Geen
+             kozijnvak maar metselwerk, zodat het als muur leest i.p.v. een gat.
+             De getrapte kozijnomtrek eromheen komt uit geometry.framePolygons
+             (zichtbaar na de wasm-rebuild). -->
+        {@const r = l.rect}
+        <rect x={r.x} y={r.y} width={r.width} height={r.height}
+              fill="url(#{brickPatternId})" stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
+        <text x={r.x + r.width / 2} y={r.y + r.height / 2} text-anchor="middle" dominant-baseline="central"
+              fill="#F5EFE3" font-size={11 / zoom} font-weight="700" opacity="0.85" pointer-events="none">Borstwering</text>
       {/if}
     {/each}
 
@@ -678,20 +741,26 @@
     {#if selectedLeafRect}
       {@const bs = 30 / zoom}
       {@const gp = 5 / zoom}
-      {@const tw = bs * 3 + gp * 2}
+      {@const tw = bs * 4 + gp * 3}
       {@const bx = selectedLeafRect.x + selectedLeafRect.width / 2 - tw / 2}
       {@const by = selectedLeafRect.y + 7 / zoom}
-      {#each [{ k: "row", t: "⟷", title: "Splits met tussenstijl" }, { k: "column", t: "↕", title: "Splits met tussendorpel" }, { k: "merge", t: "⤬", title: "Samenvoegen" }] as b, bi}
+      {#each [{ k: "row", t: "⟷", title: "Splits met tussenstijl" }, { k: "column", t: "↕", title: "Splits met tussendorpel" }, { k: "merge", t: "⤬", title: "Samenvoegen" }, { k: "swap", t: "⇄", title: "Verwissel met ander vak" }] as b, bi}
         {@const x0 = bx + bi * (bs + gp)}
+        {@const armed = b.k === "swap" && swapSourceId === selectedLeafId}
         <g class="lay-btn" role="button" tabindex="0" aria-label={b.title}
-           onclick={(e) => b.k === "merge" ? doMergeLayout(e) : doSplitLayout(b.k, e)}
-           onkeydown={(e) => e.key === "Enter" && (b.k === "merge" ? doMergeLayout(e) : doSplitLayout(b.k, e))}>
+           onclick={(e) => b.k === "merge" ? doMergeLayout(e) : b.k === "swap" ? doSwapLayout(e) : doSplitLayout(b.k, e)}
+           onkeydown={(e) => e.key === "Enter" && (b.k === "merge" ? doMergeLayout(e) : b.k === "swap" ? doSwapLayout(e) : doSplitLayout(b.k, e))}>
           <rect x={x0} y={by} width={bs} height={bs} rx={5 / zoom}
-                fill="var(--bg-surface-alt, #2a2a38)" stroke="var(--amber, #D97706)" stroke-width={1.4 / zoom} />
+                fill={armed ? "var(--amber, #D97706)" : "var(--bg-surface-alt, #2a2a38)"} stroke="var(--amber, #D97706)" stroke-width={1.4 / zoom} />
           <text x={x0 + bs / 2} y={by + bs / 2} text-anchor="middle" dominant-baseline="central"
-                font-size={17 / zoom} fill="var(--amber, #D97706)" pointer-events="none">{b.t}</text>
+                font-size={17 / zoom} fill={armed ? "#1a1a1a" : "var(--amber, #D97706)"} pointer-events="none">{b.t}</text>
         </g>
       {/each}
+      {#if swapSourceId === selectedLeafId}
+        <text x={selectedLeafRect.x + selectedLeafRect.width / 2} y={by + bs + 14 / zoom}
+              text-anchor="middle" dominant-baseline="central" fill="var(--amber, #D97706)"
+              font-size={11 / zoom} font-weight="600" pointer-events="none">→ klik het vak om mee te wisselen</text>
+      {/if}
     {/if}
   {/if}
 
@@ -801,7 +870,12 @@
   {/if}
   </g>
 
-  <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is visible) -->
+  <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is
+       visible). Skipped when the frame is polygon-based (verstek/melkmeisje):
+       the stepped mass polygons include the vak area, so redrawing them on top
+       would cover the glass — they're already drawn as the background layer.
+       Member selection + sponning lines stay on the rect frame path. -->
+  {#if !geometry.framePolygons?.length}
   {#each geometry.frameRects as rect, i}
     {@const memberType = FRAME_MEMBER_NAMES[i]}
     {@const isSelected = $selectedMember?.type === memberType}
@@ -836,6 +910,7 @@
       {/if}
     {/if}
   {/each}
+  {/if}
 
   <!-- Corner joint indicators (color-coded by type) -->
   {#if kozijn.frame?.cornerJoints?.length > 0}
@@ -933,7 +1008,10 @@
   {/if}
 
   <!-- Profile codes on frame members (GA Kozijn style - green text) —
-       skipped for zero-size members (round/elliptical: all four; arched: top) -->
+       skipped for zero-size members (round/elliptical: all four; arched: top),
+       and for polygon frames (verstek/melkmeisje) whose members don't map to
+       the 4 rect slots. -->
+  {#if !geometry.framePolygons?.length}
   {#each geometry.frameRects as rect, i}
     {@const memberName = FRAME_MEMBER_NAMES[i]}
     {@const isVertical = memberName === "frame_left" || memberName === "frame_right"}
@@ -957,6 +1035,7 @@
     </text>
     {/if}
   {/each}
+  {/if}
 
   {#if !kozijn?.layout}
   <!-- Sash frame (raamhout/deurhout) with sponning detail -->

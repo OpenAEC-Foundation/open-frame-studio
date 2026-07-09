@@ -3,6 +3,7 @@
   import { isTauri } from "../../lib/tauri.js";
   import { fileNew, fileOpen, fileSave, fileSaveAs } from "../../lib/project-actions.js";
   import { _ } from "svelte-i18n";
+  import { APP_VERSION } from "../../lib/version.js";
 
   async function handleNew() {
     await fileNew();
@@ -120,7 +121,7 @@
         </nav>
 
         <div class="sidebar-footer">
-          <span class="footer-text">v0.4.0</span>
+          <span class="footer-text">v{APP_VERSION}</span>
         </div>
       </div>
 

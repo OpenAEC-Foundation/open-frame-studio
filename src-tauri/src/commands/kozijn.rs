@@ -444,12 +444,14 @@ pub fn update_cell_type(
     match panel_type {
         PanelType::TurnTilt | PanelType::Turn | PanelType::Tilt | PanelType::Sliding => {
             if cell.sash_profile.is_none() {
+                // KVT-draaikiep 69x90 (zichtdeel 55). "54x67" bestaat niet als
+                // raamhout — de kleinste KVT-reeksmaat is 54x78 (docs/profielmaten-onderzoek.md §2.2).
                 cell.sash_profile = Some(ProfileRef {
-                    id: "raam-meranti-54x67".into(),
-                    name: "Raamhout 54x67mm".into(),
+                    id: "raamhout-69x90".into(),
+                    name: "Raamhout 69x90mm (draaikiep)".into(),
                 });
-                cell.sash_width = Some(54.0);
-                cell.sash_depth = Some(67.0);
+                cell.sash_width = Some(69.0);
+                cell.sash_depth = Some(90.0);
             }
         }
         PanelType::Door => {

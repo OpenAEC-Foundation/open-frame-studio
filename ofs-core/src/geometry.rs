@@ -40,6 +40,17 @@ pub struct KozijnGeometry2D {
     pub inner_rect: Rect2D,
     /// Frame members (top, bottom/sill, left, right)
     pub frame_rects: Vec<Rect2D>,
+    /// Frame drawn as filled polygons instead of the plain `frame_rects`
+    /// rectangles. Populated ONLY for mitered (verstek) / mixed corners and for
+    /// stepped (melkmeisje / `Buiten`-leaf) outlines; empty otherwise, so plain
+    /// butt-jointed kozijnen and old payloads stay byte-identical (the field is
+    /// skipped when empty). Each entry is a closed ring `[[x, y], ...]`. When
+    /// present, consumers should draw these for the frame body and ignore
+    /// `frame_rects` (which stays populated for rectangle-only consumers such as
+    /// the 3D viewer). Order matches `frame_rects` (top, bottom, left, right)
+    /// for the per-member miter case; the stepped case is one ring per real vak.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frame_polygons: Vec<Vec<[f64; 2]>>,
     /// Horizontal dividers
     pub h_dividers: Vec<Rect2D>,
     /// Vertical dividers
@@ -180,7 +191,13 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         top_rect_height
     };
 
-    // For round/elliptical frames, all rectangular members are hidden (ellipse/circle replaces everything)
+    // Frame members. Order stays [top, bottom, left, right] for every branch
+    // (the 3D viewer and canvas index members by position). Plain rectangular
+    // frames become joint-aware here — the through-member and any verstek come
+    // from the SAME shared helper the saw list uses (`crate::joint`), so the
+    // picture and the cut list agree (issue 7) — and step around `Buiten`
+    // leaves (issue 10). Every other shape keeps its exact historic rects.
+    let mut frame_polygons: Vec<Vec<[f64; 2]>> = Vec::new();
     let frame_rects = if is_round || is_elliptical {
         vec![
             Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
@@ -188,6 +205,48 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
             Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
         ]
+    } else if kozijn.frame.shape.shape_type == ShapeType::Rectangular {
+        let corners = crate::joint::frame_corner_model(
+            &kozijn.frame.material,
+            &kozijn.frame.corner_joints,
+        );
+        let has_buiten = layout_geom
+            .as_ref()
+            .map_or(false, |lg| lg.leaves.iter().any(|l| l.vulling.is_buiten()));
+        // Rects: stiles run full height when every corner is a stijl-through
+        // butt (the wood default); otherwise keep the historic dorpel-through
+        // rects (byte-identical for alu/PVC and configured dorpel-through). For
+        // verstek/mixed/melkmeisje the accurate frame rides in `frame_polygons`.
+        let all_stijl_through = corners
+            .iter()
+            .all(|c| !c.verstek && c.through == crate::joint::ThroughMember::Stijl);
+        let rects = if all_stijl_through {
+            vec![
+                Rect2D { x: fw, y: 0.0, width: ow - 2.0 * fw, height: fw }, // top rail between stiles
+                Rect2D { x: fw, y: oh - fw, width: ow - 2.0 * fw, height: fw }, // bottom rail between stiles
+                Rect2D { x: 0.0, y: 0.0, width: fw, height: oh }, // left stile full height
+                Rect2D { x: ow - fw, y: 0.0, width: fw, height: oh }, // right stile full height
+            ]
+        } else {
+            vec![
+                Rect2D { x: 0.0, y: 0.0, width: ow, height: fw },
+                Rect2D { x: 0.0, y: oh - fw, width: ow, height: fw },
+                Rect2D { x: 0.0, y: fw, width: fw, height: oh - 2.0 * fw },
+                Rect2D { x: ow - fw, y: fw, width: fw, height: oh - 2.0 * fw },
+            ]
+        };
+        if has_buiten {
+            if let Some(lg) = &layout_geom {
+                frame_polygons = stepped_frame_polygons(lg, ow, oh, fw);
+            }
+        } else {
+            let needs_polygons = corners.iter().any(|c| c.verstek)
+                || !corners.iter().all(|c| c.through == corners[0].through);
+            if needs_polygons {
+                frame_polygons = rectangular_frame_member_polygons(ow, oh, fw, &corners);
+            }
+        }
+        rects
     } else {
         vec![
             // Top (hidden for arched — arc replaces it)
@@ -723,6 +782,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         outer_rect,
         inner_rect,
         frame_rects,
+        frame_polygons,
         h_dividers,
         v_dividers,
         cell_rects,
@@ -769,6 +829,84 @@ fn layout_dividers_and_cells(lg: &LayoutGeometry) -> (Vec<Rect2D>, Vec<Rect2D>, 
         })
         .collect();
     (v_dividers, h_dividers, cell_rects)
+}
+
+/// Frame drawn as four member polygons for a plain rectangular frame, honoring
+/// per-corner verstek (miter) and through-member from the shared corner model.
+/// Members tile the frame border exactly, so verstek corners meet on their 45°
+/// diagonal and butt corners let the through member own the corner. Order is
+/// [top, bottom, left, right], matching `frame_rects`.
+fn rectangular_frame_member_polygons(
+    ow: f64,
+    oh: f64,
+    fw: f64,
+    corners: &[crate::joint::CornerModel; 4],
+) -> Vec<Vec<[f64; 2]>> {
+    use crate::joint::{CornerModel, ThroughMember};
+    // At a corner: outer corner (ox,oy), inner corner (ix,iy). Each end returns
+    // (outer_point, inner_point). Verstek → the 45° diagonal; otherwise the
+    // through member runs to the outer edge and the other stops at the inset.
+    let rail_end = |c: &CornerModel, ox: f64, oy: f64, ix: f64, iy: f64| -> ([f64; 2], [f64; 2]) {
+        if c.verstek {
+            ([ox, oy], [ix, iy])
+        } else if c.through == ThroughMember::Dorpel {
+            ([ox, oy], [ox, iy]) // rail runs through to the outer x
+        } else {
+            ([ix, oy], [ix, iy]) // stile through → rail stops at the inset x
+        }
+    };
+    let stile_end = |c: &CornerModel, ox: f64, oy: f64, ix: f64, iy: f64| -> ([f64; 2], [f64; 2]) {
+        if c.verstek {
+            ([ox, oy], [ix, iy])
+        } else if c.through == ThroughMember::Stijl {
+            ([ox, oy], [ix, oy]) // stile runs through to the outer y
+        } else {
+            ([ox, iy], [ix, iy]) // dorpel through → stile stops at the inset y
+        }
+    };
+
+    // Top rail: TL=corners[0], TR=corners[1].
+    let (tl_o, tl_i) = rail_end(&corners[0], 0.0, 0.0, fw, fw);
+    let (tr_o, tr_i) = rail_end(&corners[1], ow, 0.0, ow - fw, fw);
+    let top = vec![tl_o, tr_o, tr_i, tl_i];
+
+    // Bottom rail: BL=corners[2], BR=corners[3].
+    let (bl_o, bl_i) = rail_end(&corners[2], 0.0, oh, fw, oh - fw);
+    let (br_o, br_i) = rail_end(&corners[3], ow, oh, ow - fw, oh - fw);
+    let bottom = vec![bl_o, br_o, br_i, bl_i];
+
+    // Left stile: TL=corners[0], BL=corners[2].
+    let (lt_o, lt_i) = stile_end(&corners[0], 0.0, 0.0, fw, fw);
+    let (lb_o, lb_i) = stile_end(&corners[2], 0.0, oh, fw, oh - fw);
+    let left = vec![lt_o, lb_o, lb_i, lt_i];
+
+    // Right stile: TR=corners[1], BR=corners[3].
+    let (rt_o, rt_i) = stile_end(&corners[1], ow, 0.0, ow - fw, fw);
+    let (rb_o, rb_i) = stile_end(&corners[3], ow, oh, ow - fw, oh - fw);
+    let right = vec![rt_o, rb_o, rb_i, rt_i];
+
+    vec![top, bottom, left, right]
+}
+
+/// Stepped frame mass for a melkmeisje (layout with `Buiten` leaves): one ring
+/// per real (non-`Buiten`) vak, expanded outward by the frame width and clamped
+/// to the outer bounds. Their union is the stepped outline — the outline steps
+/// up around the raised side light and there is no frame (sill/stile) over the
+/// `Buiten` wall zone. Mirrors LayoutProtoView's per-vak frame-mass approach.
+fn stepped_frame_polygons(lg: &LayoutGeometry, ow: f64, oh: f64, fw: f64) -> Vec<Vec<[f64; 2]>> {
+    let mut polys = Vec::new();
+    for l in &lg.leaves {
+        if l.vulling.is_buiten() {
+            continue;
+        }
+        let r = l.rect;
+        let x0 = (r.x - fw).max(0.0);
+        let y0 = (r.y - fw).max(0.0);
+        let x1 = (r.x + r.width + fw).min(ow);
+        let y1 = (r.y + r.height + fw).min(oh);
+        polys.push(vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+    }
+    polys
 }
 
 /// Boundaries of the level-1 dimension chain along one axis, derived from the
@@ -982,6 +1120,84 @@ mod tests {
         assert!(g.v_dividers.is_empty() && g.h_dividers.is_empty());
     }
 
+    // ── Corner-joint aware frame (issue 7) ──
+
+    #[test]
+    fn wood_default_draws_stiles_full_height() {
+        // Wood stijl-through default: stiles run the full outer height, rails
+        // fit between them (agreeing with the saw list), and no polygons.
+        let k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        let g = compute_2d_geometry(&k);
+        let (ow, oh, fw) = (1200.0, 1500.0, 67.0);
+        // frame_rects order: [top, bottom, left, right]
+        let left = &g.frame_rects[2];
+        let right = &g.frame_rects[3];
+        assert!((left.height - oh).abs() < 1e-6 && (left.x - 0.0).abs() < 1e-6);
+        assert!((right.height - oh).abs() < 1e-6 && (right.x - (ow - fw)).abs() < 1e-6);
+        // Rails sit between the stiles.
+        let top = &g.frame_rects[0];
+        assert!((top.x - fw).abs() < 1e-6 && (top.width - (ow - 2.0 * fw)).abs() < 1e-6);
+        // No miter/step polygons for a plain butt frame — payload byte-compat.
+        assert!(g.frame_polygons.is_empty());
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(!json.contains("framePolygons"), "plain frame grew a key: {}", json);
+    }
+
+    #[test]
+    fn aluminum_default_keeps_rects_and_adds_miter_polygons() {
+        // Alu/PVC default = verstek: rects stay the historic dorpel-through set
+        // (byte-identical), and four mitered member polygons are added.
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.frame.material = crate::kozijn::Material::Aluminum;
+        let g = compute_2d_geometry(&k);
+        let (ow, fw) = (1200.0, 67.0);
+        // Historic top rail spans the full width.
+        let top = &g.frame_rects[0];
+        assert!((top.x - 0.0).abs() < 1e-6 && (top.width - ow).abs() < 1e-6);
+        assert_eq!(g.frame_polygons.len(), 4);
+        assert!(g.frame_polygons.iter().all(|p| p.len() == 4));
+        // Top rail miter trapezoid: outer edge full width, inner edge inset fw.
+        let top_poly = &g.frame_polygons[0];
+        assert!((top_poly[0][0] - 0.0).abs() < 1e-6 && (top_poly[0][1] - 0.0).abs() < 1e-6);
+        assert!((top_poly[1][0] - ow).abs() < 1e-6 && (top_poly[1][1] - 0.0).abs() < 1e-6);
+        assert!((top_poly[2][0] - (ow - fw)).abs() < 1e-6 && (top_poly[2][1] - fw).abs() < 1e-6);
+        assert!((top_poly[3][0] - fw).abs() < 1e-6 && (top_poly[3][1] - fw).abs() < 1e-6);
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(json.contains("framePolygons"));
+    }
+
+    #[test]
+    fn configured_verstek_on_wood_emits_polygons() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        let verstek = crate::joint::Joint {
+            joint_type: crate::joint::JointType::Verstek,
+            through_member: crate::joint::ThroughMember::Stijl,
+            angle: 45.0,
+            pen_length: 0.0,
+        };
+        k.frame.corner_joints = vec![verstek.clone(), verstek.clone(), verstek.clone(), verstek];
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.frame_polygons.len(), 4);
+        // Left stile miter trapezoid: [(0,0),(0,oh),(fw,oh-fw),(fw,fw)]
+        let (oh, fw) = (1500.0, 67.0);
+        let left = &g.frame_polygons[2];
+        assert!((left[0][0] - 0.0).abs() < 1e-6 && (left[0][1] - 0.0).abs() < 1e-6);
+        assert!((left[1][0] - 0.0).abs() < 1e-6 && (left[1][1] - oh).abs() < 1e-6);
+        assert!((left[2][0] - fw).abs() < 1e-6 && (left[2][1] - (oh - fw)).abs() < 1e-6);
+        assert!((left[3][0] - fw).abs() < 1e-6 && (left[3][1] - fw).abs() < 1e-6);
+    }
+
+    #[test]
+    fn special_shapes_keep_historic_frame_rects() {
+        // Arched frame: frame_rects unchanged (top hidden, stiles from spring
+        // line), no polygons.
+        let k = arched_kozijn(1200.0, 1500.0, 300.0);
+        let g = compute_2d_geometry(&k);
+        assert!(g.frame_polygons.is_empty());
+        // Top rect hidden (arc replaces it).
+        assert!((g.frame_rects[0].height - 0.0).abs() < 1e-6);
+    }
+
     // ── Free-subdivision layout as the geometry source ──
 
     /// Two-vaks kozijn: fw + vak + tussenstijl + vak + fw over the width.
@@ -1078,17 +1294,22 @@ mod tests {
         let (ow, oh) = (1400.0, 1900.0);
         let inner_w = ow - 2.0 * fw;
         let inner_h = oh - 2.0 * fw;
-        let raam_w = (inner_w - fw) * 900.0 / 1400.0;
-        let glas_h = (inner_h - fw) * 900.0 / 1900.0;
+        let deur_w = (inner_w - fw) * 900.0 / 1400.0;
+        let glas_h = (inner_h - fw) * 1200.0 / 2100.0;
 
         // Buiten leaf yields no cell rect; leaf indices keep their gaps
         assert_eq!(g.cell_rects.len(), 2);
-        assert_eq!(g.cell_rects[0].cell_index, 0); // raam (full height)
+        assert_eq!(g.cell_rects[0].cell_index, 0); // deur (full height)
         assert_eq!(g.cell_rects[1].cell_index, 1); // zijlicht glas (buiten = 2)
-        assert!(matches!(g.cell_rects[0].vulling, Some(Vakvulling::Raam { .. })));
-        // One tussenstijl + the zijlicht onderdorpel as h-divider
+        assert!(matches!(g.cell_rects[0].vulling, Some(Vakvulling::Deur { .. })));
+        // The tussenstijl is clipped to the side light (borders buiten below);
+        // the side-light onderdorpel borders buiten directly, so it drops out.
         assert_eq!(g.v_dividers.len(), 1);
-        assert_eq!(g.h_dividers.len(), 1);
+        assert!(g.v_dividers[0].height < inner_h - 1e-6, "tussenstijl must be clipped");
+        assert_eq!(g.h_dividers.len(), 0);
+        // Stepped frame outline: one ring per real vak (deur + side light).
+        assert_eq!(g.frame_polygons.len(), 2);
+        assert!(g.frame_polygons.iter().all(|p| p.len() == 4));
 
         // Bottom chain: zijlicht doesn't reach the bottom of the opening, so
         // its area stays one unanchored segment — chain still closes to ow
@@ -1098,8 +1319,8 @@ mod tests {
             .iter()
             .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
             .collect();
-        assert_eq!(chain.len(), 4, "stijl+raam+rest+stijl: {:?}", chain);
-        assert!((chain[1].x2 - chain[1].x1 - raam_w).abs() < 1e-6);
+        assert_eq!(chain.len(), 4, "stijl+deur+rest+stijl: {:?}", chain);
+        assert!((chain[1].x2 - chain[1].x1 - deur_w).abs() < 1e-6);
         let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
         assert!((sum - ow).abs() < 1e-6);
 

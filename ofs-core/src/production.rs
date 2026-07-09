@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::joint::{Joint, JointType, ThroughMember};
+use crate::joint::{effective_corner_joints, Joint, JointType, ThroughMember};
 use crate::kozijn::{Kozijn, Material, PanelType};
 
 // ── Cut list constants ─────────────────────────────────────────────
@@ -221,31 +221,6 @@ struct MemberCut {
     angle_end: f64,
 }
 
-/// `Kozijn::new` auto-populates four `Joint::default()` entries (pen/slis,
-/// stijl through, 90 deg, pen 20 mm) regardless of material. An untouched
-/// default set therefore carries no user intent: treat it as "not configured"
-/// so aluminum/PVC frames keep their miter default and wood frames keep the
-/// historic gross lengths.
-fn is_untouched_default_joint(j: &Joint) -> bool {
-    j.joint_type == JointType::PenSlis
-        && j.through_member == ThroughMember::Stijl
-        && (j.angle - 90.0).abs() < 1e-6
-        && (j.pen_length - 20.0).abs() < 1e-6
-}
-
-/// The four corner joints in [TL, TR, BL, BR] order, or `None` when the
-/// material-based fallback should be used.
-fn effective_corner_joints(kozijn: &Kozijn) -> Option<[&Joint; 4]> {
-    let joints = &kozijn.frame.corner_joints;
-    if joints.len() < 4 {
-        return None;
-    }
-    if joints[..4].iter().all(is_untouched_default_joint) {
-        return None;
-    }
-    Some([&joints[0], &joints[1], &joints[2], &joints[3]])
-}
-
 /// How much a member's net length is reduced at one end by the joint there.
 fn joint_end_reduction(orientation: FrameOrientation, joint: &Joint, fw: f64) -> f64 {
     match joint.joint_type {
@@ -356,6 +331,79 @@ fn frame_member_cut(
     }
 }
 
+/// Stepped outer-frame spans for a melkmeisje (free-subdivision layout with
+/// `Buiten` leaves): the onderdorpel only spans the vakken that actually reach
+/// the bottom of the opening, and an outer stijl only spans the vakken that
+/// reach that side — so a full-width bottom sill (or full-height side stijl)
+/// isn't cut where the outline steps into the wall (issue 10).
+///
+/// Returns `(left_span, right_span, top_span, bottom_span)` as *outer* member
+/// spans, so `frame_member_cut` still subtracts the corner reductions exactly
+/// as before. Without a layout — or without any `Buiten` leaf — it returns the
+/// full outer dimensions, so every non-melkmeisje kozijn stays byte-identical.
+fn stepped_frame_spans(kozijn: &Kozijn, fw: f64) -> (f64, f64, f64, f64) {
+    let ow = kozijn.frame.outer_width;
+    let oh = kozijn.frame.outer_height;
+    let full = (oh, oh, ow, ow);
+    let node = match &kozijn.layout {
+        Some(n) => n,
+        None => return full,
+    };
+    let lg = crate::layout::compute_layout_geometry(
+        node,
+        crate::layout::LayoutRect { x: fw, y: fw, width: ow - 2.0 * fw, height: oh - 2.0 * fw },
+        fw,
+    );
+    if !lg.leaves.iter().any(|l| l.vulling.is_buiten()) {
+        return full;
+    }
+
+    const EPS: f64 = 1.0;
+    let inner_left = fw;
+    let inner_right = ow - fw;
+    let inner_top = fw;
+    let inner_bottom = oh - fw;
+
+    // Covered extent along each edge from the real (non-`Buiten`) leaves that
+    // touch it. `None` = nothing reaches this edge → keep the full span.
+    let mut bottom: Option<(f64, f64)> = None;
+    let mut top: Option<(f64, f64)> = None;
+    let mut left: Option<(f64, f64)> = None;
+    let mut right: Option<(f64, f64)> = None;
+    let extend = |acc: &mut Option<(f64, f64)>, a: f64, b: f64| {
+        *acc = Some(match *acc {
+            Some((lo, hi)) => (lo.min(a), hi.max(b)),
+            None => (a, b),
+        });
+    };
+    for l in &lg.leaves {
+        if l.vulling.is_buiten() {
+            continue;
+        }
+        let r = l.rect;
+        if (r.y + r.height - inner_bottom).abs() < EPS {
+            extend(&mut bottom, r.x, r.x + r.width);
+        }
+        if (r.y - inner_top).abs() < EPS {
+            extend(&mut top, r.x, r.x + r.width);
+        }
+        if (r.x - inner_left).abs() < EPS {
+            extend(&mut left, r.y, r.y + r.height);
+        }
+        if (r.x + r.width - inner_right).abs() < EPS {
+            extend(&mut right, r.y, r.y + r.height);
+        }
+    }
+    // Covered clear extent + the two corner members = outer member span.
+    let span = |acc: Option<(f64, f64)>, full: f64| acc.map_or(full, |(lo, hi)| (hi - lo) + 2.0 * fw);
+    (
+        span(left, oh),
+        span(right, oh),
+        span(top, ow),
+        span(bottom, ow),
+    )
+}
+
 fn material_name(material: &Material) -> &'static str {
     match material {
         Material::Wood(w) => match w {
@@ -395,30 +443,35 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
 
     // Corner joints in [top-left, top-right, bottom-left, bottom-right] order,
     // or None → historic material-based fallback (wood: stiles full height,
-    // rails between; alu/PVC: all mitered at 45°).
-    let corner_joints = effective_corner_joints(kozijn);
+    // rails between; alu/PVC: all mitered at 45°). Shared with the front-view
+    // drawing via `crate::joint` so the picture and this cut list agree.
+    let corner_joints = effective_corner_joints(&kozijn.frame.corner_joints);
+
+    // Melkmeisje (layout with `Buiten` leaves): the onderdorpel / outer stijl
+    // spans step to follow the layout; full outer dims for every other kozijn.
+    let (left_span, right_span, top_span, bottom_span) = stepped_frame_spans(kozijn, fw);
 
     let left_stile = frame_member_cut(
         FrameOrientation::Stijl,
-        kozijn.frame.outer_height,
+        left_span,
         corner_joints.map(|j| (j[0], j[2])), // top-left, bottom-left
         mat, fw, is_miter, angle,
     );
     let right_stile = frame_member_cut(
         FrameOrientation::Stijl,
-        kozijn.frame.outer_height,
+        right_span,
         corner_joints.map(|j| (j[1], j[3])), // top-right, bottom-right
         mat, fw, is_miter, angle,
     );
     let top_rail = frame_member_cut(
         FrameOrientation::Dorpel,
-        kozijn.frame.outer_width,
+        top_span,
         corner_joints.map(|j| (j[0], j[1])), // top-left, top-right
         mat, fw, is_miter, angle,
     );
     let bottom_rail = frame_member_cut(
         FrameOrientation::Dorpel,
-        kozijn.frame.outer_width,
+        bottom_span,
         corner_joints.map(|j| (j[2], j[3])), // bottom-left, bottom-right
         mat, fw, is_miter, angle,
     );
@@ -636,7 +689,9 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         // historische dagmaat-omtrek, zodat oude projecten identiek blijven.
         if let Some(gl) = cell.glaslat.as_ref() {
             let (gw, gh) = if cell.panel_type.is_operable() {
-                let sw = cell.sash_width.unwrap_or(67.0);
+                // Sash-default 69mm (KVT-draaikiep 69x90) — één consistente default,
+                // was inconsistent 67 hier vs 54 in de sash-cut hieronder.
+                let sw = cell.sash_width.unwrap_or(69.0);
                 (cell_w - 2.0 * sw, cell_h - 2.0 * sw)
             } else {
                 (cell_w, cell_h)
@@ -675,7 +730,7 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             let sash_h = cell_h;
             let sash_is_miter = is_miter;
             let sash_angle = angle;
-            let sash_frame_w = cell.sash_width.unwrap_or(54.0);
+            let sash_frame_w = cell.sash_width.unwrap_or(69.0);
 
             let (sash_stile_net, sash_rail_net) = if sash_is_miter {
                 (sash_h - 2.0 * sash_frame_w, sash_w - 2.0 * sash_frame_w)
@@ -1196,6 +1251,49 @@ mod tests {
         let day_h = (1400.0 - 2.0 * 67.0) - 2.0 * 69.0; // 1128
         assert!((glass.width_mm - (day_w + 24.0)).abs() < 0.01);
         assert!((glass.height_mm - (day_h + 24.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_melkmeisje_steps_onderdorpel_and_side_stijl() {
+        // Melkmeisje: raised side light with wall (buiten) below. The
+        // onderdorpel only runs under the raam, and the right stijl only runs
+        // down to the side-light step — neither spans the full kozijn.
+        let mut k = Kozijn::new("Test", "MM", 1400.0, 1900.0);
+        k.layout = Some(crate::layout::melkmeisje1());
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+
+        let bottom = find(&prod, MemberType::FrameBottom);
+        let right = find(&prod, MemberType::FrameRight);
+        let top = find(&prod, MemberType::FrameTop);
+        let left = find(&prod, MemberType::FrameLeft);
+
+        // Onderdorpel steps in: shorter than the full dagmaat width.
+        assert!(bottom.net_length_mm > 0.0);
+        assert!(bottom.net_length_mm < k.inner_width() - 1.0,
+            "onderdorpel {} should be < dagmaat {}", bottom.net_length_mm, k.inner_width());
+        // Right stijl steps in: shorter than the full outer height.
+        assert!(right.net_length_mm < k.frame.outer_height - 1.0,
+            "right stijl {} should be < {}", right.net_length_mm, k.frame.outer_height);
+        // Both vakken reach the top and the raam reaches the left, so those
+        // members stay full (stijl-through wood default).
+        assert!((top.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.5);
+        assert!((left.net_length_mm - k.frame.outer_height).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_layout_without_buiten_keeps_full_frame_spans() {
+        // A free-subdivision layout without any `Buiten` leaf must keep the
+        // full outer frame spans — no melkmeisje stepping, byte-identical to a
+        // plain kozijn's frame members.
+        let mut k = Kozijn::new("Test", "FG", 1400.0, 1900.0);
+        k.layout = Some(crate::layout::free_grid(2, 2));
+        let prod = compute_production_data(&k);
+        let fw = k.frame.frame_width;
+        let bottom = find(&prod, MemberType::FrameBottom);
+        let left = find(&prod, MemberType::FrameLeft);
+        assert!((bottom.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.5);
+        assert!((left.net_length_mm - k.frame.outer_height).abs() < 0.5);
     }
 
     #[test]

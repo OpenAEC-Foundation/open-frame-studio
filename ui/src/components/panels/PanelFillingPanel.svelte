@@ -28,6 +28,7 @@
     color: "RAL9010",
     manufacturer: "",
     ventilation: null,
+    setbackMm: null,
   };
 
   let collapsed = $state(false);
@@ -111,6 +112,16 @@
               min="0"
               value={pf.uValue}
               onchange={(e) => update({ uValue: parseFloat(e.target.value) })}
+            />
+          </div>
+          <div class="field">
+            <label title="Inzetdiepte t.o.v. de binnenkant; leeg = automatisch gecentreerd">Inzet (mm)</label>
+            <input
+              type="number"
+              step="1"
+              placeholder="auto"
+              value={pf.setbackMm ?? ""}
+              onchange={(e) => update({ setbackMm: e.target.value === "" ? null : parseFloat(e.target.value) })}
             />
           </div>
         </div>

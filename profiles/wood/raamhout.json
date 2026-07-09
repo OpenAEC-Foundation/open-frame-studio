@@ -2,7 +2,7 @@
   {
     "id": "raamhout-rsx-54x78",
     "name": "Raamhout RSx 54x78mm (stijl/bovendorpel)",
-    "manufacturer": "Standaard",
+    "manufacturer": "Generiek",
     "series": "Raamhout KVT 54mm",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -56,7 +56,7 @@
   {
     "id": "raamhout-54x78",
     "name": "Raamhout ROx 54x78mm (onderdorpel schuin)",
-    "manufacturer": "Standaard",
+    "manufacturer": "Generiek",
     "series": "Raamhout KVT 54mm",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -110,7 +110,7 @@
   {
     "id": "raamhout-69x90",
     "name": "Raamhout 69x90mm (draaikiep standaard)",
-    "manufacturer": "Standaard",
+    "manufacturer": "Generiek",
     "series": "Raamhout draaikiep",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -162,9 +162,64 @@
     ]
   },
   {
+    "id": "raamhout-69x90-opdek",
+    "name": "Raamhout 69x90mm (draaikiep, opdek 13mm)",
+    "manufacturer": "Generiek",
+    "series": "Raamhout draaikiep opdek",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 69,
+    "depth": 90,
+    "sightline": 52,
+    "glazingRebate": 51,
+    "maxGlassWeight": 60,
+    "crossSection": [
+      [0, 0],
+      [69, 0],
+      [69, 39],
+      [52, 39],
+      [52, 90],
+      [0, 90]
+    ],
+    "ufValue": 1.8,
+    "applicableAs": [
+      "sash"
+    ],
+    "sponning": {
+      "width": 51,
+      "depth": 17,
+      "type": "draaikiep",
+      "opdek_width": 13,
+      "rubber_count": 2
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "kaderdichtingGroef": {
+      "width": 8,
+      "depth": 9
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "sources": [
+      "doc R4 (KVT 14.01 + TO 2024 p.3/11-12): binnendraaiend valt de vleugel (sponningdiepte - lucht) over de daglijn; buitendraaiend overdek 17; opdek-lip praktijk ~13 mm",
+      "bouwbestel.nl / kozijnshop.nl: opdek meranti raam/kozijn (56x90, 68x114) bestaande handelsproducten"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "maxGlassWeight",
+      "opdek_width"
+    ],
+    "dataNotes": [
+      "Opdek-variant van raamhout-69x90: de overslag-lip ~13 mm dekt de kozijnrand af; 'opdek_width' in de sponning stuurt de opdek-/rubberdetails in de doorsnede-tekenlaag (profileContour.js). De stompe/vlakke variant is raamhout-69x90."
+    ]
+  },
+  {
     "id": "raamhout-78x90",
     "name": "Raamhout 78x90mm (triple glas)",
-    "manufacturer": "Standaard",
+    "manufacturer": "Generiek",
     "series": "Raamhout Triple",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -214,7 +269,7 @@
   {
     "id": "deurhout-54x118",
     "name": "Deurhout 54x118mm (standaard)",
-    "manufacturer": "Standaard",
+    "manufacturer": "Generiek",
     "series": "Deurhout",
     "material": "wood",
     "materialSubtype": "meranti",

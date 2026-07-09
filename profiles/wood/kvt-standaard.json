@@ -2,7 +2,7 @@
   {
     "id": "kvt-67x90",
     "name": "KVT Standaard 67x90mm (licht)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 67mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -60,7 +60,7 @@
   {
     "id": "kvt-67x102",
     "name": "KVT Standaard 67x102mm",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 67mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -116,7 +116,7 @@
   {
     "id": "kvt-67x114",
     "name": "KVT Standaard 67x114mm (meest gebruikt)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 67mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -178,7 +178,7 @@
   {
     "id": "kvt-67x139",
     "name": "KVT Standaard 67x139mm (zwaar)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 67mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -235,7 +235,7 @@
   {
     "id": "kvt-90x90",
     "name": "KVT 90mm serie 90x90mm (licht, triple glas)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 90mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -292,7 +292,7 @@
   {
     "id": "kvt-90x114",
     "name": "KVT 90mm serie 90x114mm (triple glas standaard)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 90mm serie",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -349,7 +349,7 @@
   {
     "id": "kvt-90x139",
     "name": "KVT 90mm serie 90x139mm (passief huis)",
-    "manufacturer": "KVT Standaard",
+    "manufacturer": "Generiek",
     "series": "KVT 90mm serie",
     "material": "wood",
     "materialSubtype": "meranti",

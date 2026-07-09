@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
   import { allProfiles } from "../../stores/profiles.js";
+  import { ralToHex } from "../../lib/ral-colors.js";
   import { _ } from "svelte-i18n";
 
   let { visible = true } = $props();
@@ -66,6 +67,13 @@
   }
 
   function getFrameColor(kozijn) {
+    // #8: prefer the chosen RAL colour so the picked colour shows in 3D too;
+    // fall back to the material's natural tint when no RAL is set.
+    const ral = kozijn?.frame?.colorInside;
+    if (ral) {
+      const hex = ralToHex(ral);
+      if (typeof hex === "string" && hex[0] === "#") return parseInt(hex.slice(1), 16);
+    }
     const key = getMaterialKey(kozijn?.frame?.material);
     return MATERIAL_COLORS[key] || MATERIAL_COLORS["wood(meranti)"];
   }
@@ -531,7 +539,11 @@
           const tint = FILLING_COLORS[filling?.fillingType] ||
             (kind === "ventilation" ? FILLING_COLORS.ventilation : PANEL_COLOR);
           const fillMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.8, metalness: 0.0 });
-          kozijnGroup.add(makeBox(cellInset, thickness, fillMat, 0));
+          // #6: an explicit inzet/diepte (setbackMm) shifts the fill along the
+          // depth axis so different vakvullingen can sit at different depths;
+          // null/undefined keeps the historic centred placement.
+          const panelZ = typeof filling?.setbackMm === "number" ? filling.setbackMm : 0;
+          kozijnGroup.add(makeBox(cellInset, thickness, fillMat, panelZ));
 
           // Ventilation grille — horizontal louver slats proud of the panel
           if (kind === "ventilation") {

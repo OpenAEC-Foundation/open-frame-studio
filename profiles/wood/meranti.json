@@ -170,5 +170,131 @@
     "dataNotes": [
       "vervangt de eerdere 'Meranti 54x114 (roede)' — een echte glasroede is veel lichter en is geen tussenstijl"
     ]
+  },
+  {
+    "id": "wood-meranti-67x114-bovendorpel",
+    "name": "Meranti 67x114mm (bovendorpel, waterhol)",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 67,
+    "depth": 114,
+    "sightline": 50,
+    "glazingRebate": 51,
+    "crossSection": [
+      [0, 0],
+      [67, 0],
+      [67, 63],
+      [50, 63],
+      [50, 114],
+      [0, 114]
+    ],
+    "ufValue": 1.8,
+    "applicableAs": [
+      "frame"
+    ],
+    "sponning": {
+      "width": 51,
+      "depth": 17,
+      "type": "binnensponning"
+    },
+    "aanslagSponning": {
+      "depth": 29,
+      "clearance": 6
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 13.5/14.5: in boven- en tussendorpels is een waterhol of gelijkwaardige alu lekdorpel verplicht",
+      "KVT 11.7.2.2: gedekte deel aan de voorzijde bovendorpel >= 15 mm",
+      "KVT 61.1: 67x114 is de handels-/reeksmaat kozijnhout bovendorpel",
+      "KVT 12.2: sponninghoogte 17 mm vast"
+    ],
+    "unverifiedFields": [
+      "ufValue",
+      "waterhol"
+    ],
+    "dataNotes": [
+      "Verschilt van de stijl door verplicht waterhol; verschilt van de onderdorpel doordat er GEEN afschot (slopeDegrees) is. Waterhol-groefmaat is in KVT niet gepubliceerd (praktijk ~10x8 mm)."
+    ]
+  },
+  {
+    "id": "wood-meranti-67x114-tussendorpel",
+    "name": "Meranti 67x114mm (tussendorpel/kalf)",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 67,
+    "depth": 114,
+    "sightline": 50,
+    "glazingRebate": 51,
+    "crossSection": [
+      [0, 0],
+      [67, 0],
+      [67, 63],
+      [50, 63],
+      [50, 114],
+      [17, 114],
+      [17, 63],
+      [0, 63]
+    ],
+    "ufValue": 1.8,
+    "applicableAs": [
+      "divider"
+    ],
+    "sponning": {
+      "width": 51,
+      "depth": 17,
+      "type": "binnensponning"
+    },
+    "glaslatWidth": 17,
+    "glaslatHeight": 17,
+    "achterhout": 13,
+    "waterhol": true,
+    "sources": [
+      "KVT 30.5.3: 8 doorsneden, dikte 67 of 90 mm (67x90/102/114/139, 90x90/102/114/139); type C/D niet mogelijk in 67 mm",
+      "pieterbaks.nl: meranti kozijnprofiel tussendorpel/kalf model DD 67x114mm (bestaand product)",
+      "KVT 13.5/14.5: waterhol verplicht ook in tussendorpels"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
+    "dataNotes": [
+      "Kalf = horizontale tussendorpel met glassponning aan boven- EN onderzijde (boven- en onderpaneel). Onderscheid met de verticale tussenstijl 90x114: zie wood-meranti-90x114-tussenstijl."
+    ]
+  },
+  {
+    "id": "wood-meranti-glasroede-32x12",
+    "name": "Meranti glasroede 32x12mm (opgelegd, incl. roedeband 30x3)",
+    "material": "wood",
+    "materialSubtype": "meranti",
+    "width": 32,
+    "depth": 12,
+    "sightline": 32,
+    "glazingRebate": 0,
+    "crossSection": [
+      [0, 0],
+      [32, 0],
+      [32, 12],
+      [0, 12]
+    ],
+    "ufValue": 0,
+    "applicableAs": [
+      "divider"
+    ],
+    "roedeband": {
+      "width": 30,
+      "thickness": 3
+    },
+    "sources": [
+      "dekozijnenman.frl: hardhout glasroedes gegrond 32x12mm incl. zelfklevende roedeband 30x3mm (meranti RAL9010)",
+      "zkkf.nl / onlinekozijnshop.nl: roeden tussen het glas (Wiener) in breedtes 8/18/26/45 mm"
+    ],
+    "unverifiedFields": [
+      "ufValue"
+    ],
+    "dataNotes": [
+      "Vervangt definitief de verwijderde fake '54x114 roede' (was raamhoutformaat). Opgelegde/opgelijmde roede, geen dragende sponning. Drie reele typen bestaan: opgelegd 32x12 + band 30x3 [deze], Wiener tussen-glas 8/18/26/45, en constructieve muntin ~45 mm."
+    ]
   }
 ]
