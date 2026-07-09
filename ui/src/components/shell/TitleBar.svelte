@@ -4,6 +4,7 @@
   import { undo, redo, canUndo, canRedo } from "../../stores/history.js";
   import { confirmUnsavedChanges } from "../../lib/project-actions.js";
   import { isDirty } from "../../stores/project.js";
+  import { APP_VERSION } from "../../lib/version.js";
 
   let appWindow = null;
   let maximized = false;
@@ -78,7 +79,7 @@
   </div>
 
   <div class="titlebar-center" data-tauri-drag-region>
-    <span class="subtitle">{$isDirty ? '* ' : ''}{$_('app.name')} <span class="version">v0.4.0</span></span>
+    <span class="subtitle">{$isDirty ? '* ' : ''}{$_('app.name')} <span class="version">v{APP_VERSION}</span></span>
   </div>
 
   {#if isTauri && platform !== "linux"}

@@ -10,7 +10,7 @@ async fn main() {
     let state = Arc::new(storage::CloudState::new());
 
     let app = Router::new()
-        .route("/api/v1/health", get(|| async { Json(serde_json::json!({"status": "ok", "version": "0.4.0"})) }))
+        .route("/api/v1/health", get(|| async { Json(serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")})) }))
         .route("/api/v1/projects", get(api::list_projects))
         .route("/api/v1/projects", post(api::create_project))
         .route("/api/v1/projects/{id}", get(api::get_project))

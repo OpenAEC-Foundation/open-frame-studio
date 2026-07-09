@@ -2,7 +2,7 @@
   {
     "id": "abc-a-66x110",
     "name": "ABC A-profiel (stijl/bovendorpel) 66x110mm",
-    "manufacturer": "Standaard Houthandel",
+    "manufacturer": "Generiek",
     "series": "ABC Kozijnhout",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -60,7 +60,7 @@
   {
     "id": "abc-b-66x110",
     "name": "ABC B-profiel (tussenstijl) 66x110mm",
-    "manufacturer": "Standaard Houthandel",
+    "manufacturer": "Generiek",
     "series": "ABC Kozijnhout",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -116,7 +116,7 @@
   {
     "id": "abc-c-66x110",
     "name": "ABC C-profiel (onderdorpel) 66x110mm",
-    "manufacturer": "Standaard Houthandel",
+    "manufacturer": "Generiek",
     "series": "ABC Kozijnhout",
     "material": "wood",
     "materialSubtype": "meranti",
@@ -175,7 +175,7 @@
   {
     "id": "abc-d-66x110",
     "name": "ABC D-profiel (kalf/tussendorpel) 66x110mm",
-    "manufacturer": "Standaard Houthandel",
+    "manufacturer": "Generiek",
     "series": "ABC Kozijnhout",
     "material": "wood",
     "materialSubtype": "meranti",

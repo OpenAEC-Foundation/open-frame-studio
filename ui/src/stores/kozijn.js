@@ -97,14 +97,26 @@ export async function updateCellPanelFilling(cellIndex, panelFilling) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  const updated = await invoke("update_cell_panel_filling", {
-    id: k.id,
-    cellIndex,
-    panelFillingJson: JSON.stringify(panelFilling),
+  // Optimistically apply so fields like the new inzet/diepte (setbackMm, #6)
+  // reflect immediately — even when the backend echoes the kozijn unchanged or
+  // an older wasm bundle silently drops a field it doesn't know yet.
+  const applyLocal = (kz) => ({
+    ...kz,
+    cells: (kz.cells || []).map((c, i) => (i === cellIndex ? { ...c, panelFilling } : c)),
   });
-  currentKozijn.set(updated);
+  currentKozijn.set(applyLocal(k));
+  try {
+    const updated = await invoke("update_cell_panel_filling", {
+      id: k.id,
+      cellIndex,
+      panelFillingJson: JSON.stringify(panelFilling),
+    });
+    if (updated && Array.isArray(updated.cells)) currentKozijn.set(applyLocal(updated));
+  } catch (e) {
+    console.error("Vakvulling opslaan mislukt:", e);
+  }
   await refreshProject();
-  await refreshGeometry(updated.id);
+  await refreshGeometry(k.id);
 }
 
 export async function updateCellGlaslat(cellIndex, glaslat) {
@@ -318,12 +330,24 @@ export async function updateFrameColors(colorInside, colorOutside) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  const updated = await invoke("update_frame_colors", {
-    id: k.id,
-    colorInside,
-    colorOutside,
-  });
-  currentKozijn.set(updated);
+  // Optimistically apply the colours so the drawing updates immediately. The
+  // wasm/web backend (and older bundles) echo the kozijn UNCHANGED for this
+  // command, so blindly trusting its return value reverted the pick — that was
+  // the "kleuren gaan niet mee" bug. We force the chosen colours onto whatever
+  // the backend returns; the IPC still persists them when the command exists.
+  currentKozijn.set({ ...k, frame: { ...k.frame, colorInside, colorOutside } });
+  try {
+    const updated = await invoke("update_frame_colors", {
+      id: k.id,
+      colorInside,
+      colorOutside,
+    });
+    if (updated && updated.frame) {
+      currentKozijn.set({ ...updated, frame: { ...updated.frame, colorInside, colorOutside } });
+    }
+  } catch (e) {
+    console.error("Kleur opslaan mislukt:", e);
+  }
   await refreshProject();
 }
 

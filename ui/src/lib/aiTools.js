@@ -26,8 +26,8 @@ export const AI_TOOLS = [
           },
           sjabloon: {
             type: "string",
-            enum: ["standaard-67-meranti", "standaard-67-accoya", "zwaar-78-meranti", "passief-90-meranti"],
-            description: "Profiel sjabloon: standaard-67-meranti (default), standaard-67-accoya, zwaar-78-meranti, passief-90-meranti",
+            enum: ["standaard-67-meranti", "standaard-67-accoya", "zwaar-78-meranti", "passief-90-meranti", "kunststof-82-veka", "kunststof-88-kommerling", "aluminium-77-reynaers", "aluminium-75-schuco"],
+            description: "Profiel sjabloon: hout (standaard-67-meranti (default), standaard-67-accoya, zwaar-78-meranti, passief-90-meranti), kunststof (kunststof-82-veka, kunststof-88-kommerling), aluminium (aluminium-77-reynaers, aluminium-75-schuco)",
           },
         },
         required: ["template", "width", "height"],

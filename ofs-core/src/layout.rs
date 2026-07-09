@@ -137,7 +137,92 @@ pub struct LayoutGeometry {
 pub fn compute_layout_geometry(node: &VakNode, rect: LayoutRect, divider_w: f64) -> LayoutGeometry {
     let mut out = LayoutGeometry::default();
     layout_rec(node, rect, divider_w, &mut out);
+    clip_dividers_against_buiten(&mut out);
     out
+}
+
+/// Clip divider segments so a mullion/transom only spans the overlap of two
+/// adjacent NON-`Buiten` regions (issue 10). A divider that borders the wall
+/// (`Buiten`) on either side loses that part: the melkmeisje tussenstijl stops
+/// at the bottom of the side-light instead of running down through the wall,
+/// and the side-light onderdorpel (which has wall directly below it) drops out
+/// entirely. Divider stretches away from any `Buiten` region are untouched, so
+/// every non-melkmeisje layout stays byte-identical. Mirrors the same pass in
+/// `layoutToRects` (ui/src/lib/layout.js) — keep the two in sync.
+fn clip_dividers_against_buiten(out: &mut LayoutGeometry) {
+    const EPS: f64 = 1.0;
+    let buiten: Vec<LayoutRect> = out
+        .leaves
+        .iter()
+        .filter(|l| l.vulling.is_buiten())
+        .map(|l| l.rect)
+        .collect();
+    if buiten.is_empty() {
+        return;
+    }
+    let mut kept: Vec<LayoutDivider> = Vec::new();
+    for d in out.dividers.drain(..) {
+        let r = d.rect;
+        if d.direction == "v" {
+            // Vertical mullion: spans Y, its left/right edges border regions.
+            let (lo, hi) = (r.y, r.y + r.height);
+            let (left_x, right_x) = (r.x, r.x + r.width);
+            let mut blocked: Vec<(f64, f64)> = Vec::new();
+            for b in &buiten {
+                let adjacent = (b.x + b.width - left_x).abs() < EPS || (b.x - right_x).abs() < EPS;
+                if adjacent {
+                    blocked.push((b.y.max(lo), (b.y + b.height).min(hi)));
+                }
+            }
+            for (a, c) in subtract_intervals(lo, hi, &blocked, EPS) {
+                kept.push(LayoutDivider {
+                    rect: LayoutRect { x: r.x, y: a, width: r.width, height: c - a },
+                    direction: "v".into(),
+                });
+            }
+        } else {
+            // Horizontal transom: spans X, its top/bottom edges border regions.
+            let (lo, hi) = (r.x, r.x + r.width);
+            let (top_y, bot_y) = (r.y, r.y + r.height);
+            let mut blocked: Vec<(f64, f64)> = Vec::new();
+            for b in &buiten {
+                let adjacent = (b.y + b.height - top_y).abs() < EPS || (b.y - bot_y).abs() < EPS;
+                if adjacent {
+                    blocked.push((b.x.max(lo), (b.x + b.width).min(hi)));
+                }
+            }
+            for (a, c) in subtract_intervals(lo, hi, &blocked, EPS) {
+                kept.push(LayoutDivider {
+                    rect: LayoutRect { x: a, y: r.y, width: c - a, height: r.height },
+                    direction: "h".into(),
+                });
+            }
+        }
+    }
+    out.dividers = kept;
+}
+
+/// `[lo, hi]` minus the union of `blocked` intervals, as a list of remaining
+/// sub-intervals (each wider than `eps`).
+fn subtract_intervals(lo: f64, hi: f64, blocked: &[(f64, f64)], eps: f64) -> Vec<(f64, f64)> {
+    let mut b: Vec<(f64, f64)> = blocked
+        .iter()
+        .map(|&(a, c)| (a.max(lo), c.min(hi)))
+        .filter(|&(a, c)| c > a + eps)
+        .collect();
+    b.sort_by(|p, q| p.0.total_cmp(&q.0));
+    let mut result = Vec::new();
+    let mut cur = lo;
+    for (bs, be) in b {
+        if bs > cur + eps {
+            result.push((cur, bs));
+        }
+        cur = cur.max(be);
+    }
+    if hi > cur + eps {
+        result.push((cur, hi));
+    }
+    result
 }
 
 fn layout_rec(node: &VakNode, rect: LayoutRect, divider_w: f64, out: &mut LayoutGeometry) {
@@ -220,21 +305,25 @@ pub fn split_col(children: Vec<VakChild>) -> VakNode {
     VakNode::Split { id: None, direction: SplitDirection::Column, children }
 }
 
-/// Side-light zone: glass side light on top (starts higher) over outside-the-kozijn.
+/// Side-light zone of a melkmeisje: a glass side light on top sitting on a low
+/// borstwering (masonry, `Buiten`). The side light is TALLER than the borstwering
+/// (a borstwering is a low wall ~900 mm; the glass fills up to door height), and
+/// the outline steps: below the side light is wall, not kozijn.
 fn zijlicht_zone() -> VakNode {
-    split_col(vec![child(900.0, glas()), child(1000.0, buiten())])
+    split_col(vec![child(1200.0, glas()), child(900.0, buiten())])
 }
 
-/// Melkmeisje: full-height casement with a raised side light (stepped outline).
+/// Melkmeisje: a DOOR with a side light that does not reach the floor — a
+/// borstwering (low masonry wall) sits below the side light (stepped outline).
 pub fn melkmeisje1() -> VakNode {
-    split_row(vec![child(900.0, raam("draaikiep")), child(500.0, zijlicht_zone())])
+    split_row(vec![child(900.0, deur("enkel")), child(500.0, zijlicht_zone())])
 }
 
-/// Melkmeisje with side lights on both sides.
+/// Melkmeisje with a side light (on a borstwering) on both sides of the door.
 pub fn melkmeisje2() -> VakNode {
     split_row(vec![
         child(500.0, zijlicht_zone()),
-        child(1000.0, raam("draaikiep")),
+        child(1000.0, deur("enkel")),
         child(500.0, zijlicht_zone()),
     ])
 }
@@ -263,6 +352,42 @@ mod tests {
         assert!(!geom.leaves.iter().any(|l| matches!(l.vulling, Vakvulling::Paneel)));
         // 2 real vakken (raam + glas), buiten does not count
         assert_eq!(count_vakken(&melkmeisje1()), 2);
+    }
+
+    #[test]
+    fn melkmeisje_dividers_clipped_against_buiten() {
+        // The tussenstijl between the raam and the side light stops at the
+        // side-light step (does not run down through the wall), and the
+        // side-light onderdorpel (wall directly below) drops out entirely.
+        let geom = compute_layout_geometry(&melkmeisje1(), FULL, 90.0);
+        let v: Vec<_> = geom.dividers.iter().filter(|d| d.direction == "v").collect();
+        let h: Vec<_> = geom.dividers.iter().filter(|d| d.direction == "h").collect();
+        assert_eq!(v.len(), 1, "one clipped tussenstijl");
+        assert!(
+            v[0].rect.height < FULL.height - 1e-6,
+            "tussenstijl {} must be shorter than the full height {}",
+            v[0].rect.height,
+            FULL.height
+        );
+        assert!(v[0].rect.height > 0.0);
+        assert_eq!(h.len(), 0, "side-light onderdorpel borders buiten → dropped");
+    }
+
+    #[test]
+    fn dividers_without_buiten_are_untouched() {
+        // No `Buiten` leaf → clipping is a no-op (byte-identical dividers).
+        let geom = compute_layout_geometry(&free_grid(3, 2), FULL, 60.0);
+        // 3×2 = 2 mullions per row (×2 rows via the row splits) + 1 transom.
+        let v = geom.dividers.iter().filter(|d| d.direction == "v").count();
+        let h = geom.dividers.iter().filter(|d| d.direction == "h").count();
+        assert_eq!(v, 4, "two mullions in each of the two rows");
+        assert_eq!(h, 1, "one transom between the rows");
+        // Every mullion spans a full row height (not clipped).
+        assert!(geom
+            .dividers
+            .iter()
+            .filter(|d| d.direction == "v")
+            .all(|d| d.rect.height > 0.0));
     }
 
     #[test]

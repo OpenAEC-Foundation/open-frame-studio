@@ -123,7 +123,7 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
                 let cols = kozijn.grid.columns.len().max(1);
                 let cw = kozijn.grid.columns.get(i % cols).map(|c| c.size).unwrap_or(0.0);
                 let ch = kozijn.grid.rows.get(i / cols).map(|r| r.size).unwrap_or(0.0);
-                let sw = cell.sash_width.unwrap_or(67.0);
+                let sw = cell.sash_width.unwrap_or(69.0);
                 let free_w = cw - 2.0 * sw;
                 let free_h = ch - 2.0 * sw;
                 if free_w < MIN_ESCAPE_OPENING || free_h < MIN_ESCAPE_OPENING {

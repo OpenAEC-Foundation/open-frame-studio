@@ -76,27 +76,33 @@ export function vullingLabel(v) {
 // ── Templates ────────────────────────────────────────────────────
 
 /**
- * Side-light zone: a glass side light on top that starts higher; BELOW it is
- * outside the kozijn (the outline steps up) — no panel, no continuous bottom
- * transom/stile.
+ * Side-light zone of a melkmeisje: a glass side light sitting on a low
+ * borstwering. The side light (glass) is TALLER than the borstwering — a
+ * borstwering is a low wall (~900 mm) and the glass fills up to door height.
+ * Below the side light is `buiten`: masonry (gemetseld muurtje), NOT a kozijn
+ * vak — the outline steps and the wall is drawn as metselwerk there.
  */
-function zijlichtZone(lightH = 900, outsideH = 1000) {
-  return splitCol(child(lightH, glas()), child(outsideH, buiten()));
+function zijlichtZone(lightH = 1200, borstweringH = 900) {
+  return splitCol(child(lightH, glas()), child(borstweringH, buiten()));
 }
 
-/** Melkmeisje: main full-height casement with a side light that begins higher. */
+/**
+ * Melkmeisje: a door with a side light that does not reach the floor — a
+ * borstwering (low masonry wall) sits below the side light. Named after the
+ * milkmaid-with-a-yoke silhouette (nl.wikipedia.org/wiki/Melkmeisje_(bouwkunde)).
+ */
 export function melkmeisje1() {
   return splitRow(
-    child(900, raam("draaikiep")),
+    child(900, deur("enkel")),
     child(500, zijlichtZone()),
   );
 }
 
-/** Melkmeisje with side lights on both sides. */
+/** Melkmeisje with a side light (on a borstwering) on both sides of the door. */
 export function melkmeisje2() {
   return splitRow(
     child(500, zijlichtZone()),
-    child(1000, raam("draaikiep")),
+    child(1000, deur("enkel")),
     child(500, zijlichtZone()),
   );
 }
@@ -160,6 +166,12 @@ export function freeGrid(cols = 9, rows = 4) {
  * @returns {{leaves: Array<{rect, node}>, dividers: Array<{rect, direction}>}}
  */
 export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], dividers: [] }) {
+  layoutRec(node, rect, dividerW, out);
+  clipDividersAgainstBuiten(out);
+  return out;
+}
+
+function layoutRec(node, rect, dividerW, out) {
   if (!node) return out;
   if (node.kind === "leaf") {
     out.leaves.push({ rect, node });
@@ -177,7 +189,7 @@ export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], div
     const childRect = horiz
       ? { x: pos, y: rect.y, width: len, height: rect.height }
       : { x: rect.x, y: pos, width: rect.width, height: len };
-    layoutToRects(c.node, childRect, dividerW, out);
+    layoutRec(c.node, childRect, dividerW, out);
     pos += len;
     if (i < n - 1) {
       out.dividers.push({
@@ -193,6 +205,71 @@ export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], div
       pos += dividerW;
     }
   });
+  return out;
+}
+
+/**
+ * Clip divider segments so a mullion/transom only covers the overlap of two
+ * adjacent NON-`buiten` regions (issue 10). A divider that borders the wall
+ * (`buiten`) on either side loses that part: the melkmeisje tussenstijl stops
+ * at the bottom of the side light instead of running down through the wall, and
+ * the side-light onderdorpel (wall directly below it) drops out entirely.
+ * Layouts without any `buiten` leaf are left untouched. Mirrors the same pass
+ * in ofs-core (layout.rs `clip_dividers_against_buiten`) — keep them in sync.
+ * Divider drag/edit metadata (splitId/childIndex/avail/sizeSum) is preserved on
+ * every kept segment, so resizing still works on the clipped handle.
+ */
+function clipDividersAgainstBuiten(out) {
+  const EPS = 1;
+  const buiten = out.leaves
+    .filter((l) => l.node?.vulling?.type === "buiten")
+    .map((l) => l.rect);
+  if (!buiten.length) return;
+  const kept = [];
+  for (const d of out.dividers) {
+    const r = d.rect;
+    if (d.direction === "v") {
+      const lo = r.y, hi = r.y + r.height;
+      const leftX = r.x, rightX = r.x + r.width;
+      const blocked = [];
+      for (const b of buiten) {
+        if (Math.abs(b.x + b.width - leftX) < EPS || Math.abs(b.x - rightX) < EPS) {
+          blocked.push([Math.max(b.y, lo), Math.min(b.y + b.height, hi)]);
+        }
+      }
+      for (const [a, c] of subtractIntervals(lo, hi, blocked, EPS)) {
+        kept.push({ ...d, rect: { x: r.x, y: a, width: r.width, height: c - a } });
+      }
+    } else {
+      const lo = r.x, hi = r.x + r.width;
+      const topY = r.y, botY = r.y + r.height;
+      const blocked = [];
+      for (const b of buiten) {
+        if (Math.abs(b.y + b.height - topY) < EPS || Math.abs(b.y - botY) < EPS) {
+          blocked.push([Math.max(b.x, lo), Math.min(b.x + b.width, hi)]);
+        }
+      }
+      for (const [a, c] of subtractIntervals(lo, hi, blocked, EPS)) {
+        kept.push({ ...d, rect: { x: a, y: r.y, width: c - a, height: r.height } });
+      }
+    }
+  }
+  out.dividers = kept;
+}
+
+/** `[lo, hi]` minus the union of `blocked` [a,b] intervals → remaining sub-intervals. */
+function subtractIntervals(lo, hi, blocked, eps = 1) {
+  const b = blocked
+    .map(([a, c]) => [Math.max(a, lo), Math.min(c, hi)])
+    .filter(([a, c]) => c > a + eps)
+    .sort((p, q) => p[0] - q[0]);
+  const out = [];
+  let cur = lo;
+  for (const [bs, be] of b) {
+    if (bs > cur + eps) out.push([cur, bs]);
+    cur = Math.max(cur, be);
+  }
+  if (hi > cur + eps) out.push([cur, hi]);
   return out;
 }
 
@@ -276,6 +353,21 @@ export function mergeAt(root, leafId) {
     return { ...node, children: node.children.map((c) => ({ size: c.size, node: walk(c.node) })) };
   };
   return walk(clone(root));
+}
+
+/**
+ * Swap the vulling (content) of two leaves, keeping tree structure, sizes and
+ * node ids intact. This is "vakken uitwisselen": e.g. exchange a glass vak with
+ * a door vak, or two draaikiep vakken, without moving the dividers.
+ */
+export function swapVullingen(root, idA, idB) {
+  if (!root || idA === idB) return root;
+  const a = findNode(root, idA);
+  const b = findNode(root, idB);
+  if (!a || !b || a.kind !== "leaf" || b.kind !== "leaf") return root;
+  const va = { ...a.vulling };
+  const vb = { ...b.vulling };
+  return setVulling(setVulling(root, idA, vb), idB, va);
 }
 
 /** Count leaves (vakken). */

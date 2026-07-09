@@ -188,6 +188,18 @@
 
     <div class="canvas-wrap">
       <svg viewBox="0 0 {OUTER.w} {OUTER.h}" class="frame-svg" bind:this={svgEl}>
+        <defs>
+          <!-- Metselwerk (borstwering) — running bond, mm user-space. -->
+          <pattern id="proto-brick" width="300" height="150" patternUnits="userSpaceOnUse">
+            <rect width="300" height="150" fill="#9c876d" />
+            <g stroke="#cabfa8" stroke-width="10" stroke-linecap="square">
+              <line x1="0" y1="0" x2="300" y2="0" />
+              <line x1="0" y1="75" x2="300" y2="75" />
+              <line x1="0" y1="0" x2="0" y2="75" />
+              <line x1="150" y1="75" x2="150" y2="150" />
+            </g>
+          </pattern>
+        </defs>
         <!-- wall / outside the kozijn -->
         <rect x="0" y="0" width={OUTER.w} height={OUTER.h} fill="#2a2a38" />
 
@@ -205,9 +217,9 @@
              onclick={() => (selectedId = l.node.id)} onkeydown={(e) => e.key === "Enter" && (selectedId = l.node.id)}>
             {#if l.node.vulling.type === "buiten"}
               <rect x={l.rect.x} y={l.rect.y} width={l.rect.width} height={l.rect.height}
-                    fill="none" stroke="#4a4a5a" stroke-width="4" stroke-dasharray="26 20" />
+                    fill="url(#proto-brick)" stroke="#3a3a52" stroke-width="3" />
               <text x={cx(l.rect)} y={cy(l.rect)} text-anchor="middle" dominant-baseline="middle"
-                    font-size="54" fill="#6a6a7a">buiten kozijn</text>
+                    font-size="54" fill="#f5efe3" font-weight="700">Borstwering</text>
             {:else}
               <rect x={l.rect.x} y={l.rect.y} width={l.rect.width} height={l.rect.height}
                     fill={FILL[l.node.vulling.type] || "#888"} stroke="#3a3a52" stroke-width="3" />

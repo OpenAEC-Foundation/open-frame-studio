@@ -1,6 +1,7 @@
 <script>
   import { _ , locale } from "svelte-i18n";
   import { showSettings, theme, setTheme, THEMES } from "../../stores/ui.js";
+  import { APP_VERSION } from "../../lib/version.js";
 
   let activeCategory = "general";
   let dialogEl;
@@ -90,7 +91,7 @@
               <img class="about-icon" src="/icon.png" alt="" />
               <div class="about-text">
                 <strong>{$_('app.name')}</strong>
-                <span>v0.4.0</span>
+                <span>v{APP_VERSION}</span>
                 <span class="muted">{$_('app.org')}</span>
                 <span class="muted">AGPL-3.0</span>
               </div>

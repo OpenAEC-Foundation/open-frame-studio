@@ -18,9 +18,15 @@
   let panStart = $state({ x: 0, y: 0 });
   let panOffset = $state({ x: 0, y: 0 });
 
-  // Auto zoom-to-fit when kozijn changes
+  // Auto zoom-to-fit only when a *different* kozijn is loaded — NOT on every
+  // geometry recompute. Otherwise routine edits (splits, resizes, cell changes)
+  // retrigger this effect and reset zoom/pan, making the canvas visibly jump.
+  let lastFitId = null;
   $effect(() => {
-    if ($currentGeometry && containerEl) {
+    const k = $currentKozijn;
+    const geom = $currentGeometry;
+    if (geom && containerEl && k && k.id !== lastFitId) {
+      lastFitId = k.id;
       requestAnimationFrame(() => zoomToFit());
     }
   });
@@ -132,7 +138,7 @@
     contextMenu = { ...contextMenu, visible: false };
   }
 
-  // Ctrl+click or double-click on canvas to add a column or row at click position
+  // Ctrl+click on canvas to add a column or row at click position
   function handleCanvasClick(e) {
     if (e.ctrlKey && !e.altKey) {
       // Ctrl+Click = add vertical column
@@ -166,10 +172,13 @@
     splitPreview = null;
   }
 
-  // Double-click on canvas to add a column or row at click position
-  function handleCanvasDblClick(e) {
-    addDividerAtMouse(e, e.altKey);
-  }
+  // Double-click is intentionally a no-op. It previously inserted a grid
+  // divider at the cursor — surprising when the user just meant to select a vak,
+  // and in vrije-indeling mode it mutated the hidden grid (not the visible
+  // split-tree), so "nothing" happened visibly while state/history churned.
+  // Dividers are added deliberately via Ctrl+click / Ctrl+Alt+click, or via the
+  // split buttons on a selected vak.
+  function handleCanvasDblClick() {}
 
   // Export for use in Beeld tab
   export { zoomToFit };

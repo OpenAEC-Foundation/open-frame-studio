@@ -24,6 +24,12 @@ pub struct PanelFilling {
     /// Grille spec — only relevant for `FillingType::Ventilation`.
     #[serde(default)]
     pub ventilation: Option<PanelVentilation>,
+    /// Depth position of the fill within the profile depth, in mm: the offset of
+    /// the fill's inner face from the frame's inner face (0 = flush with the
+    /// inside; positive = set back towards the outside). `None` = auto (centred
+    /// by thickness). Lets different vakvullingen sit at different depths (#6).
+    #[serde(default)]
+    pub setback_mm: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +90,7 @@ impl Default for PanelFilling {
             color: "RAL9010".into(),
             manufacturer: None,
             ventilation: None,
+            setback_mm: None,
         }
     }
 }
