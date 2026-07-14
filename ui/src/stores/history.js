@@ -118,9 +118,11 @@ async function restoreKozijn(snapshot) {
       layoutJson: JSON.stringify(snapshot.layout ?? null),
     });
 
-    // Re-fetch the current state
+    // Re-fetch the current state. Keep the snapshot's own layout tree rather
+    // than the backend echo: older backends strip vulling extras (glaslat/
+    // opensOutward/hardware) on the roundtrip, which would make undo lossy.
     const final = await invoke("get_kozijn", { id: snapshot.id });
-    currentKozijn.set(final);
+    currentKozijn.set({ ...final, layout: snapshot.layout ?? null });
 
     const geom = await invoke("get_kozijn_geometry", { id: snapshot.id });
     currentGeometry.set(geom);

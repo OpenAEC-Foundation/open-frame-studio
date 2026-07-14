@@ -11,9 +11,16 @@
   // Proof-of-concept for the free subdivision model (recursive split tree).
   // Fully local — pure JS/SVG, no backend/wasm.
 
-  const OUTER = { w: 1800, h: 2100 };
-  const FRAME = 90;
-  const DIVIDER = 90;
+  // Draw on the REAL kozijn (outer size + wood width) so "Toepassen" is 1:1
+  // with the main editor — the fixed 1800×2100/90mm sandbox only applies when
+  // no kozijn is selected. Tree child sizes are weights, so designing on the
+  // wrong canvas silently rescaled every vak on apply.
+  let OUTER = $derived({
+    w: $currentKozijn?.frame?.outerWidth || 1800,
+    h: $currentKozijn?.frame?.outerHeight || 2100,
+  });
+  let FRAME = $derived($currentKozijn?.frame?.frameWidth || 90);
+  let DIVIDER = $derived($currentKozijn?.frame?.frameWidth || 90);
 
   let tree = $state(melkmeisje1());
   let selectedId = $state(null);
@@ -77,10 +84,21 @@
   function changeVulling(e) {
     if (!selectedLeaf) return;
     const val = e.target.value;
+    // Carry compatible extras across a type switch — resetting glaslat/
+    // scharnier/draairichting/beslag on every switch loses the user's input.
+    const prev = selectedLeaf.vulling || {};
+    const glazed = (t) => t === "glas" || t === "raam";
+    const operable = (t) => t === "raam" || t === "deur";
+    const keep = (t) => ({
+      ...(glazed(t) && prev.glaslat != null ? { glaslat: prev.glaslat } : {}),
+      ...(operable(t) && prev.hingeSide != null ? { hingeSide: prev.hingeSide } : {}),
+      ...(operable(t) && prev.opensOutward != null ? { opensOutward: prev.opensOutward } : {}),
+      ...(operable(t) && prev.hardware != null ? { hardware: prev.hardware } : {}),
+    });
     let v;
-    if (val.startsWith("raam:")) v = { type: "raam", openType: val.slice(5) };
-    else if (val.startsWith("deur:")) v = { type: "deur", doorKind: val.slice(5) };
-    else v = { type: val };
+    if (val.startsWith("raam:")) v = { ...keep("raam"), type: "raam", openType: val.slice(5) };
+    else if (val.startsWith("deur:")) v = { ...keep("deur"), type: "deur", doorKind: val.slice(5) };
+    else v = { ...keep(val), type: val };
     tree = setVulling(tree, selectedLeaf.id, v);
   }
 

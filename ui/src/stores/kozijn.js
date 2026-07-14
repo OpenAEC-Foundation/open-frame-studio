@@ -7,6 +7,9 @@ export const currentKozijn = writable(null);
 export const selectedCellIndex = writable(null);
 // Selected member: { type: "frame_top"|"frame_bottom"|"frame_left"|"frame_right"|"divider_v"|"divider_h", index: number }
 export const selectedMember = writable(null);
+// Selected leaf (vak) in the free-subdivision layout tree, by node id. Lives in
+// the store so the side panels can edit the vulling of the selected vak.
+export const selectedLayoutLeafId = writable(null);
 
 export const currentGeometry = writable(null);
 
@@ -40,6 +43,7 @@ export async function selectKozijn(id) {
   const k = await invoke("get_kozijn", { id });
   currentKozijn.set(k);
   selectedCellIndex.set(null);
+  selectedLayoutLeafId.set(null);
   await refreshGeometry(id);
 }
 
@@ -56,12 +60,19 @@ export async function setKozijnLayout(tree) {
   // and IPC serialization).
   const plain = JSON.parse(JSON.stringify(tree));
   pushSnapshot();
+  // Optimistic: keep OUR tree in the store rather than the backend echo — older
+  // backends strip vulling extras (glaslat/opensOutward/hardware) on roundtrip.
   currentKozijn.set({ ...k, layout: plain });
   try {
     await invoke("update_kozijn_layout", { id: k.id, layoutJson: JSON.stringify(plain) });
   } catch (e) {
     console.error("Layout opslaan mislukt:", e);
   }
+  // The 2D stepped outline (framePolygons), dimension chains and the 3D viewer
+  // all render from the geometry payload — without this refresh they keep
+  // showing the pre-layout state until an unrelated mutation happens.
+  await refreshProject();
+  await refreshGeometry(k.id);
 }
 
 export async function updateDimensions(width, height) {
@@ -382,6 +393,7 @@ export async function removeKozijn(id) {
     currentKozijn.set(null);
     currentGeometry.set(null);
     selectedCellIndex.set(null);
+    selectedLayoutLeafId.set(null);
   }
   markDirty();
 }
