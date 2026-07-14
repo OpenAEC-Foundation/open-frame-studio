@@ -1,5 +1,5 @@
 <script>
-  import { selectedCellIndex, selectedMember, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
+  import { selectedCellIndex, selectedMember, selectedLayoutLeafId, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
   import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
   import { ralToHex } from "../../lib/ral-colors.js";
@@ -17,7 +17,8 @@
   // is smooth and history/backend are only touched once, on release.
   let workingTree = $state(null);
   let layoutDrag = $state(null);
-  let selectedLeafId = $state(null);
+  // Leaf selection lives in the store so the side panels (vulling editor) see it.
+  let selectedLeafId = $derived($selectedLayoutLeafId);
   // #9: "vakken uitwisselen". When a swap is armed (via the ⇄ button) this holds
   // the source vak id; the next vak click swaps the two vakken's contents.
   let swapSourceId = $state(null);
@@ -49,6 +50,93 @@
     return geometry?.glaslatHoogte != null
       ? Math.max(0, geometry.glaslatHoogte - (geometry.sponningHoogte ?? 17))
       : fallback;
+  }
+
+  // ── Draaisymbolen op het layout-pad (NL-conventie, VKG 1.8) ─────────────────
+  // Buitenaanzicht: brede zijde van de driehoek = scharnierzijde, punt =
+  // kruk-/slotzijde; doorgetrokken lijn = naar buiten draaiend, streeplijn =
+  // naar binnen draaiend; schuivend deel = pijl in de schuifrichting.
+  // Returns [{ d, solid }] paths in vak-coördinaten.
+  function vullingSymbols(v, r) {
+    if (!v || (v.type !== "raam" && v.type !== "deur")) return [];
+    const { x, y, width: w, height: h } = r;
+    const mx = w * 0.14, my = h * 0.14;
+    const left = (v.hingeSide || "links") === "links";
+    const outward = v.opensOutward ?? (v.type === "raam" && v.openType === "uitzet");
+    const turn = (rx, rw) => left
+      ? `M${rx + rw * 0.14},${y + my} L${rx + rw * 0.86},${y + h / 2} L${rx + rw * 0.14},${y + h - my}`
+      : `M${rx + rw * 0.86},${y + my} L${rx + rw * 0.14},${y + h / 2} L${rx + rw * 0.86},${y + h - my}`;
+    const val = `M${x + mx},${y + h - my} L${x + w / 2},${y + my} L${x + w - mx},${y + h - my}`;
+    const uitzet = `M${x + mx},${y + my} L${x + w / 2},${y + h - my} L${x + w - mx},${y + my}`;
+    const arrow = (() => {
+      const yMid = y + h / 2, x1 = x + w * 0.25, x2 = x + w * 0.75;
+      const hd = Math.min(w, h) * 0.06;
+      return left
+        ? `M${x1},${yMid} L${x2},${yMid} M${x2 - hd},${yMid - hd} L${x2},${yMid} L${x2 - hd},${yMid + hd}`
+        : `M${x2},${yMid} L${x1},${yMid} M${x1 + hd},${yMid - hd} L${x1},${yMid} L${x1 + hd},${yMid + hd}`;
+    })();
+    const syms = [];
+    if (v.type === "deur") {
+      if (v.doorKind === "dubbel") {
+        // Stolp: twee vleugels, scharnieren op de buitenstijlen, punten op de naald.
+        syms.push({ d: `M${x + w * 0.07},${y + my} L${x + w * 0.46},${y + h / 2} L${x + w * 0.07},${y + h - my}`, solid: outward });
+        syms.push({ d: `M${x + w * 0.93},${y + my} L${x + w * 0.54},${y + h / 2} L${x + w * 0.93},${y + h - my}`, solid: outward });
+      } else if (v.doorKind === "schuif" || v.doorKind === "hefschuif") {
+        syms.push({ d: arrow, solid: true });
+      } else {
+        syms.push({ d: turn(x, w), solid: outward });
+      }
+      return syms;
+    }
+    switch (v.openType) {
+      case "draaikiep":
+        syms.push({ d: turn(x, w), solid: outward });
+        syms.push({ d: val, solid: false });
+        break;
+      case "valraam":
+        syms.push({ d: val, solid: false });
+        break;
+      case "uitzet":
+        syms.push({ d: uitzet, solid: true });
+        break;
+      case "tuimel":
+        syms.push({ d: uitzet, solid: outward });
+        syms.push({ d: `M${x + mx},${y + h / 2} L${x + w - mx},${y + h / 2}`, solid: false });
+        break;
+      case "taats":
+        syms.push({ d: turn(x, w), solid: outward });
+        syms.push({ d: `M${x + w / 2},${y + my} L${x + w / 2},${y + h - my}`, solid: false });
+        break;
+      case "schuif":
+      case "hefschuif":
+        syms.push({ d: arrow, solid: true });
+        break;
+      default: // draai
+        syms.push({ d: turn(x, w), solid: outward });
+    }
+    return syms;
+  }
+
+  // Vleugel-aanzichtbreedte in het layout-pad: raamhout 69 mm (embedded default
+  // raamhout-69x90), deurhout = kozijnhoutbreedte — beide consistent met de
+  // productie-defaults zodat 2D, 3D en zaaglijst dezelfde vleugel tonen.
+  function sashWidthFor(v) {
+    if (v?.type === "deur") return kozijn?.frame?.frameWidth || 67;
+    return 69;
+  }
+
+  // Borstwering (`buiten`-vak): strek het metselwerk door tot de buitenrand aan
+  // zijden waar geen kozijnhout meer zit (de getrapte omtrek slaat die kant
+  // over), anders blijft daar een kale strook editor-achtergrond als "gat".
+  function buitenRect(r) {
+    const fw = kozijn?.frame?.frameWidth || 67;
+    const ow = kozijn?.frame?.outerWidth || 0;
+    const oh = kozijn?.frame?.outerHeight || 0;
+    const x0 = Math.abs(r.x - fw) < 1 ? 0 : r.x;
+    const y0 = Math.abs(r.y - fw) < 1 ? 0 : r.y;
+    const x1 = Math.abs(r.x + r.width - (ow - fw)) < 1 ? ow : r.x + r.width;
+    const y1 = Math.abs(r.y + r.height - (oh - fw)) < 1 ? oh : r.y + r.height;
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }
 
   // ── Drag a layout divider (tussenstijl/-dorpel) to resize the two vakken ────
@@ -97,18 +185,21 @@
   }
 
   function selectLeaf(id, e) {
+    // Ctrl(+Alt)+klik = tussenstijl/-dorpel plaatsen: laat de click doorbubbelen
+    // naar de svg-handler van KozijnEditor in plaats van hem hier te vangen.
+    if (e?.ctrlKey) return;
     e?.stopPropagation();
     // If a swap is armed and a *different* vak is clicked, complete the swap.
     if (swapSourceId && id !== swapSourceId && activeTree) {
       setKozijnLayout(swapVullingen(activeTree, swapSourceId, id));
       swapSourceId = null;
-      selectedLeafId = id;
+      selectedLayoutLeafId.set(id);
       selectedCellIndex.set(null);
       selectedMember.set(null);
       return;
     }
     swapSourceId = null; // clicking (the same or any) vak cancels an armed swap
-    selectedLeafId = id;
+    selectedLayoutLeafId.set(id);
     selectedCellIndex.set(null);
     selectedMember.set(null);
   }
@@ -648,7 +739,11 @@
        wasm bundle / plain butt frame) so the canvas renders either shape. -->
   {#if geometry.framePolygons?.length}
     {#each geometry.framePolygons as poly}
-      <polygon points={poly.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={frameColor} />
+      <!-- Stroke maakt de naad tussen de leden zichtbaar: de 45°-lasnaad bij
+           PVC/alu-verstek, de haakse stuiknaad bij hout — zonder stroke oogt
+           het kozijn als één massieve rand ("geen echte verbindingen"). -->
+      <polygon points={poly.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={frameColor}
+               stroke="var(--editor-frame)" stroke-width="1" />
     {/each}
   {:else}
     {#each geometry.frameRects as rect}
@@ -697,15 +792,31 @@
         {@const v = l.node.vulling}
         {@const lcx = r.x + r.width / 2}
         {@const lcy = r.y + r.height / 2}
-        {@const sb = (kozijn.frame.frameWidth || 67) * 0.4}
+        {@const operable = v.type === "raam" || v.type === "deur"}
+        {@const sw = sashWidthFor(v)}
         <rect x={r.x} y={r.y} width={r.width} height={r.height} fill={vullingFill(v.type)} stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
-        {#if v.type === "raam" || v.type === "deur"}
-          <rect x={r.x + sb} y={r.y + sb} width={Math.max(1, r.width - sb * 2)} height={Math.max(1, r.height - sb * 2)} fill="none" stroke="var(--amber)" stroke-width={1.2} opacity="0.7" pointer-events="none" />
+        {#if operable}
+          <!-- Vleugel (raamhout/deurhout) op werkelijke aanzichtbreedte, als band
+               binnen de dag — zelfde maat als 3D en productie gebruiken. -->
+          <rect x={r.x + sw / 2} y={r.y + sw / 2} width={Math.max(1, r.width - sw)} height={Math.max(1, r.height - sw)}
+                fill="none" stroke={frameColor} stroke-width={sw} opacity="0.9" pointer-events="none" />
+          <rect x={r.x + sw} y={r.y + sw} width={Math.max(1, r.width - sw * 2)} height={Math.max(1, r.height - sw * 2)}
+                fill="none" stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
+          {#if v.type === "deur" && v.doorKind === "dubbel"}
+            <!-- Stolpnaad: twee vleugels zonder vaste tussenstijl -->
+            <line x1={lcx} y1={r.y + 2} x2={lcx} y2={r.y + r.height - 2} stroke="var(--editor-frame)" stroke-width={1.5} pointer-events="none" />
+          {/if}
         {/if}
-        {#if v.glaslat}
-          {@const gi = sb + glaslatOffset(6)}
-          <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
+        {#if v.glaslat || v.type === "glas"}
+          {@const gi = (operable ? sw : 0) + glaslatOffset(6)}
+          {#if gi > 0.5}
+            <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
+          {/if}
         {/if}
+        {#each vullingSymbols(v, r) as sym}
+          <path d={sym.d} fill="none" stroke="var(--editor-frame)" stroke-width={1.2}
+                stroke-dasharray={sym.solid ? null : "7 5"} opacity="0.8" pointer-events="none" />
+        {/each}
         <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
         <text x={lcx} y={lcy + 9 / zoom} text-anchor="middle" dominant-baseline="central" fill="#DC2626" font-size={8 / zoom} opacity="0.7" pointer-events="none">{Math.round(r.width)}×{Math.round(r.height)}</text>
         <!-- transparent hit layer for selecting the vak -->
@@ -718,14 +829,22 @@
         {/if}
       {:else}
         <!-- Borstwering: het lage muurtje onder een melkmeisje-zijlicht. Geen
-             kozijnvak maar metselwerk, zodat het als muur leest i.p.v. een gat.
-             De getrapte kozijnomtrek eromheen komt uit geometry.framePolygons
-             (zichtbaar na de wasm-rebuild). -->
-        {@const r = l.rect}
+             kozijnvak maar metselwerk, doorgetrokken tot de buitenrand waar de
+             getrapte omtrek geen hout meer heeft — muur i.p.v. een gat. -->
+        {@const r = buitenRect(l.rect)}
         <rect x={r.x} y={r.y} width={r.width} height={r.height}
               fill="url(#{brickPatternId})" stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
         <text x={r.x + r.width / 2} y={r.y + r.height / 2} text-anchor="middle" dominant-baseline="central"
               fill="#F5EFE3" font-size={11 / zoom} font-weight="700" opacity="0.85" pointer-events="none">Borstwering</text>
+        <!-- Ook een borstwering blijft selecteerbaar, anders is de keuze
+             'buiten' onomkeerbaar (vullingpaneel onbereikbaar). -->
+        <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" class="vak-hit"
+              onclick={(e) => selectLeaf(l.node.id, e)} role="button" tabindex="0"
+              aria-label="Selecteer borstwering" onkeydown={(e) => e.key === "Enter" && selectLeaf(l.node.id, e)} />
+        {#if l.node.id === selectedLeafId}
+          <rect x={r.x + 2} y={r.y + 2} width={Math.max(1, r.width - 4)} height={Math.max(1, r.height - 4)}
+                fill="none" stroke="var(--editor-selected, #D97706)" stroke-width={3 / zoom} pointer-events="none" />
+        {/if}
       {/if}
     {/each}
 

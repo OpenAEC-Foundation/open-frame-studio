@@ -12,10 +12,31 @@
     clearVliesgevelSelection,
   } from "../../stores/vliesgevel.js";
   import { panelTypeSummary } from "../../lib/labels.js";
+  import { vullingLabel } from "../../lib/layout.js";
 
   onMount(loadVliesgevels);
 
+  // Bij een vrije indeling beschrijft de boom de vakken; de matrix-cellen zijn
+  // dan vestigiaal (die zeiden "1x Vast glas" bij een melkmeisje met deur).
+  function layoutCounts(node, acc = {}) {
+    if (!node) return acc;
+    if (node.kind === "leaf") {
+      if (node.vulling?.type !== "buiten") {
+        const lbl = vullingLabel(node.vulling);
+        acc[lbl] = (acc[lbl] || 0) + 1;
+      }
+      return acc;
+    }
+    for (const c of node.children || []) layoutCounts(c.node, acc);
+    return acc;
+  }
+
   function cellSummary(kozijn) {
+    if (kozijn.layout) {
+      return Object.entries(layoutCounts(kozijn.layout))
+        .map(([lbl, n]) => `${n}x ${lbl}`)
+        .join(", ");
+    }
     return panelTypeSummary($_, kozijn.cells);
   }
 

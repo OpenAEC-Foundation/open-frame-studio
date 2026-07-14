@@ -5,6 +5,8 @@
     currentKozijn,
     selectedCellIndex,
     selectedMember,
+    selectedLayoutLeafId,
+    setKozijnLayout,
     updateDimensions,
     updateCellType,
     updateCellEscape,
@@ -19,6 +21,8 @@
     addFrameExtension,
     removeFrameExtension,
   } from "../../stores/kozijn.js";
+  import { gridToLayout } from "../../lib/layout.js";
+  import VakVullingPanel from "./VakVullingPanel.svelte";
   import { allProfiles } from "../../stores/profiles.js";
   import { toast } from "../../stores/toast.js";
   import { PANEL_TYPE_KEYS, panelLabel, memberLabel } from "../../lib/labels.js";
@@ -334,8 +338,24 @@
       {/if}
     </div>
 
+    {#if $currentKozijn.layout}
+      <div class="section">
+        <h3>{$_('props.gridSizes')}</h3>
+        <p class="hint-text">Vrije indeling actief — vakken bewerk je in de tekening:
+          klik een vak om te splitsen/vullen, versleep de deellijnen, Ctrl+klik
+          plaatst een tussenstijl op de klikpositie (Ctrl+Alt = tussendorpel).</p>
+      </div>
+    {:else}
     <div class="section">
       <h3>{$_('props.gridSizes')}</h3>
+      <div class="field">
+        <button class="convert-btn" onclick={() => setKozijnLayout(gridToLayout($currentKozijn))}>
+          → Vrije indeling activeren
+        </button>
+        <p class="hint-text">Zet het raster om naar de vrije indeling: per vak
+          splitsen, samenvoegen en vullingen kiezen, met getrapte vormen
+          (melkmeisje). De vakken hieronder blijven anders rasterbreed.</p>
+      </div>
       <div class="field">
         <label>{$_('props.columns')}</label>
         {#each $currentKozijn.grid.columns as col, i}
@@ -375,6 +395,11 @@
         {/each}
       </div>
     </div>
+    {/if}
+
+    {#if $currentKozijn.layout && $selectedLayoutLeafId}
+      <VakVullingPanel />
+    {/if}
 
     {#if $selectedMember}
       {@const memberOverride = getMemberOverride($selectedMember, $currentKozijn)}
@@ -434,7 +459,9 @@
           {/if}
         {/if}
       </div>
-    {:else if selectedCell}
+    {:else if selectedCell && !$currentKozijn.layout}
+      <!-- Cel-eigenschappen horen bij de matrix; op een vrije-indeling-kozijn
+           zouden ze de onzichtbare (vestigiale) cellen muteren zonder effect. -->
       <div class="section">
         <h3>{$_('props.cell', { values: { index: $selectedCellIndex + 1 } })}</h3>
         <div class="field">
@@ -686,6 +713,30 @@
   .section {
     padding: 10px 12px 6px;
     border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.06));
+  }
+
+  .hint-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin: 4px 0 0;
+  }
+
+  .convert-btn {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-surface-alt);
+    color: var(--amber, #D97706);
+    border: 1px solid var(--amber, #D97706);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+  }
+  .convert-btn:hover {
+    background: var(--amber, #D97706);
+    color: #1a1a1a;
   }
 
   .section h3 {

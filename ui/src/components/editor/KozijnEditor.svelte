@@ -1,11 +1,26 @@
 <script>
-  import { currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes, addColumn, addRow } from "../../stores/kozijn.js";
+  import { currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes, addColumn, addRow, setKozijnLayout } from "../../stores/kozijn.js";
   import { zoom, editorPan } from "../../stores/ui.js";
   import { _ } from "svelte-i18n";
   import KozijnCanvas from "./KozijnCanvas.svelte";
   import GridHandles from "./GridHandles.svelte";
   import CellContextMenu from "./CellContextMenu.svelte";
   import { get } from "svelte/store";
+  import { layoutToRects, splitLeafAt, ensureIds } from "../../lib/layout.js";
+
+  // Leaf-hittest op de vrije indeling: welk vak ligt onder (mx,my) in model-mm?
+  function layoutLeafAt(k, mx, my) {
+    if (!k?.layout) return null;
+    const fw = k.frame.frameWidth || 67;
+    const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
+    const tree = ensureIds(k.layout);
+    const geom = layoutToRects(tree, inner, fw);
+    const leaf = geom.leaves.find((l) =>
+      l.node.vulling?.type !== "buiten" &&
+      mx >= l.rect.x && mx <= l.rect.x + l.rect.width &&
+      my >= l.rect.y && my <= l.rect.y + l.rect.height);
+    return leaf ? { tree, leaf } : null;
+  }
 
   // Context menu state
   let contextMenu = $state({ visible: false, cellIndex: 0, x: 0, y: 0 });
@@ -107,12 +122,18 @@
       const oh = k.frame.outerHeight;
 
       if (mx > fw && mx < ow - fw && my > fw && my < oh - fw) {
-        if (e.altKey) {
+        // Op een vrije-indeling-kozijn splitst Ctrl+klik alleen het vak onder de
+        // cursor — clamp de preview-lijn dan ook op dat vak i.p.v. de hele dag.
+        const hit = layoutLeafAt(k, mx, my);
+        const b = hit ? hit.leaf.rect : { x: fw, y: fw, width: ow - 2 * fw, height: oh - 2 * fw };
+        if (k.layout && !hit) {
+          splitPreview = null;
+        } else if (e.altKey) {
           // Horizontal split preview
-          splitPreview = { type: "h", y: my, x1: fw, x2: ow - fw };
+          splitPreview = { type: "h", y: my, x1: b.x, x2: b.x + b.width };
         } else {
           // Vertical split preview
-          splitPreview = { type: "v", x: mx, y1: fw, y2: oh - fw };
+          splitPreview = { type: "v", x: mx, y1: b.y, y2: b.y + b.height };
         }
       } else {
         splitPreview = null;
@@ -164,7 +185,18 @@
 
     if (mx < fw || mx > ow - fw || my < fw || my > oh - fw) return;
 
-    if (horizontal) {
+    if (k.layout) {
+      // Vrije indeling: splits het vak onder de cursor op de klikpositie
+      // (WH Okna-patroon) — de matrix-commando's zouden hier het onzichtbare
+      // grid muteren zonder zichtbaar effect.
+      const hit = layoutLeafAt(k, mx, my);
+      if (!hit) return;
+      const { tree, leaf } = hit;
+      const ratio = horizontal
+        ? (my - leaf.rect.y) / Math.max(1, leaf.rect.height)
+        : (mx - leaf.rect.x) / Math.max(1, leaf.rect.width);
+      setKozijnLayout(splitLeafAt(tree, leaf.node.id, horizontal ? "column" : "row", ratio));
+    } else if (horizontal) {
       addRow(my);
     } else {
       addColumn(mx);
@@ -199,7 +231,12 @@
     <svg class="canvas" xmlns="http://www.w3.org/2000/svg" ondblclick={handleCanvasDblClick} onclick={handleCanvasClick}>
       <g transform="translate({$editorPan.x}, {$editorPan.y}) scale({$zoom})">
         <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} oncellcontextmenu={handleCellContextMenu} />
-        <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
+        <!-- GridHandles werkt op kozijn.grid en hoort niet op een vrije-indeling-
+             kozijn: zijn hit-rects vangen de divider-drag van het canvas af en
+             zijn resize leest het vestigiale 1×1-grid (NaN-gridcorruptie). -->
+        {#if !$currentKozijn.layout}
+          <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
+        {/if}
 
         <!-- Split preview line (Ctrl+hover) -->
         {#if splitPreview}

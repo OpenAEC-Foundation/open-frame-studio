@@ -132,7 +132,9 @@ function cellToVulling(cell) {
   if (dir === "outward") extra.opensOutward = true;
   if (cell.hardwareSet) extra.hardware = true;
   if (pt === "fixed_glass") return { type: "glas", ...extra };
-  if (pt === "panel") return { type: "paneel" };
+  // Carry the panel specification along so converting matrix → tree does not
+  // silently drop dikte/kleur/U-waarde (field name mirrors Rust Vakvulling).
+  if (pt === "panel") return { type: "paneel", ...(cell.panelFilling ? { filling: cell.panelFilling } : {}) };
   if (pt === "ventilation") return { type: "rooster" };
   if (pt === "door") return { type: "deur", doorKind: "enkel", ...extra };
   return { type: "raam", openType: OPENTYPE_FROM_PANELTYPE[pt] || "draai", ...extra };
@@ -295,13 +297,23 @@ function transformNode(root, id, fn) {
 
 /** Split a leaf into two along `direction`, keeping the original as the first child. */
 export function splitLeaf(root, id, direction) {
+  return splitLeafAt(root, id, direction, 0.5);
+}
+
+/**
+ * Split a leaf at a position: `ratio` (0..1) is the first child's share of the
+ * vak, so a Ctrl+click places the new tussenstijl/-dorpel at the click position
+ * instead of always halving (WH Okna-style "insert divider at position").
+ */
+export function splitLeafAt(root, id, direction, ratio) {
+  const r = Math.min(0.9, Math.max(0.1, ratio || 0.5));
   return transformNode(root, id, (node) => {
     if (node.kind !== "leaf") return node;
     return {
       id: nid(),
       kind: "split",
       direction,
-      children: [child(1, node), child(1, glas())],
+      children: [child(Math.round(r * 1000), node), child(Math.round((1 - r) * 1000), glas())],
     };
   });
 }
