@@ -59,6 +59,11 @@ jobs:
       - name: Check Rust workspace
         run: cargo check -p ofs-core -p open-frame-studio
 
+      # Zonder deze stap bood de hele ofs-core-testsuite nul CI-bescherming
+      # (cargo check type-checkt geen #[cfg(test)]-code).
+      - name: Test ofs-core
+        run: cargo test -p ofs-core --lib
+
       - name: Build Tauri app (no bundle)
         working-directory: src-tauri
         run: cargo build

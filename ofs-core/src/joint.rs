@@ -24,9 +24,11 @@ impl Default for JointType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThroughMember {
-    /// Stijl (vertical) runs through — standard for wood
+    /// Stijl (vertical) runs through — standard for draaiende delen
+    /// (raam-/deurvleugels), where the stiles run full height.
     Stijl,
-    /// Dorpel (horizontal) runs through
+    /// Dorpel (horizontal) runs through — standard for houten kozijnen
+    /// (NL-timmerpraktijk: dorpels doorlopend, stijlen ertussen gepend).
     Dorpel,
 }
 
@@ -92,14 +94,20 @@ pub fn is_untouched_default_joint(j: &Joint) -> bool {
 }
 
 /// The four corner joints in [top-left, top-right, bottom-left, bottom-right]
-/// order, or `None` when the stored joints are absent, incomplete, or still the
-/// untouched auto-populated default set — in which case callers fall back to
-/// the material-based default.
-pub fn effective_corner_joints(corner_joints: &[Joint]) -> Option<[&Joint; 4]> {
+/// order, or `None` when the stored joints are absent, incomplete, or — while
+/// `configured` is false — still the untouched auto-populated default set, in
+/// which case callers fall back to the material-based default.
+///
+/// `configured` is `Frame::joints_configured`: once the user has explicitly
+/// saved corner joints the stored set always wins, even when it happens to
+/// equal the auto-populated default — a deliberate "pen/slis, stijl
+/// doorlopend" must not be mistaken for "never touched". Old .ofs files carry
+/// `false` and keep the historic sentinel behaviour.
+pub fn effective_corner_joints(corner_joints: &[Joint], configured: bool) -> Option<[&Joint; 4]> {
     if corner_joints.len() < 4 {
         return None;
     }
-    if corner_joints[..4].iter().all(is_untouched_default_joint) {
+    if !configured && corner_joints[..4].iter().all(is_untouched_default_joint) {
         return None;
     }
     Some([
@@ -123,11 +131,16 @@ pub struct CornerModel {
 
 /// Resolve the four corners [TL, TR, BL, BR] from material + stored joints.
 /// Falls back to the material default when the joints are untouched/absent:
-/// wood & wood-aluminium → stijl-through square (butt); aluminium & PVC →
-/// verstek 45°. This is exactly the decision production's saw list uses, so the
-/// front-view picture and the cut list always agree (issue 7).
-pub fn frame_corner_model(material: &Material, corner_joints: &[Joint]) -> [CornerModel; 4] {
-    match effective_corner_joints(corner_joints) {
+/// wood & wood-aluminium → dorpel-through square (butt); aluminium & PVC →
+/// verstek 45°. `configured` is `Frame::joints_configured` — see
+/// `effective_corner_joints`. This is exactly the decision production's saw
+/// list uses, so the front-view picture and the cut list always agree (issue 7).
+pub fn frame_corner_model(
+    material: &Material,
+    corner_joints: &[Joint],
+    configured: bool,
+) -> [CornerModel; 4] {
+    match effective_corner_joints(corner_joints, configured) {
         Some(js) => {
             let model = |j: &Joint| {
                 let verstek = j.joint_type == JointType::Verstek;
@@ -149,9 +162,14 @@ pub fn frame_corner_model(material: &Material, corner_joints: &[Joint]) -> [Corn
         }
         None => {
             let verstek = matches!(material, Material::Aluminum | Material::Pvc);
+            // NL-timmerpraktijk (KVT katern 15): bij houten KOZIJNEN lopen de
+            // dorpels door en worden de stijlen ertussen gepend (pen-en-gat);
+            // bij vleugels (raam-/deurhout) is het omgekeerd — de doorlopende
+            // vleugelstijlen blijven in production.rs' sash-systematiek staan.
+            // Voor alu/PVC geldt verstek, waar de through-member niet meetelt.
             let c = CornerModel {
                 verstek,
-                through: ThroughMember::Stijl,
+                through: ThroughMember::Dorpel,
                 angle: if verstek { 45.0 } else { 90.0 },
             };
             [c, c, c, c]
@@ -170,16 +188,29 @@ mod tests {
 
     #[test]
     fn untouched_defaults_use_material_fallback() {
-        // Wood default → stijl-through butt, no verstek.
-        let m = frame_corner_model(&Material::Wood(WoodType::Meranti), &defaults());
-        assert!(m.iter().all(|c| !c.verstek && c.through == ThroughMember::Stijl));
+        // Wood default → dorpel-through butt (NL-timmerpraktijk, KVT katern
+        // 15: dorpels doorlopend, stijlen ertussen gepend), no verstek.
+        let m = frame_corner_model(&Material::Wood(WoodType::Meranti), &defaults(), false);
+        assert!(m.iter().all(|c| !c.verstek && c.through == ThroughMember::Dorpel));
         // Aluminium / PVC default → verstek 45° everywhere.
         for mat in [Material::Aluminum, Material::Pvc] {
-            let m = frame_corner_model(&mat, &defaults());
+            let m = frame_corner_model(&mat, &defaults(), false);
             assert!(m.iter().all(|c| c.verstek && (c.angle - 45.0).abs() < 1e-6));
         }
         // The untouched default set is treated as "not configured".
-        assert!(effective_corner_joints(&defaults()).is_none());
+        assert!(effective_corner_joints(&defaults(), false).is_none());
+    }
+
+    #[test]
+    fn configured_flag_makes_default_set_win() {
+        // joints_configured=true: the stored set always wins, even when it
+        // equals the auto-populated sentinel — a deliberate "pen/slis, stijl
+        // doorlopend" on aluminium beats the material verstek default.
+        assert!(effective_corner_joints(&defaults(), true).is_some());
+        let m = frame_corner_model(&Material::Aluminum, &defaults(), true);
+        assert!(m.iter().all(|c| !c.verstek && c.through == ThroughMember::Stijl));
+        // Incomplete sets stay unconfigured regardless of the flag.
+        assert!(effective_corner_joints(&defaults()[..2], true).is_none());
     }
 
     #[test]
@@ -191,9 +222,9 @@ mod tests {
             pen_length: 0.0,
         };
         let joints = vec![verstek.clone(), verstek.clone(), verstek.clone(), verstek];
-        let m = frame_corner_model(&Material::Wood(WoodType::Meranti), &joints);
+        let m = frame_corner_model(&Material::Wood(WoodType::Meranti), &joints, false);
         assert!(m.iter().all(|c| c.verstek && (c.angle - 45.0).abs() < 1e-6));
-        assert!(effective_corner_joints(&joints).is_some());
+        assert!(effective_corner_joints(&joints, false).is_some());
     }
 
     #[test]
@@ -205,7 +236,7 @@ mod tests {
             pen_length: 20.0,
         };
         let joints = vec![dorpel.clone(), dorpel.clone(), dorpel.clone(), dorpel];
-        let m = frame_corner_model(&Material::Aluminum, &joints);
+        let m = frame_corner_model(&Material::Aluminum, &joints, false);
         // Explicit config wins over the material verstek default.
         assert!(m.iter().all(|c| !c.verstek && c.through == ThroughMember::Dorpel));
     }

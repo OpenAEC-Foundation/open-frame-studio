@@ -301,6 +301,9 @@ pub fn update_corner_joints(id: &str, joints_json: &str) -> Result<String, Strin
         let joints: Vec<ofs_core::joint::Joint> = serde_json::from_str(joints_json)
             .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
         p.kozijnen[idx].frame.corner_joints = joints;
+        // Explicitly saved joints always win from now on, even when they
+        // equal the auto-populated default set (see Frame::joints_configured).
+        p.kozijnen[idx].frame.joints_configured = true;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -396,6 +399,69 @@ pub fn update_frame_profile(
                         .map_err(|e| format!("Ongeldig profielsnapshot JSON: {}", e))?,
                 )
             };
+        }
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_sill_profile(
+    id: &str,
+    profile_id: &str,
+    profile_name: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        p.kozijnen[idx].frame.sill_profile = Some(ofs_core::profile::ProfileRef {
+            id: profile_id.to_string(),
+            name: profile_name.to_string(),
+        });
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_member_profile(
+    id: &str,
+    member_type: &str,
+    member_index: Option<u32>,
+    profile_id: &str,
+    profile_name: &str,
+    _profile_width: Option<f64>,
+    _profile_depth: Option<f64>,
+) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        let profile = ofs_core::profile::ProfileRef {
+            id: profile_id.to_string(),
+            name: profile_name.to_string(),
+        };
+        // Same member mapping as the Tauri command: per-member frame
+        // overrides, dividers by index (+1: the first column/row carries no
+        // divider). Width/depth are accepted but not applied per-member (the
+        // Tauri command ignores them too — per-member widths need geometry
+        // support first).
+        match member_type {
+            "frame_top" => k.frame.top_profile = Some(profile),
+            "frame_bottom" => k.frame.bottom_profile = Some(profile),
+            "frame_left" => k.frame.left_profile = Some(profile),
+            "frame_right" => k.frame.right_profile = Some(profile),
+            "divider_v" => {
+                if let Some(i) = member_index {
+                    if let Some(col) = k.grid.columns.get_mut(i as usize + 1) {
+                        col.divider_profile = Some(profile);
+                    }
+                }
+            }
+            "divider_h" => {
+                if let Some(i) = member_index {
+                    if let Some(row) = k.grid.rows.get_mut(i as usize + 1) {
+                        row.divider_profile = Some(profile);
+                    }
+                }
+            }
+            _ => return Err(format!("Onbekend member type: {}", member_type)),
         }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?

@@ -104,6 +104,7 @@ impl Kozijn {
                     crate::joint::Joint::default(),
                     crate::joint::Joint::default(),
                 ],
+                joints_configured: false,
                 edges: vec![],
             },
             grid: Grid {
@@ -159,6 +160,7 @@ impl Kozijn {
                     crate::joint::Joint::default(),
                     crate::joint::Joint::default(),
                 ],
+                joints_configured: false,
                 edges: vec![],
             },
             grid: Grid {
@@ -204,8 +206,14 @@ impl Kozijn {
         self.frame.outer_height - 2.0 * self.frame.frame_width
     }
 
-    /// Add a vertical divider (creates a new column)
+    /// Add a vertical divider (creates a new column). The new tussenstijl
+    /// occupies `frame_width` mm, which is subtracted proportionally from the
+    /// two new column sizes so that Σ(kolommen) + Σ(tussenstijlen) stays
+    /// exactly the binnenmaat — the level-1 dimension chain keeps adding up
+    /// to the buitenwerkse maat and the last vak no longer runs underneath
+    /// the stijl.
     pub fn add_column(&mut self, position: f64) {
+        let divider_w = self.frame.frame_width;
         let total_existing: f64 = self.grid.columns.iter().map(|c| c.size).sum();
 
         if position > 0.0 && position < total_existing {
@@ -213,8 +221,17 @@ impl Kozijn {
             for i in 0..self.grid.columns.len() {
                 let col_end = accumulated + self.grid.columns[i].size;
                 if position > accumulated && position < col_end {
-                    let left = position - accumulated;
-                    let right = col_end - position;
+                    let mut left = position - accumulated;
+                    let mut right = col_end - position;
+                    // Reserve room for the divider itself: shrink both halves
+                    // proportionally. Skipped when the vak is not wider than
+                    // the divider (degenerate split, sizes must stay > 0).
+                    let span = left + right;
+                    if span > divider_w {
+                        let scale = (span - divider_w) / span;
+                        left *= scale;
+                        right *= scale;
+                    }
                     self.grid.columns[i].size = left;
                     self.grid.columns.insert(
                         i + 1,
@@ -231,8 +248,11 @@ impl Kozijn {
         self.rebuild_cells();
     }
 
-    /// Add a horizontal divider (creates a new row)
+    /// Add a horizontal divider (creates a new row). The new tussendorpel
+    /// occupies `frame_width` mm, subtracted proportionally from the two new
+    /// row sizes — see `add_column` for the invariant.
     pub fn add_row(&mut self, position: f64) {
+        let divider_w = self.frame.frame_width;
         let total_existing: f64 = self.grid.rows.iter().map(|r| r.size).sum();
 
         if position > 0.0 && position < total_existing {
@@ -240,8 +260,15 @@ impl Kozijn {
             for i in 0..self.grid.rows.len() {
                 let row_end = accumulated + self.grid.rows[i].size;
                 if position > accumulated && position < row_end {
-                    let top = position - accumulated;
-                    let bottom = row_end - position;
+                    let mut top = position - accumulated;
+                    let mut bottom = row_end - position;
+                    // Reserve room for the divider itself (see add_column).
+                    let span = top + bottom;
+                    if span > divider_w {
+                        let scale = (span - divider_w) / span;
+                        top *= scale;
+                        bottom *= scale;
+                    }
                     self.grid.rows[i].size = top;
                     self.grid.rows.insert(
                         i + 1,
@@ -309,6 +336,14 @@ pub struct Frame {
     /// Corner joint configurations [top-left, top-right, bottom-left, bottom-right]
     #[serde(default)]
     pub corner_joints: Vec<crate::joint::Joint>,
+    /// `true` once the user has explicitly saved corner joints (set by the
+    /// update_corner_joints commands). `Kozijn::new` auto-populates
+    /// `corner_joints` with four defaults, so the values alone cannot tell a
+    /// deliberate "pen/slis, stijl doorlopend" apart from "never touched";
+    /// this flag can. `false` on old .ofs files, which keeps the historic
+    /// sentinel fallback (`crate::joint::effective_corner_joints`).
+    #[serde(default)]
+    pub joints_configured: bool,
     /// Edge configurations [left, right, top, bottom] — wall connection details
     #[serde(default)]
     pub edges: Vec<crate::edge::EdgeConfig>,
@@ -683,4 +718,54 @@ pub struct Series {
     pub name: String,
     #[serde(default)]
     pub description: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_column_reserves_divider_space() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        let inner_w = k.inner_width(); // 1066
+        let fw = k.frame.frame_width; // 67 (= divider width)
+        k.add_column(400.0);
+
+        assert_eq!(k.grid.columns.len(), 2);
+        assert_eq!(k.cells.len(), 2);
+        let sum: f64 = k.grid.columns.iter().map(|c| c.size).sum();
+        // Σ kolommen + tussenstijl = binnenmaat: the dimension chain closes.
+        assert!((sum + fw - inner_w).abs() < 1e-6, "sum {} + fw {} != inner {}", sum, fw, inner_w);
+        // The divider space is taken proportionally: the 400:666 ratio holds.
+        let ratio = k.grid.columns[0].size / k.grid.columns[1].size;
+        assert!((ratio - 400.0 / 666.0).abs() < 1e-6);
+        // Both columns stay positive.
+        assert!(k.grid.columns.iter().all(|c| c.size > 0.0));
+    }
+
+    #[test]
+    fn add_row_reserves_divider_space() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        let inner_h = k.inner_height(); // 1366
+        let fw = k.frame.frame_width;
+        k.add_row(500.0);
+
+        assert_eq!(k.grid.rows.len(), 2);
+        let sum: f64 = k.grid.rows.iter().map(|r| r.size).sum();
+        assert!((sum + fw - inner_h).abs() < 1e-6, "sum {} + fw {} != inner {}", sum, fw, inner_h);
+        let ratio = k.grid.rows[0].size / k.grid.rows[1].size;
+        assert!((ratio - 500.0 / 866.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn add_column_on_degenerate_vak_keeps_positive_sizes() {
+        // A vak narrower than the divider cannot reserve the space; the split
+        // still happens but sizes stay positive (no negative column widths).
+        let mut k = Kozijn::new("Test", "K02", 190.0, 400.0);
+        // inner width = 190 − 134 = 56 < divider width 67
+        assert!(k.inner_width() < k.frame.frame_width);
+        k.add_column(28.0);
+        assert_eq!(k.grid.columns.len(), 2);
+        assert!(k.grid.columns.iter().all(|c| c.size > 0.0));
+    }
 }

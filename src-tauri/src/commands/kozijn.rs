@@ -589,6 +589,9 @@ pub fn update_corner_joints(
         .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
 
     kozijn.frame.corner_joints = joints;
+    // Explicitly saved joints always win from now on, even when they equal
+    // the auto-populated default set (see Frame::joints_configured).
+    kozijn.frame.joints_configured = true;
     Ok(kozijn.clone())
 }
 

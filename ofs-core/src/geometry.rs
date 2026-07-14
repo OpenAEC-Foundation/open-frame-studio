@@ -209,14 +209,18 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         let corners = crate::joint::frame_corner_model(
             &kozijn.frame.material,
             &kozijn.frame.corner_joints,
+            kozijn.frame.joints_configured,
         );
         let has_buiten = layout_geom
             .as_ref()
             .map_or(false, |lg| lg.leaves.iter().any(|l| l.vulling.is_buiten()));
-        // Rects: stiles run full height when every corner is a stijl-through
-        // butt (the wood default); otherwise keep the historic dorpel-through
-        // rects (byte-identical for alu/PVC and configured dorpel-through). For
-        // verstek/mixed/melkmeisje the accurate frame rides in `frame_polygons`.
+        // Rects: stiles run full height only when every corner is an
+        // explicitly configured stijl-through butt; the wood/wood-alu DEFAULT
+        // is dorpel-through (NL-timmerpraktijk, KVT katern 15: dorpels
+        // doorlopend, stijlen ertussen gepend — see `joint::frame_corner_model`),
+        // which uses the historic dorpel-through rects (also byte-identical
+        // for alu/PVC verstek). For verstek/mixed/melkmeisje the accurate
+        // frame rides in `frame_polygons`.
         let all_stijl_through = corners
             .iter()
             .all(|c| !c.verstek && c.through == crate::joint::ThroughMember::Stijl);
@@ -1056,8 +1060,11 @@ mod tests {
         assert!((rows_sum + dividers_sum - expected).abs() < 1e-6);
         // First row starts at the arch spring line
         assert!((g.cell_rects[0].rect.y - 300.0).abs() < 1e-6);
-        // The stored grid itself is untouched (geometry is a view)
-        assert!((k.grid.rows[0].size - 600.0).abs() < 1e-6);
+        // The stored grid itself keeps the add_row result (geometry is a
+        // view): 600 scaled for the reserved tussendorpel, not overwritten
+        // by the arch scaling.
+        let inner_h = oh - 2.0 * fw; // 1366
+        assert!((k.grid.rows[0].size - 600.0 * (inner_h - fw) / inner_h).abs() < 1e-6);
     }
 
     #[test]
@@ -1123,24 +1130,51 @@ mod tests {
     // ── Corner-joint aware frame (issue 7) ──
 
     #[test]
-    fn wood_default_draws_stiles_full_height() {
-        // Wood stijl-through default: stiles run the full outer height, rails
-        // fit between them (agreeing with the saw list), and no polygons.
+    fn wood_default_draws_dorpels_full_width() {
+        // Wood dorpel-through default (NL-timmerpraktijk, KVT katern 15:
+        // dorpels doorlopend, stijlen ertussen gepend): rails run the full
+        // outer width, stiles fit between them (agreeing with the saw list),
+        // and no polygons.
         let k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
         let g = compute_2d_geometry(&k);
         let (ow, oh, fw) = (1200.0, 1500.0, 67.0);
         // frame_rects order: [top, bottom, left, right]
+        let top = &g.frame_rects[0];
+        let bottom = &g.frame_rects[1];
+        assert!((top.x - 0.0).abs() < 1e-6 && (top.width - ow).abs() < 1e-6);
+        assert!((bottom.x - 0.0).abs() < 1e-6 && (bottom.width - ow).abs() < 1e-6);
+        assert!((bottom.y - (oh - fw)).abs() < 1e-6);
+        // Stiles sit between the rails.
         let left = &g.frame_rects[2];
         let right = &g.frame_rects[3];
-        assert!((left.height - oh).abs() < 1e-6 && (left.x - 0.0).abs() < 1e-6);
-        assert!((right.height - oh).abs() < 1e-6 && (right.x - (ow - fw)).abs() < 1e-6);
-        // Rails sit between the stiles.
-        let top = &g.frame_rects[0];
-        assert!((top.x - fw).abs() < 1e-6 && (top.width - (ow - 2.0 * fw)).abs() < 1e-6);
+        assert!((left.y - fw).abs() < 1e-6 && (left.height - (oh - 2.0 * fw)).abs() < 1e-6);
+        assert!((right.x - (ow - fw)).abs() < 1e-6 && (right.height - (oh - 2.0 * fw)).abs() < 1e-6);
         // No miter/step polygons for a plain butt frame — payload byte-compat.
         assert!(g.frame_polygons.is_empty());
         let json = serde_json::to_string(&g).unwrap();
         assert!(!json.contains("framePolygons"), "plain frame grew a key: {}", json);
+    }
+
+    #[test]
+    fn configured_stijl_through_still_draws_stiles_full_height() {
+        // An explicitly configured stijl-through pen/slis (non-default pen
+        // length so it counts as configured) keeps the stijl-doorlopend
+        // drawing — only the untouched DEFAULT flipped to dorpel-through.
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        let pen = crate::joint::Joint {
+            joint_type: crate::joint::JointType::PenSlis,
+            through_member: crate::joint::ThroughMember::Stijl,
+            angle: 90.0,
+            pen_length: 30.0,
+        };
+        k.frame.corner_joints = vec![pen.clone(), pen.clone(), pen.clone(), pen];
+        let g = compute_2d_geometry(&k);
+        let (ow, oh, fw) = (1200.0, 1500.0, 67.0);
+        let left = &g.frame_rects[2];
+        assert!((left.height - oh).abs() < 1e-6 && (left.x - 0.0).abs() < 1e-6);
+        let top = &g.frame_rects[0];
+        assert!((top.x - fw).abs() < 1e-6 && (top.width - (ow - 2.0 * fw)).abs() < 1e-6);
+        assert!(g.frame_polygons.is_empty());
     }
 
     #[test]
@@ -1230,7 +1264,7 @@ mod tests {
         assert!((g.v_dividers[0].x - (fw + vak_w)).abs() < 1e-6);
         // cell_index = stable depth-first leaf index; vulling rides along
         assert_eq!((c0.cell_index, c1.cell_index), (0, 1));
-        assert!(matches!(c0.vulling, Some(Vakvulling::Glas)));
+        assert!(matches!(c0.vulling, Some(Vakvulling::Glas { .. })));
         assert!(matches!(
             &c1.vulling,
             Some(Vakvulling::Raam { open_type, .. }) if open_type == "draaikiep"
@@ -1462,32 +1496,42 @@ mod tests {
 
     #[test]
     fn grid_path_without_layout_is_unchanged() {
-        // Regression: a kozijn without layout must keep the exact pre-layout
-        // grid behavior — geometry values, dim chain and serialized payload.
+        // Regression: a kozijn without layout keeps the grid path — geometry
+        // values, dim chain and serialized payload. add_column reserves the
+        // tussenstijl width proportionally (the historical overlap quirk is
+        // fixed), so the level-1 chain closes exactly on the buitenmaat.
         let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
-        k.add_column(400.0); // columns [400, 666] (grid semantics untouched)
+        k.add_column(400.0);
         assert!(k.layout.is_none());
         let g = compute_2d_geometry(&k);
 
+        // 400/666 split of the 1066 binnenmaat, minus the 67 tussenstijl.
+        let left = 400.0 * (1066.0 - 67.0) / 1066.0; // ≈ 374.86
+        let right = 666.0 * (1066.0 - 67.0) / 1066.0; // ≈ 624.14
         assert_eq!(g.cell_rects.len(), 2);
         let c0 = &g.cell_rects[0];
         let c1 = &g.cell_rects[1];
         assert_eq!((c0.col, c0.row, c0.cell_index), (0, 0, 0));
         assert_eq!((c1.col, c1.row, c1.cell_index), (1, 0, 1));
-        assert!((c0.rect.x - 67.0).abs() < 1e-6 && (c0.rect.width - 400.0).abs() < 1e-6);
-        assert!((c1.rect.x - 534.0).abs() < 1e-6 && (c1.rect.width - 666.0).abs() < 1e-6);
+        assert!((c0.rect.x - 67.0).abs() < 1e-6 && (c0.rect.width - left).abs() < 1e-6);
+        assert!((c1.rect.x - (134.0 + left)).abs() < 1e-6 && (c1.rect.width - right).abs() < 1e-6);
+        // Last vak ends exactly at the right stijl (no overlap anymore).
+        assert!((c1.rect.x + c1.rect.width - (1200.0 - 67.0)).abs() < 1e-6);
         assert_eq!(g.v_dividers.len(), 1);
-        assert!((g.v_dividers[0].x - 467.0).abs() < 1e-6);
+        assert!((g.v_dividers[0].x - (67.0 + left)).abs() < 1e-6);
 
-        // Grid-walk dim chain exactly as before (incl. the historical overlap
-        // quirk where added columns keep their pre-divider sizes)
-        let bottom: Vec<_> = g
+        // Level-1 chain: stijl + vak + tussenstijl + vak + stijl sums to the
+        // buitenwerkse maat (was 1267 ≠ 1200 with the old overlap quirk).
+        let bot_y1 = 1500.0 + 20.0;
+        let chain: Vec<_> = g
             .dimensions
             .iter()
-            .filter(|d| matches!(d.side, DimensionSide::Bottom))
+            .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
             .collect();
-        let labels: Vec<&str> = bottom.iter().map(|d| d.label.as_str()).collect();
-        assert_eq!(labels, vec!["67", "400", "67", "666", "67", "1066", "1200"]);
+        let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
+        assert!((sum - 1200.0).abs() < 1e-6, "level-1 chain sums to {} != 1200", sum);
+        let labels: Vec<&str> = chain.iter().map(|d| d.label.as_str()).collect();
+        assert_eq!(labels, vec!["67", "375", "67", "624", "67"]);
 
         // No vulling on the grid path, and the payload stays byte-identical:
         // the optional field is skipped entirely when absent

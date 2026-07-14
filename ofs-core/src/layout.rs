@@ -24,7 +24,13 @@ pub enum SplitDirection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Vakvulling {
-    Glas,
+    Glas {
+        /// Glaslat position ("binnen"/"buiten"), set by the canvas editor.
+        /// Optional with `skip_serializing_if` so `{"type":"glas"}` payloads
+        /// stay byte-equal (old bundles/.ofs files roundtrip unchanged).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        glaslat: Option<String>,
+    },
     Raam {
         #[serde(default, rename = "openType")]
         open_type: String,
@@ -33,6 +39,17 @@ pub enum Vakvulling {
         /// (old bundles/.ofs files roundtrip unchanged).
         #[serde(default, rename = "hingeSide", skip_serializing_if = "Option::is_none")]
         hinge_side: Option<String>,
+        /// Glaslat position ("binnen"/"buiten"); optional, see `Glas::glaslat`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        glaslat: Option<String>,
+        /// Opening direction: `Some(true)` = buitendraaiend, `Some(false)` =
+        /// binnendraaiend; optional so an unset value never appears in JSON.
+        #[serde(default, rename = "opensOutward", skip_serializing_if = "Option::is_none")]
+        opens_outward: Option<bool>,
+        /// Hang- en sluitwerk toggle from the canvas editor; optional, an
+        /// explicit `false` roundtrips as `false` (never silently dropped).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hardware: Option<bool>,
     },
     Deur {
         #[serde(default, rename = "doorKind")]
@@ -40,8 +57,25 @@ pub enum Vakvulling {
         /// Hinge side ("links"/"rechts"); optional, see `Raam::hinge_side`.
         #[serde(default, rename = "hingeSide", skip_serializing_if = "Option::is_none")]
         hinge_side: Option<String>,
+        /// Glaslat position ("binnen"/"buiten") for glazed doors — the
+        /// grid→layout conversion (ui/src/lib/layout.js `cellToVulling`)
+        /// carries it onto door vullingen too; optional, see `Glas::glaslat`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        glaslat: Option<String>,
+        /// Opening direction; optional, see `Raam::opens_outward`.
+        #[serde(default, rename = "opensOutward", skip_serializing_if = "Option::is_none")]
+        opens_outward: Option<bool>,
+        /// Hang- en sluitwerk toggle; optional, see `Raam::hardware`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hardware: Option<bool>,
     },
-    Paneel,
+    Paneel {
+        /// Infill spec (sandwich/massief/…), same shape as
+        /// `Cell::panel_filling`; optional so `{"type":"paneel"}` stays
+        /// byte-equal on the roundtrip.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        filling: Option<crate::panel_filling::PanelFilling>,
+    },
     Rooster,
     /// Outside the kozijn (wall) — no vak, no member; makes the outline step.
     Buiten,
@@ -58,10 +92,10 @@ impl Vakvulling {
     /// `type`, for consumers that only need the kind.
     pub fn type_str(&self) -> &'static str {
         match self {
-            Vakvulling::Glas => "glas",
+            Vakvulling::Glas { .. } => "glas",
             Vakvulling::Raam { .. } => "raam",
             Vakvulling::Deur { .. } => "deur",
-            Vakvulling::Paneel => "paneel",
+            Vakvulling::Paneel { .. } => "paneel",
             Vakvulling::Rooster => "rooster",
             Vakvulling::Buiten => "buiten",
         }
@@ -135,9 +169,25 @@ pub struct LayoutGeometry {
 
 /// Recursively partition `rect` according to the split tree (mirrors layoutToRects).
 pub fn compute_layout_geometry(node: &VakNode, rect: LayoutRect, divider_w: f64) -> LayoutGeometry {
+    let mut out = compute_layout_geometry_unclipped(node, rect, divider_w);
+    clip_dividers_against_buiten(&mut out);
+    out
+}
+
+/// Same partitioning as `compute_layout_geometry` but WITHOUT the `Buiten`
+/// divider-clipping pass: dividers keep their full drawn spans. The clip
+/// serves the DRAWING (a mullion visually stops at a melkmeisje step);
+/// production resolves its own member lengths from these raw dividers, so a
+/// stretch clipped away for the picture (the side-light onderdorpel on the
+/// borstwering) is still available as a member to cut. Leaves are identical
+/// in both variants. Backend-only — the JS mirror keeps the clipped form.
+pub fn compute_layout_geometry_unclipped(
+    node: &VakNode,
+    rect: LayoutRect,
+    divider_w: f64,
+) -> LayoutGeometry {
     let mut out = LayoutGeometry::default();
     layout_rec(node, rect, divider_w, &mut out);
-    clip_dividers_against_buiten(&mut out);
     out
 }
 
@@ -203,8 +253,14 @@ fn clip_dividers_against_buiten(out: &mut LayoutGeometry) {
 }
 
 /// `[lo, hi]` minus the union of `blocked` intervals, as a list of remaining
-/// sub-intervals (each wider than `eps`).
-fn subtract_intervals(lo: f64, hi: f64, blocked: &[(f64, f64)], eps: f64) -> Vec<(f64, f64)> {
+/// sub-intervals (each wider than `eps`). Shared with production's own
+/// divider-member resolution (`crate::production`).
+pub(crate) fn subtract_intervals(
+    lo: f64,
+    hi: f64,
+    blocked: &[(f64, f64)],
+    eps: f64,
+) -> Vec<(f64, f64)> {
     let mut b: Vec<(f64, f64)> = blocked
         .iter()
         .map(|&(a, c)| (a.max(lo), c.min(hi)))
@@ -281,16 +337,28 @@ pub fn leaf(vulling: Vakvulling) -> VakNode {
     VakNode::Leaf { id: None, vulling }
 }
 pub fn glas() -> VakNode {
-    leaf(Vakvulling::Glas)
+    leaf(Vakvulling::Glas { glaslat: None })
 }
 pub fn raam(open_type: &str) -> VakNode {
-    leaf(Vakvulling::Raam { open_type: open_type.to_string(), hinge_side: None })
+    leaf(Vakvulling::Raam {
+        open_type: open_type.to_string(),
+        hinge_side: None,
+        glaslat: None,
+        opens_outward: None,
+        hardware: None,
+    })
 }
 pub fn deur(door_kind: &str) -> VakNode {
-    leaf(Vakvulling::Deur { door_kind: door_kind.to_string(), hinge_side: None })
+    leaf(Vakvulling::Deur {
+        door_kind: door_kind.to_string(),
+        hinge_side: None,
+        glaslat: None,
+        opens_outward: None,
+        hardware: None,
+    })
 }
 pub fn paneel() -> VakNode {
-    leaf(Vakvulling::Paneel)
+    leaf(Vakvulling::Paneel { filling: None })
 }
 pub fn buiten() -> VakNode {
     leaf(Vakvulling::Buiten)
@@ -345,11 +413,11 @@ mod tests {
         let geom = compute_layout_geometry(&melkmeisje1(), FULL, 90.0);
         // raam (full height) + glas (side light) + buiten (below) = 3 leaves
         assert_eq!(geom.leaves.len(), 3);
-        let glas_leaf = geom.leaves.iter().find(|l| matches!(l.vulling, Vakvulling::Glas)).unwrap();
+        let glas_leaf = geom.leaves.iter().find(|l| matches!(l.vulling, Vakvulling::Glas { .. })).unwrap();
         let buiten_leaf = geom.leaves.iter().find(|l| matches!(l.vulling, Vakvulling::Buiten)).unwrap();
         // side light is above the outside (stepped outline), no panel
         assert!(glas_leaf.rect.y < buiten_leaf.rect.y);
-        assert!(!geom.leaves.iter().any(|l| matches!(l.vulling, Vakvulling::Paneel)));
+        assert!(!geom.leaves.iter().any(|l| matches!(l.vulling, Vakvulling::Paneel { .. })));
         // 2 real vakken (raam + glas), buiten does not count
         assert_eq!(count_vakken(&melkmeisje1()), 2);
     }
@@ -409,14 +477,14 @@ mod tests {
 
     #[test]
     fn leaves_carry_stable_depth_first_indices() {
-        // melkmeisje1: raam (0), then zijlicht glas (1), then buiten (2) —
+        // melkmeisje1: deur (0), then zijlicht glas (1), then buiten (2) —
         // buiten counts in the numbering so vulling changes never renumber.
         let geom = compute_layout_geometry(&melkmeisje1(), FULL, 90.0);
         let idx: Vec<usize> = geom.leaves.iter().map(|l| l.leaf_index).collect();
         assert_eq!(idx, vec![0, 1, 2]);
-        assert!(matches!(geom.leaves[0].vulling, Vakvulling::Raam { .. }));
+        assert!(matches!(geom.leaves[0].vulling, Vakvulling::Deur { .. }));
         assert!(matches!(geom.leaves[2].vulling, Vakvulling::Buiten));
-        assert_eq!(geom.leaves[0].vulling.type_str(), "raam");
+        assert_eq!(geom.leaves[0].vulling.type_str(), "deur");
     }
 
     #[test]
@@ -425,7 +493,7 @@ mod tests {
         let json = r#"{"kind":"leaf","vulling":{"type":"raam","openType":"draai","hingeSide":"links"}}"#;
         let node: VakNode = serde_json::from_str(json).unwrap();
         match &node {
-            VakNode::Leaf { vulling: Vakvulling::Raam { open_type, hinge_side }, .. } => {
+            VakNode::Leaf { vulling: Vakvulling::Raam { open_type, hinge_side, .. }, .. } => {
                 assert_eq!(open_type, "draai");
                 assert_eq!(hinge_side.as_deref(), Some("links"));
             }
@@ -435,5 +503,91 @@ mod tests {
         // ...and payloads without it stay byte-equal (no null field appears)
         let plain = serde_json::to_string(&raam("draai")).unwrap();
         assert!(!plain.contains("hingeSide"), "plain raam grew a hingeSide field: {}", plain);
+    }
+
+    #[test]
+    fn vulling_extras_roundtrip_through_serde() {
+        // All canvas-editor extras (glaslat, opensOutward, hardware, filling)
+        // survive the Rust roundtrip instead of being silently dropped.
+        let json = r#"{"kind":"split","direction":"row","children":[
+            {"size":1.0,"node":{"kind":"leaf","vulling":{"type":"glas","glaslat":"binnen"}}},
+            {"size":1.0,"node":{"kind":"leaf","vulling":{"type":"raam","openType":"draaikiep","hingeSide":"rechts","glaslat":"buiten","opensOutward":true,"hardware":true}}},
+            {"size":1.0,"node":{"kind":"leaf","vulling":{"type":"deur","doorKind":"enkel","opensOutward":false,"hardware":false}}},
+            {"size":1.0,"node":{"kind":"leaf","vulling":{"type":"paneel","filling":{"fillingType":"sandwich","material":"sandwich-pur","thicknessMm":40.0,"uValue":0.6,"color":"RAL9010"}}}}
+        ]}"#;
+        let node: VakNode = serde_json::from_str(json).unwrap();
+        let back = serde_json::to_string(&node).unwrap();
+        let reparsed: VakNode = serde_json::from_str(&back).unwrap();
+        let children = match &reparsed {
+            VakNode::Split { children, .. } => children,
+            other => panic!("expected split, got {:?}", other),
+        };
+        match &children[0].node {
+            VakNode::Leaf { vulling: Vakvulling::Glas { glaslat }, .. } => {
+                assert_eq!(glaslat.as_deref(), Some("binnen"));
+            }
+            other => panic!("expected glas leaf, got {:?}", other),
+        }
+        match &children[1].node {
+            VakNode::Leaf {
+                vulling: Vakvulling::Raam { open_type, hinge_side, glaslat, opens_outward, hardware },
+                ..
+            } => {
+                assert_eq!(open_type, "draaikiep");
+                assert_eq!(hinge_side.as_deref(), Some("rechts"));
+                assert_eq!(glaslat.as_deref(), Some("buiten"));
+                assert_eq!(*opens_outward, Some(true));
+                assert_eq!(*hardware, Some(true));
+            }
+            other => panic!("expected raam leaf, got {:?}", other),
+        }
+        match &children[2].node {
+            VakNode::Leaf { vulling: Vakvulling::Deur { opens_outward, hardware, .. }, .. } => {
+                // Explicit `false` roundtrips as `false` — the canvas editor
+                // distinguishes "unchecked" from "never touched".
+                assert_eq!(*opens_outward, Some(false));
+                assert_eq!(*hardware, Some(false));
+            }
+            other => panic!("expected deur leaf, got {:?}", other),
+        }
+        match &children[3].node {
+            VakNode::Leaf { vulling: Vakvulling::Paneel { filling }, .. } => {
+                let f = filling.as_ref().expect("paneel filling survives roundtrip");
+                assert_eq!(f.filling_type, crate::panel_filling::FillingType::Sandwich);
+                assert!((f.thickness_mm - 40.0).abs() < 1e-9);
+            }
+            other => panic!("expected paneel leaf, got {:?}", other),
+        }
+        // Serialized form keeps the camelCase wire names the frontend uses.
+        assert!(back.contains("\"opensOutward\":true"), "payload: {}", back);
+        assert!(back.contains("\"glaslat\":\"binnen\""), "payload: {}", back);
+        assert!(back.contains("\"hardware\":false"), "payload: {}", back);
+        assert!(back.contains("\"filling\":{"), "payload: {}", back);
+    }
+
+    #[test]
+    fn bare_vullingen_stay_byte_compatible() {
+        // Old payloads without the new fields still parse...
+        let node: VakNode =
+            serde_json::from_str(r#"{"kind":"leaf","vulling":{"type":"glas"}}"#).unwrap();
+        assert!(matches!(
+            &node,
+            VakNode::Leaf { vulling: Vakvulling::Glas { glaslat: None }, .. }
+        ));
+        let paneel_node: VakNode =
+            serde_json::from_str(r#"{"kind":"leaf","vulling":{"type":"paneel"}}"#).unwrap();
+        assert!(matches!(
+            &paneel_node,
+            VakNode::Leaf { vulling: Vakvulling::Paneel { filling: None }, .. }
+        ));
+        // ...and a bare vulling still serializes without any of the new keys.
+        assert_eq!(
+            serde_json::to_string(&glas()).unwrap(),
+            r#"{"kind":"leaf","vulling":{"type":"glas"}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&paneel()).unwrap(),
+            r#"{"kind":"leaf","vulling":{"type":"paneel"}}"#
+        );
     }
 }

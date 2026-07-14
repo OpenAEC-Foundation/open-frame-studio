@@ -245,10 +245,18 @@ function wasmCommand(cmd, args) {
       case "get_export_data": return J(wasm.get_export_data(args?.id));
       case "get_project_export_data": return J(wasm.get_project_export_data());
 
+      case "update_sill_profile":
+        return typeof wasm.update_sill_profile === "function"
+          ? J(wasm.update_sill_profile(args?.id, args?.profileId, args?.profileName))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_member_profile":
+        return typeof wasm.update_member_profile === "function"
+          ? J(wasm.update_member_profile(args?.id, args?.memberType, args?.memberIndex ?? null,
+              args?.profileId, args?.profileName, args?.profileWidth ?? null, args?.profileDepth ?? null))
+          : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+
       // Commands that return unchanged kozijn (updates not yet in WASM)
       case "update_grid_sizes":
-      case "update_sill_profile":
-      case "update_member_profile":
       case "update_cell_hardware":
       case "auto_select_hardware":
       case "update_security_class":
