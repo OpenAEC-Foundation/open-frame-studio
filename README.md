@@ -1,4 +1,4 @@
-# Open Frame Studio v0.5.2
+# Open Frame Studio v0.6.0
 
 **Free, open-source kozijn (window frame) design software for the Dutch construction industry.**
 
@@ -44,6 +44,21 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 | **Aluminium** | Standaard aluminium profielen |
 | **Kunststof (PVC)** | Standaard PVC profielen |
 | **Hout-Aluminium** | Combinatieprofielen |
+
+---
+
+## Changelog v0.6.0 (2026-07-14)
+
+### Vrije 2D-editor = bron van waarheid, 3D en zaaglijst volgen 1-op-1
+- **Hoofd-editor is nu de vrije tekeneditor** — elk kozijn met één knop om te zetten ("Vrije indeling activeren"); vak klikken → vullingpaneel (glas/raam/deur/paneel/borstwering, scharnierzijde, draairichting, glaslat, beslag); Ctrl+klik plaatst een tussenstijl op de klikpositie (Ctrl+Alt = tussendorpel); deellijnen slepen; undo/redo over de hele indeling
+- **Proto → toepassen is 1-op-1** — de proto-tab tekent op de echte kozijnmaten en profielbreedte; toepassen ververst direct geometrie, maatvoering en 3D
+- **3D volgt het model exact** — getrapte omtrek (melkmeisje) met dorpel onder het zijlicht en metselwerk i.p.v. een gat; verstek-hoeken (alu/PVC) echt op 45° afgekort; glas ín de sponning; vleugels als echte raamhout-/deurhout-extrusies; stolp = twee vleugels + stolpnaald
+- **Zaaglijst = tekening** — layout-kozijnen krijgen een eigen ledenresolutie: doorlopende tussenstijlen, borstweringdorpel, per vak glas/vleugel/paneel/glaslatten; verstek besteld over de lange punt (ook bij default-verbindingen)
+- **Verbindingen volgens verbindingsleer** — hout: dorpels doorlopend, stijlen ertussen gepend (KVT katern 15), haakse naden; PVC/alu: 45°-lasnaad, T-stijlen recht gecontramald; beslistabel + bronnen in `docs/verbindingsleer.md`; bewuste keuze in het verbindingenpaneel wint nu altijd van het materiaal-default
+- **NL-tekenconventies (VKG 1.8)** — buitenaanzicht met draaisymbolen: brede zijde = scharnierzijde, doorgetrokken = naar buiten, streeplijn = naar binnen, pijl = schuivend
+- **Vulling-instellingen blijven bewaard** — glaslat/draairichting/beslag overleven nu opslaan, kozijnwissel en undo (backend-model uitgebreid)
+- **Maatketting sluitend** — kolom/rij toevoegen reserveert de dividerbreedte; browser kan nu ook dorpel- en lidprofielen instellen
+- **CI draait `cargo test`** — 104 tests, waaronder regressietests op al het bovenstaande
 
 ---
 
