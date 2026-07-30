@@ -5,7 +5,7 @@
   "identifier": "org.openaec.open-frame-studio",
   "build": {
     "frontendDist": "../ui/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5180",
     "beforeDevCommand": "cd ../ui && npm run dev",
     "beforeBuildCommand": "cd ../ui && npm run build"
   },
