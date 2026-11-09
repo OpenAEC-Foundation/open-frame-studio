@@ -89,14 +89,6 @@ jobs:
               draft: true,
               prerelease: '${{ steps.get-version.outputs.prerelease }}' === 'true'
             });
-            // GitHub can expose a new draft as untagged-<id> until its tag is set again.
-            // Keep the draft discoverable by tag for the Windows user-installer upload.
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: data.id,
-              tag_name: version,
-            });
             return data.id;
 
       - name: Write beta release notes
@@ -124,6 +116,7 @@ jobs:
               '- Generieke G-code-export is geblokkeerd. CE, Bbl en SKH/KOMO zijn indicatieve voorcontroles.',
               '- Alleen een visuele Revit-linkproef is uitgevoerd; Tekla, SketchUp en hsbDesign moeten nog worden geaccepteerd.',
               '- Een installatietest op een schone machine is nog niet uitgevoerd.',
+              '- De desktopapp heeft nog geen automatische updater; nieuwe versies vereisen een handmatige installer.',
               '',
               '### Licentievermelding',
               'De repository bevat een bestaand verschil tussen de CC BY-SA 4.0-tekst in LICENSE en AGPL-3.0 in Cargo/UI-metadata. Deze bèta wijzigt geen licentie; de rechthebbenden moeten dit verschil nog vastleggen.',
@@ -135,6 +128,22 @@ jobs:
               repo: context.repo.repo,
               release_id: Number(process.env.release_id),
               body,
+            });
+
+      - name: Make draft discoverable by tag
+        uses: actions/github-script@v8
+        env:
+          release_id: ${{ steps.create-release.outputs.result }}
+          release_version: ${{ steps.get-version.outputs.version }}
+        with:
+          script: |
+            // GitHub can expose drafts as untagged-<id> after a notes update.
+            // Set the tag last so gh release upload can find the draft.
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.release_id),
+              tag_name: process.env.release_version,
             });
 
   build:

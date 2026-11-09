@@ -191,7 +191,7 @@ cd ui && npm run dev
 
 ### Docker voor OpenAEC SuperCloud
 
-De [Docker-image-workflow](.github/workflows/docker-image.yml) bouwt na een geslaagde installerrelease een container **uit de `.deb` van diezelfde release**. De gewone Linux-desktopapp draait daarin als niet-rootgebruiker op een virtueel scherm en is via één HTTP-poort te bekijken. De workflow controleert het app-proces, `GET /gezond`, een screenshot van de stream en het geheugengebruik voordat hij de image naar GHCR pusht. Een eerdere release kan ook met de hand via de workflow en zijn `tag`-invoer worden verwerkt.
+De [Docker-image-workflow](.github/workflows/docker-image.yml) bouwt na een geslaagde installerrelease een container **uit de `.deb` en containertemplate van diezelfde releasecommit**. De gewone Linux-desktopapp draait daarin als niet-rootgebruiker op een virtueel scherm en is via één HTTP-poort te bekijken. De workflow controleert het app-proces, `GET /gezond`, een screenshot van de stream en het geheugengebruik voordat hij de image naar GHCR pusht. Een release met deze containertemplate kan ook handmatig via de workflow en zijn `tag`-invoer worden verwerkt.
 
 Na publicatie van de image:
 

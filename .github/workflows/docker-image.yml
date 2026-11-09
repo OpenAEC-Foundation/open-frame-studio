@@ -78,15 +78,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ofs-docker"
-          cp -a packaging/docker/. "$RUNNER_TEMP/ofs-docker/"
+          # Pin the container recipe to the same commit as the installer.
+          cp -a release-source/packaging/docker/. "$RUNNER_TEMP/ofs-docker/"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir "$RUNNER_TEMP/ofs-docker"
           mapfile -t packages < <(find "$RUNNER_TEMP/ofs-docker" -maxdepth 1 -type f -name '*.deb')
           if [[ ${#packages[@]} -ne 1 ]]; then
             echo "::error::Expected exactly one Linux .deb release asset, found ${#packages[@]}"
             exit 1
           fi
-          dpkg-deb --contents "${packages[0]}" > "$RUNNER_TEMP/ofs-deb-contents.txt"
-          if ! grep -Fq './usr/bin/open-frame-studio' "$RUNNER_TEMP/ofs-deb-contents.txt"; then
+          dpkg-deb --fsys-tarfile "${packages[0]}" | tar -tf - > "$RUNNER_TEMP/ofs-deb-files.txt"
+          if ! grep -Eq '^(\./)?usr/bin/open-frame-studio$' "$RUNNER_TEMP/ofs-deb-files.txt"; then
             echo "::error::The .deb does not contain /usr/bin/open-frame-studio"
             exit 1
           fi
@@ -111,7 +112,7 @@ jobs:
         env:
           NUMBER: ${{ steps.release.outputs.number }}
         run: |
-          bash packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
+          bash release-source/packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
             /usr/bin/open-frame-studio "$RUNNER_TEMP/ofs-docker-test"
 
       - name: Upload smoke-test evidence
