@@ -1,6 +1,6 @@
 <script>
   import { showAppMenu } from "../../stores/ui.js";
-  import { isTauri } from "../../lib/tauri.js";
+  import { isTauri, isPlatformBuild } from "../../lib/tauri.js";
   import { fileNew, fileOpen, fileSave, fileSaveAs } from "../../lib/project-actions.js";
   import { _ } from "svelte-i18n";
   import { APP_VERSION } from "../../lib/version.js";
@@ -26,6 +26,7 @@
   }
 
   async function openExternal(url) {
+    if (isPlatformBuild) return;
     if (isTauri) {
       try {
         const { open } = await import("@tauri-apps/plugin-shell");
@@ -95,8 +96,8 @@
             <span class="nav-shortcut">Ctrl+Shift+S</span>
           </button>
 
+          {#if !isPlatformBuild}
           <div class="nav-divider"></div>
-
           <span class="nav-group-label">{$_('backstage.help')}</span>
           <button class="nav-btn" onclick={() => openExternal('https://github.com/OpenAEC-Foundation/Open-Frame-Studio')}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -118,6 +119,7 @@
             </svg>
             <span class="nav-label">{$_('backstage.documentation')}</span>
           </button>
+          {/if}
         </nav>
 
         <div class="sidebar-footer">

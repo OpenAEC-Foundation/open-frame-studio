@@ -83,14 +83,24 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: version,
+              target_commitish: context.sha,
               name: `Open Frame Studio ${version}`,
               body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE)`,
               draft: true,
               prerelease: '${{ steps.get-version.outputs.prerelease }}' === 'true'
             });
+            // GitHub can expose a new draft as untagged-<id> until its tag is set again.
+            // Keep the draft discoverable by tag for the Windows user-installer upload.
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: data.id,
+              tag_name: version,
+            });
             return data.id;
 
       - name: Write beta release notes
+        if: steps.get-version.outputs.prerelease == 'true'
         uses: actions/github-script@v8
         env:
           release_id: ${{ steps.create-release.outputs.result }}
@@ -302,7 +312,8 @@ jobs:
   verify-assets:
     needs: [create-release, build]
     permissions:
-      contents: read
+      # GitHub treats assets of a draft release as write-protected resources.
+      contents: write
     runs-on: ubuntu-latest
 
     steps:

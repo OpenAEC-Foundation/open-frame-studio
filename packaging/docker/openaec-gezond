@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+"""HEALTHCHECK of the container: exit 0 when GET /gezond on the stream port answers OK, else 1."""
+import os
+import sys
+import urllib.request
+
+port = os.environ.get("OPENAEC_PORT", "3000")
+try:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/gezond", timeout=4) as answer:
+        healthy = answer.read().strip() == b"OK"
+except OSError:
+    healthy = False
+sys.exit(0 if healthy else 1)

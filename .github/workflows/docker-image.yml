@@ -1,0 +1,212 @@
+name: Docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published installer release tag, e.g. v2026.46.0'
+        required: true
+        type: string
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  docker:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    env:
+      IMAGE: ghcr.io/openaec-foundation/open-frame-studio
+    steps:
+      - name: Check out the Docker packaging
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the installer source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.tag }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Match the published release to this source
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          number=$(node -p "require('./release-source/ui/package.json').version")
+          tag="v${number}"
+          if [[ "$EVENT_NAME" == workflow_dispatch && "$REQUESTED_TAG" != "$tag" ]]; then
+            echo "::error::Requested $REQUESTED_TAG, but the source version is $tag"
+            exit 1
+          fi
+          node release-source/scripts/check-version.mjs "$tag"
+          if [[ "$(git -C release-source rev-parse "$tag^{commit}")" != "$(git -C release-source rev-parse HEAD)" ]]; then
+            echo "::error::Release tag $tag does not point to the checked-out installer source"
+            exit 1
+          fi
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.draft')
+          prerelease=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.prerelease')
+          if [[ "$draft" != false ]]; then
+            echo "::error::Release $tag is still a draft"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Download the Linux installer from that release
+        id: deb
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ofs-docker"
+          cp -a packaging/docker/. "$RUNNER_TEMP/ofs-docker/"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir "$RUNNER_TEMP/ofs-docker"
+          mapfile -t packages < <(find "$RUNNER_TEMP/ofs-docker" -maxdepth 1 -type f -name '*.deb')
+          if [[ ${#packages[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one Linux .deb release asset, found ${#packages[@]}"
+            exit 1
+          fi
+          dpkg-deb --contents "${packages[0]}" > "$RUNNER_TEMP/ofs-deb-contents.txt"
+          if ! grep -Fq './usr/bin/open-frame-studio' "$RUNNER_TEMP/ofs-deb-contents.txt"; then
+            echo "::error::The .deb does not contain /usr/bin/open-frame-studio"
+            exit 1
+          fi
+          echo "name=$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
+
+      - name: Build the graphical app image from the release installer
+        env:
+          NUMBER: ${{ steps.release.outputs.number }}
+          APP_DEB: ${{ steps.deb.outputs.name }}
+        run: |
+          set -euo pipefail
+          docker build "$RUNNER_TEMP/ofs-docker" -t "open-frame-studio:${NUMBER}" \
+            --build-arg APP_DEB="$APP_DEB" \
+            --build-arg APP_COMMAND=/usr/bin/open-frame-studio \
+            --build-arg APP_NAME=open-frame-studio \
+            --build-arg APP_TITLE='Open Frame Studio' \
+            --build-arg APP_VERSION="$NUMBER" \
+            --build-arg APP_SOURCE="https://github.com/$GITHUB_REPOSITORY" \
+            --build-arg APP_DESCRIPTION='Open Frame Studio desktop application streamed to the browser'
+
+      - name: Test health, process, stream, and idle memory
+        env:
+          NUMBER: ${{ steps.release.outputs.number }}
+        run: |
+          bash packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
+            /usr/bin/open-frame-studio "$RUNNER_TEMP/ofs-docker-test"
+
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-test
+          path: ${{ runner.temp }}/ofs-docker-test/
+          if-no-files-found: warn
+
+      - name: Log in to the GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the tested image
+        env:
+          NUMBER: ${{ steps.release.outputs.number }}
+        run: |
+          set -euo pipefail
+          docker tag "open-frame-studio:${NUMBER}" "$IMAGE:${NUMBER}"
+          docker push "$IMAGE:${NUMBER}"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:${NUMBER}" | cut -d@ -f2)
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::Could not determine the pushed image digest"
+            exit 1
+          fi
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "Image: $IMAGE:${NUMBER}@$digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate an image SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ env.DIGEST }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/open-frame-studio_docker-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign the image with GitHub OIDC
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+
+      - name: Attest the image build
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+
+      - name: Attest the SBOM
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          sbom-path: ${{ runner.temp }}/open-frame-studio_docker-sbom.spdx.json
+          push-to-registry: true
+
+      - name: Attach the SBOM and report memory
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          NUMBER: ${{ steps.release.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$RUNNER_TEMP/open-frame-studio_docker-sbom.spdx.json" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          memory=$(cat "$RUNNER_TEMP/ofs-docker-test/memory.txt")
+          echo "Idle memory: $memory" >> "$GITHUB_STEP_SUMMARY"
+          echo "The tested image is available as ghcr.io/openaec-foundation/open-frame-studio:${NUMBER}." >> "$GITHUB_STEP_SUMMARY"
+          notes="$RUNNER_TEMP/ofs-release-notes.md"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$notes"
+          awk '
+            $0 == "<!-- OFS Docker image -->" { skip=1; next }
+            $0 == "<!-- /OFS Docker image -->" { skip=0; next }
+            !skip { print }
+          ' "$notes" > "$notes.clean"
+          mv "$notes.clean" "$notes"
+          cat >> "$notes" <<EOF
+
+          <!-- OFS Docker image -->
+          ### Docker (OpenAEC SuperCloud)
+
+          The tested desktop image is \`ghcr.io/openaec-foundation/open-frame-studio:${NUMBER}\` (digest \`${DIGEST}\`). Idle container memory: **${memory}**. Run it behind an authenticated proxy; port 3000 has no built-in sign-in. The image SBOM is attached to this release.
+          <!-- /OFS Docker image -->
+          EOF
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$notes"
+
+      - name: Update latest after signing and attestation
+        if: steps.release.outputs.prerelease == 'false'
+        env:
+          NUMBER: ${{ steps.release.outputs.number }}
+        run: |
+          docker tag "open-frame-studio:${NUMBER}" "$IMAGE:latest"
+          docker push "$IMAGE:latest"

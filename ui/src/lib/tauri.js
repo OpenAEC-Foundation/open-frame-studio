@@ -9,9 +9,22 @@ import uiPackage from "../../package.json";
 
 export const isTauri = typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
 export const isWeb = !isTauri;
+export const isPlatformBuild = import.meta.env.MODE === "platform";
 
 let wasm = null;
 let webRuntimeMode = isTauri ? "desktop" : "preview";
+let hostReadOnly = false;
+
+export function setHostReadOnly(value) {
+  hostReadOnly = !!value;
+}
+
+function allowedForReadOnlyProject(cmd) {
+  return cmd === "open_project" || cmd === "new_project" || cmd === "save_project"
+    || cmd === "load_settings" || cmd === "save_settings" || cmd === "get_platform"
+    || cmd === "generate_dop_for_kozijn"
+    || /^(get_|calculate_|check_|validate_|compare_|optimize_)/.test(cmd);
+}
 
 export function getWebRuntimeMode() {
   return webRuntimeMode;
@@ -26,7 +39,9 @@ export async function initWasm() {
   try {
     // A plain Vite build can copy an old ignored WASM bundle. Refuse that
     // bundle instead of silently running an older domain model than the UI.
-    const packageUrl = new URL("/wasm/package.json", window.location.origin).href;
+    // Platform bundles live below /werkplek/app/<tool>/, not at the site root.
+    const assetBase = new URL(import.meta.env.BASE_URL || "/", window.location.href);
+    const packageUrl = new URL("wasm/package.json", assetBase).href;
     const response = await fetch(packageUrl, { cache: "no-store" });
     if (!response.ok) throw new Error("WASM-pakket ontbreekt");
     const wasmPackage = await response.json();
@@ -35,8 +50,8 @@ export async function initWasm() {
     }
 
     // Use fetch + instantiate to avoid Rollup resolving the path.
-    const jsUrl = new URL("/wasm/ofs_wasm.js", window.location.origin).href;
-    const wasmUrl = new URL("/wasm/ofs_wasm_bg.wasm", window.location.origin).href;
+    const jsUrl = new URL("wasm/ofs_wasm.js", assetBase).href;
+    const wasmUrl = new URL("wasm/ofs_wasm_bg.wasm", assetBase).href;
     const module = await import(/* @vite-ignore */ jsUrl);
     await module.default(wasmUrl);
     wasm = module;
@@ -54,9 +69,16 @@ export async function invoke(cmd, args) {
     return tauriInvoke(cmd, args);
   }
 
+  if (hostReadOnly && !allowedForReadOnlyProject(cmd)) {
+    throw new Error("Dit Docs-project is alleen-lezen. Gebruik Opslaan als om een bewerkbare kopie te maken.");
+  }
+
   // Web mode: try WASM first, fall back to a labelled UI preview.
   if (wasm) {
     return wasmCommand(cmd, args);
+  }
+  if (isPlatformBuild) {
+    throw new Error("De OFS-rekenkern ontbreekt. Openen en opslaan zijn daarom uitgeschakeld.");
   }
   return browserFallback(cmd, args);
 }

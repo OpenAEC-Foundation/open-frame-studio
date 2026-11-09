@@ -1,0 +1,35 @@
+[
+  {
+    "name": "frame_stand",
+    "description": "Geeft het huidige OFS-project, het Docs-bestand, de selectie en aantallen kozijnen en vliesgevels.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "frame_kozijnen",
+    "description": "Geeft een gefilterde en gepagineerde lijst met kozijnen in het huidige project.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "description": "Zoektekst in merk of naam." },
+        "offset": { "type": "integer", "minimum": 0, "description": "Startpositie in de gefilterde lijst." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Aantal resultaten, standaard 20." }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "frame_kozijn",
+    "description": "Geeft de belangrijkste eigenschappen van één kozijn, op ID of de huidige selectie.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Kozijn-ID; zonder ID wordt de huidige kozijnselectie gebruikt." }
+      },
+      "additionalProperties": false
+    }
+  }
+]

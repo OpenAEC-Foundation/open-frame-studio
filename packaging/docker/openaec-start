@@ -1,0 +1,86 @@
+#!/bin/bash
+# Starts one OpenAEC app in a minimal graphical session and streams it to the
+# browser: Xvfb, a window manager that keeps the app full screen, x11vnc on
+# localhost and noVNC through websockify on one HTTP port. GET /gezond on that
+# port answers OK only while the app and the stream run. When the app closes,
+# it starts again, unless OPENAEC_RESTART=0.
+set -u
+
+: "${OPENAEC_APP:?OPENAEC_APP must name the program to start}"
+PORT="${OPENAEC_PORT:-3000}"
+SCREEN="${OPENAEC_SCREEN:-1920x1080}"
+RUN=/tmp/openaec
+mkdir -p "$RUN" "${XDG_CACHE_HOME:-$RUN/cache}"
+rm -f "$RUN/gezond" "$RUN"/*.pid
+export DISPLAY=:0
+if [ -n "${OPENAEC_LANG:-}" ]; then
+  export LANGUAGE="$OPENAEC_LANG"
+fi
+
+children=()
+stop() {
+  rm -f "$RUN/gezond"
+  for f in "$RUN"/*.pid; do [ -s "$f" ] && kill "$(cat "$f")" 2>/dev/null; done
+  kill "${children[@]}" 2>/dev/null
+  wait 2>/dev/null
+  exit 0
+}
+trap stop TERM INT
+
+Xvfb :0 -screen 0 "${SCREEN}x24" -nolisten tcp -noreset >"$RUN/xvfb.log" 2>&1 &
+xvfb=$!; children+=("$xvfb")
+for _ in $(seq 100); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 0.1; done
+[ -S /tmp/.X11-unix/X0 ] || { echo "openaec: the virtual screen did not start" >&2; cat "$RUN/xvfb.log" >&2; exit 1; }
+
+matchbox-window-manager -use_titlebar no -use_cursor yes >"$RUN/wm.log" 2>&1 &
+children+=($!)
+x11vnc -display :0 -localhost -rfbport 5900 -forever -shared -nopw -noxdamage -quiet >"$RUN/x11vnc.log" 2>&1 &
+vnc=$!; children+=("$vnc")
+websockify --web /opt/openaec/web "0.0.0.0:$PORT" localhost:5900 >"$RUN/websockify.log" 2>&1 &
+web=$!; children+=("$web")
+
+# The tool's own preparation, such as writing a theme from the environment.
+for script in /opt/openaec/setup.d/*.sh; do
+  [ -r "$script" ] && . "$script"
+done
+
+read -r -a app <<<"$OPENAEC_APP"
+if [ -n "${OPENAEC_OPEN:-}" ]; then
+  case "$OPENAEC_OPEN" in
+    /openaec/*) app+=("$OPENAEC_OPEN") ;;
+    *) app+=("/openaec/$OPENAEC_OPEN") ;;
+  esac
+fi
+
+# Runs a program, records its process id, and starts it again when it ends.
+keep() {
+  local name=$1; shift
+  while :; do
+    "$@" &
+    echo $! >"$RUN/$name.pid"
+    wait $!
+    rm -f "$RUN/$name.pid"
+    [ "${OPENAEC_RESTART:-1}" = 1 ] || break
+    sleep 1
+  done
+}
+keep app "${app[@]}" &
+children+=($!)
+
+# The tool's MCP server, when it has one, on its own port for the internal network.
+if [ -n "${OPENAEC_MCP:-}" ]; then
+  read -r -a mcp <<<"$OPENAEC_MCP"
+  keep mcp "${mcp[@]}" &
+  children+=($!)
+fi
+
+running() { [ -s "$RUN/$1.pid" ] && kill -0 "$(cat "$RUN/$1.pid")" 2>/dev/null; }
+while :; do
+  if kill -0 "$xvfb" "$vnc" "$web" 2>/dev/null && running app; then
+    printf 'OK\n' >"$RUN/gezond.tmp" && mv -f "$RUN/gezond.tmp" "$RUN/gezond"
+  else
+    rm -f "$RUN/gezond"
+  fi
+  sleep 2 &
+  wait $!
+done

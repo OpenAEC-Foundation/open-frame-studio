@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from "svelte";
+  import { get } from "svelte/store";
   import { _, isLoading } from "svelte-i18n";
   import TitleBar from "./components/shell/TitleBar.svelte";
   import Ribbon from "./components/shell/Ribbon.svelte";
@@ -38,9 +39,14 @@
   import { registerUndoRedoShortcuts } from "./stores/history.js";
   import { activeRibbonTab, activeWorkspaceView } from "./stores/ui.js";
   import { getSetting, saveSetting } from "./lib/settings.js";
-  import { isWeb, getWebRuntimeMode } from "./lib/tauri.js";
+  import { isWeb, isPlatformBuild, getWebRuntimeMode } from "./lib/tauri.js";
+  import { hostFileRef, isDirty } from "./stores/project.js";
+  import { getOpenAecHost } from "./lib/platformHost.js";
+  import { openHostFileById } from "./lib/project-actions.js";
+  import { toast } from "./stores/toast.js";
 
   let cleanupShortcuts;
+  let hostStartupHandled = false;
   const webRuntimeMode = getWebRuntimeMode();
   $: workspaceView = $activeWorkspaceView;
   let rightTab = "properties";
@@ -72,13 +78,30 @@
     saveSetting("right_panel_open", rightOpen);
   }
 
+  async function openInitialHostProject() {
+    if (hostStartupHandled) return;
+    const host = getOpenAecHost();
+    if (!host) return;
+    hostStartupHandled = true;
+    if (host.initialFileId) {
+      if (get(isDirty)) {
+        toast.error("Docs-project kon niet automatisch openen: sla eerst de huidige wijzigingen op");
+        return;
+      }
+      await openHostFileById(host.initialFileId);
+    }
+  }
+
   onMount(async () => {
     await loadProject();
     await loadProfiles();
+    window.addEventListener("openaec-host-ready", openInitialHostProject);
+    await openInitialHostProject();
     cleanupShortcuts = registerUndoRedoShortcuts();
   });
 
   onDestroy(() => {
+    window.removeEventListener("openaec-host-ready", openInitialHostProject);
     if (cleanupShortcuts) cleanupShortcuts();
   });
 </script>
@@ -95,6 +118,11 @@
     {:else}
       UI-preview: de actuele rekenkern ontbreekt. Bewerkingen en resultaten in deze browser zijn demonstratie.
     {/if}
+  </div>
+{/if}
+{#if $hostFileRef?.readOnly}
+  <div class="web-mode-banner" role="status">
+    Docs-project {$hostFileRef.name} is alleen-lezen. Gebruik Opslaan als voor een bewerkbare kopie.
   </div>
 {/if}
 <AppMenu />
@@ -375,12 +403,14 @@
             <button class="panel-tab" class:active={rightTab === "properties"} onclick={() => rightTab = "properties"}>
               {$_('props.kozijn')}
             </button>
+            {#if !isPlatformBuild}
             <button class="panel-tab" class:active={rightTab === "ai"} onclick={() => rightTab = "ai"}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M12 2a5 5 0 015 5v1h1a3 3 0 013 3v1a3 3 0 01-3 3h-1v4a3 3 0 01-3 3H10a3 3 0 01-3-3v-4H6a3 3 0 01-3-3v-1a3 3 0 013-3h1V7a5 5 0 015-5z"/>
               </svg>
               AI
             </button>
+            {/if}
           </div>
           <button class="collapse-btn" onclick={toggleRight}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -389,7 +419,7 @@
           </button>
         </div>
         <div class="panel-body">
-          {#if rightTab === "properties"}
+          {#if rightTab === "properties" || isPlatformBuild}
             <PropertiesPanel />
           {:else}
             <AiAssistant />

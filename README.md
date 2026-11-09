@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.46.0
+# Open Frame Studio v2026.46.1
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -7,7 +7,9 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Release-status:** `v2026.46.0` is de installer-prerelease voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
+> **Release-status:** `v2026.46.1` is de installer-prerelease voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
+
+> **Updaten:** de desktopapp heeft nog geen automatische updater. Een nieuwe GitHub-release verschijnt daarom niet vanzelf in een al geïnstalleerde app. Download na publicatie de passende installer rechtstreeks van [v2026.46.1](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/tag/v2026.46.1) en voer die uit; deze bèta staat niet op de stabiele `latest`-releasepagina.
 
 > **Versie bumpen:** draai `node scripts/bump-version.mjs --next` voor het volgende `JJJJ.W.N`-nummer
 > volgens de ISO-week in Nederland, of geef expliciet een nummer op (bijvoorbeeld `2026.46.0`).
@@ -46,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.46.1 (installer-prerelease, 2026-11-09)
+
+- SuperCloud Route A in ontwikkeling: een browserbundel met relatieve WASM-bestanden, een Docs-adapter voor `.ofs` openen/opslaan met versiecontrole en alleen-lezen, plus drie alleen-lezen `frame_*`-assistenttools. Echte werkplekintegratie en desktop-MCP-pariteit vragen nog acceptatie.
+- Docker-imageworkflow uit de Blueprint-template toegevoegd. Deze bouwt de grafische Linux-app uit de `.deb` van dezelfde release, test stream/gezondheid en publiceert na slagen een ondertekende GHCR-image. De GitHub-containerproef moet nog slagen voordat de image als beschikbaar geldt.
+- De releaseworkflow herstelt de GitHub-rechten voor conceptrelease-assets en koppelt conceptreleases expliciet aan de juiste tag.
 
 ## Changelog v2026.46.0 (installer-prerelease, 2026-11-09)
 
@@ -180,6 +188,18 @@ cd ui && npm run dev
 `npm run dev` laat de interface zien zonder desktopbackend en gebruikt alleen een WASM-bundel als diens versie overeenkomt met de UI; anders toont de app een herkenbare demo-preview. Een actuele browserbuild met `ofs-wasm` wordt gemaakt met `npm run build:web`; daarvoor zijn `wasm-pack` en de Rust-target `wasm32-unknown-unknown` nodig.
 
 **Webbeperking:** de browser heeft geen volledige desktoppariteit. Bestandsimport/-export en meerdere project-, vliesgevel-, calculatie- en productiecommando's hebben daar nog geen echte implementatie. Gebruik de browserweergave niet als bewijs van een werkende producentenworkflow.
+
+### Docker voor OpenAEC SuperCloud
+
+De [Docker-image-workflow](.github/workflows/docker-image.yml) bouwt na een geslaagde installerrelease een container **uit de `.deb` van diezelfde release**. De gewone Linux-desktopapp draait daarin als niet-rootgebruiker op een virtueel scherm en is via één HTTP-poort te bekijken. De workflow controleert het app-proces, `GET /gezond`, een screenshot van de stream en het geheugengebruik voordat hij de image naar GHCR pusht. Een eerdere release kan ook met de hand via de workflow en zijn `tag`-invoer worden verwerkt.
+
+Na publicatie van de image:
+
+```bash
+docker run -p 127.0.0.1:3000:3000 -v "$PWD":/openaec -v ofs-config:/config ghcr.io/openaec-foundation/open-frame-studio:2026.46.1
+```
+
+Open dan `http://localhost:3000`. `/openaec` bevat gebruikersbestanden; `/config` bewaart instellingen. `OPENAEC_SCREEN` stelt de virtuele schermmaat in (standaard `1920x1080`) en `OPENAEC_RESTART=0` schakelt automatisch herstarten van de app uit. De stream heeft zelf geen aanmelding: plaats hem bij servergebruik achter de authenticatieproxy van de SuperCloud. De huidige app leest nog geen startbestand uit een CLI-argument en levert geen MCP-server; `OPENAEC_OPEN` en `OPENAEC_MCP` zijn voor Open Frame Studio dus nog niet beschikbaar. De image-tag `latest` wordt alleen bij een volledige release bijgewerkt.
 
 ---
 
