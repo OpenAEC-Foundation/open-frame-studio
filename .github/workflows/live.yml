@@ -26,11 +26,8 @@ jobs:
       build_command: |
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
         rustup target add wasm32-unknown-unknown
-        cd ofs-wasm && wasm-pack build --target web --out-dir pkg && cd ..
-        mkdir -p ui/public/wasm
-        cp ofs-wasm/pkg/ofs_wasm.js ui/public/wasm/
-        cp ofs-wasm/pkg/ofs_wasm_bg.wasm ui/public/wasm/
-        cd ui && npm run build
+        node scripts/check-version.mjs
+        cd ui && npm run build:web
       deploy_source: ui/dist
     secrets:
       deploy_ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}

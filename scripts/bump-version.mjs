@@ -8,7 +8,8 @@
 //   • every Rust crate inherits [workspace.package].version  (Cargo.toml)
 //   • ofs-cloud's /health reads env!("CARGO_PKG_VERSION")    (Cargo.toml)
 // So the truly authoritative files are Cargo.toml + ui/package.json +
-// src-tauri/tauri.conf.json. The remaining spots (the standalone ofs-web
+// src-tauri/tauri.conf.json. Lockfiles are updated with these source versions.
+// The remaining spots (the standalone ofs-web
 // pages and the README title) are static, so this script rewrites them too —
 // that way "bump the version" is one command and nothing is forgotten.
 //
@@ -60,10 +61,21 @@ edit("Cargo.toml", /(\[workspace\.package\][\s\S]*?version\s*=\s*")[^"]+(")/, `$
 edit("ui/package.json", /("version":\s*")[^"]+(")/, `$1${next}$2`);
 // 3. Tauri bundle metadata.
 edit("src-tauri/tauri.conf.json", /("version":\s*")[^"]+(")/, `$1${next}$2`);
-// 4. Standalone ofs-web pages + README title (static — replace the old vX.Y.Z).
+// 4. Keep the workspace package entries and npm root package in sync.
+for (const name of ["ofs-core", "ofs-wasm", "ofs-cloud", "open-frame-studio"]) {
+  edit("Cargo.lock", new RegExp(`(\\[\\[package\\]\\]\\s+name = "${name}"\\s+version = ")[^"]+(")`), `$1${next}$2`);
+}
+const packageLockPath = join(root, "ui/package-lock.json");
+const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
+packageLock.version = next;
+if (!packageLock.packages?.[""]) throw new Error("ui/package-lock.json mist het rootpakket");
+packageLock.packages[""].version = next;
+writeFileSync(packageLockPath, JSON.stringify(packageLock, null, 2) + "\n");
+console.log("ok    ui/package-lock.json");
+// 5. Standalone ofs-web pages + README title (static — replace the old vX.Y.Z).
 edit("ofs-web/index.html", new RegExp(`v${esc(prev)}\\b`), `v${next}`, { optional: true });
 edit("ofs-web/workshop.html", new RegExp(`v${esc(prev)}\\b`), `v${next}`, { optional: true });
 edit("README.md", new RegExp(`^(# Open Frame Studio )v${esc(prev)}\\b`, "m"), `$1v${next}`, { optional: true });
 
 console.log(`\nBumped ${prev} -> ${next}.`);
-console.log("Reminder: add a changelog entry to README.md and run `npm install` in ui/ to refresh the lockfile.");
+console.log("Reminder: werk release-notities bij en draai `node scripts/check-version.mjs`.");

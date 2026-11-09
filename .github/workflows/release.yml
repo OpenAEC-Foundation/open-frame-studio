@@ -7,12 +7,41 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.1.0)'
+        description: 'Version tag matching the source (e.g., v0.7.0-beta.1)'
         required: true
-        default: 'v0.1.0'
 
 jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Install Rust stable and browser target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+      - name: Match release tag and source versions
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: node scripts/check-version.mjs "$RELEASE_TAG"
+      - name: Test core
+        run: cargo test -p ofs-core --lib --locked
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build browser against current core
+        working-directory: ui
+        run: npm run build:web
+
   create-release:
+    needs: verify
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -45,7 +74,7 @@ jobs:
               name: `Open Frame Studio ${version}`,
               body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE)`,
               draft: true,
-              prerelease: false
+              prerelease: version.includes('-')
             });
             return data.id;
 
@@ -100,7 +129,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: ui
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         working-directory: ui
@@ -225,12 +254,13 @@ jobs:
         uses: actions/github-script@v8
         env:
           release_id: ${{ needs.create-release.outputs.release_id }}
+          release_version: ${{ needs.create-release.outputs.version }}
         with:
           script: |
-            github.rest.repos.updateRelease({
+            await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: process.env.release_id,
               draft: false,
-              prerelease: false
+              prerelease: process.env.release_version.includes('-')
             });

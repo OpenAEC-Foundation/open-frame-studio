@@ -38,8 +38,10 @@
   import { registerUndoRedoShortcuts } from "./stores/history.js";
   import { activeRibbonTab, activeWorkspaceView } from "./stores/ui.js";
   import { getSetting, saveSetting } from "./lib/settings.js";
+  import { isWeb, getWebRuntimeMode } from "./lib/tauri.js";
 
   let cleanupShortcuts;
+  const webRuntimeMode = getWebRuntimeMode();
   $: workspaceView = $activeWorkspaceView;
   let rightTab = "properties";
   let leftWidth = getSetting("left_panel_width") || 220;
@@ -86,6 +88,15 @@
 {:else}
 <TitleBar />
 <Ribbon />
+{#if isWeb}
+  <div class="web-mode-banner" role="status">
+    {#if webRuntimeMode === "wasm"}
+      Webversie: IFC, producentenoverdracht, kostencalculatie, offertes en CNC zijn alleen beschikbaar in de desktopapp.
+    {:else}
+      UI-preview: de actuele rekenkern ontbreekt. Bewerkingen en resultaten in deze browser zijn demonstratie.
+    {/if}
+  </div>
+{/if}
 <AppMenu />
 <Settings />
 
@@ -472,6 +483,15 @@
 {/if}
 
 <style>
+  .web-mode-banner {
+    padding: 6px 12px;
+    background: #573a14;
+    color: #fff2d4;
+    border-bottom: 1px solid #a87523;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   .workspace-tabs {
     display: flex;
     flex-wrap: wrap;

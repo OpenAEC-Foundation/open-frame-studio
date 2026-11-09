@@ -3,7 +3,6 @@
   import { onMount } from "svelte";
   import { invoke } from "../../lib/tauri.js";
   import { toast } from "../../stores/toast.js";
-  import { exportCncGcode } from "../../lib/export.js";
 
   let kozijnen = [];
   let selectedId = "";
@@ -52,15 +51,6 @@
       parts = [];
     }
     loading = false;
-  }
-
-  async function handleExportGcode() {
-    try {
-      await exportCncGcode();
-    } catch (e) {
-      console.error("G-code export mislukt:", e);
-      toast.error($_("cnc.exportError") + ": " + e);
-    }
   }
 
   function fmt(n) {
@@ -116,9 +106,11 @@
         {/each}
       </select>
       <button class="action-btn" onclick={load}>{$_("cnc.refresh")}</button>
-      <button class="action-btn primary" onclick={handleExportGcode}>{$_("cnc.exportGcode")}</button>
+      <button class="action-btn primary" disabled title="Machinecode is geblokkeerd tot producentprofielen en bewerkingen zijn gevalideerd">G-code niet vrijgegeven</button>
     </div>
   </div>
+
+  <p class="scope-note">Indicatieve zaagpreview. Deze gegevens zijn niet vrijgegeven voor een CNC-machine; controleer systeemprofielen, verbindingen en machine-instellingen bij de producent.</p>
 
   {#if loading}
     <p class="hint">{$_("cnc.loading")}</p>
@@ -179,6 +171,8 @@
   .action-btn { padding: var(--sp-2) var(--sp-4); background: var(--bg-surface-alt); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: default; }
   .action-btn.primary { background: var(--amber); color: var(--bg-surface); border-color: transparent; }
   .hint { color: var(--text-muted); font-size: 13px; font-style: italic; }
+  .scope-note { padding: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-3); border-left: 3px solid var(--amber); background: var(--bg-surface-alt); color: var(--text-secondary); font-size: 12px; }
+  .action-btn:disabled { opacity: 0.55; }
   .table-container { flex: 1; overflow: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   thead th { position: sticky; top: 0; background: var(--bg-surface-alt); padding: var(--sp-2) var(--sp-3); text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border-color, #333); }

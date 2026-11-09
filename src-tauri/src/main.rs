@@ -68,6 +68,10 @@ fn main() {
             commands::kozijn::remove_frame_extension,
             // Export commands
             commands::export_ifc::export_ifc,
+            commands::export_ifc::export_ifc_project,
+            commands::export_ifc::export_ifc_library,
+            commands::export_ifc::export_ifc_parts_project,
+            commands::export_ifc::export_manufacturer_handoff,
             commands::export_dxf::export_dxf,
             commands::export_pdf::export_kozijnstaat,
             commands::export_pdf::export_quotation_pdf,
@@ -142,6 +146,7 @@ fn main() {
             commands::cnc::get_cnc_parts,
             // IFC import commands
             commands::import_ifc::import_ifc_file,
+            commands::import_ifc::restore_own_ifc_project,
             // Combination commands
             commands::combination::create_combination,
             commands::combination::add_to_combination,

@@ -1,13 +1,13 @@
 {
   "name": "open-frame-studio-ui",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0-beta.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:wasm": "cd ../ofs-wasm && wasm-pack build --target web --out-dir pkg && mkdir -p ../ui/public/wasm && cp pkg/ofs_wasm.js pkg/ofs_wasm_bg.wasm ../ui/public/wasm/",
+    "build:wasm": "node scripts/build-wasm.mjs",
     "build:web": "npm run build:wasm && vite build",
     "dev:web": "npm run build:wasm && vite"
   },

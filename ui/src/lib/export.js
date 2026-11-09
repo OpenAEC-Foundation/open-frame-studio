@@ -7,7 +7,8 @@ import { _ } from "svelte-i18n";
 import { isTauri, isWeb } from "./tauri.js";
 import { api } from "./api.js";
 import { toast } from "../stores/toast.js";
-import { currentKozijn } from "../stores/kozijn.js";
+import { currentKozijn, selectKozijn } from "../stores/kozijn.js";
+import { project, refreshProject, markDirty } from "../stores/project.js";
 import { refreshCustomProfiles } from "../stores/profiles.js";
 
 // In web mode file export/import commands resolve to null (no filesystem);
@@ -183,6 +184,59 @@ export async function exportIfcWithLod(lod) {
   toast.success(get(_)("alert.exportSuccess", { values: { type: `IFC LOD${lod}`, path } }));
 }
 
+export async function exportIfcProjectWithLod(lod) {
+  const p = get(project);
+  if (!p?.kozijnen?.length) return;
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    defaultPath: "project.ifc",
+  });
+  if (!path) return;
+  const result = await api("export_ifc_project", { outputPath: path, lod: String(lod) });
+  if (exportUnavailable(result)) return;
+  toast.success(get(_)("alert.exportSuccess", { values: { type: `Project IFC LOD${lod}`, path } }));
+}
+
+export async function exportIfcLibrary() {
+  const p = get(project);
+  if (!p?.kozijnen?.length) return;
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    defaultPath: "kozijnbibliotheek.ifc",
+  });
+  if (!path) return;
+  const result = await api("export_ifc_library", { outputPath: path });
+  if (exportUnavailable(result)) return;
+  toast.success(get(_)("alert.exportSuccess", { values: { type: "IFC typebibliotheek", path } }));
+}
+
+export async function exportIfcPartsProject() {
+  const p = get(project);
+  if (!p?.kozijnen?.length) return;
+  const { save } = await getSaveDialog();
+  const path = await save({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    defaultPath: "project_onderdelen.ifc",
+  });
+  if (!path) return;
+  const result = await api("export_ifc_parts_project", { outputPath: path });
+  if (exportUnavailable(result)) return;
+  toast.success(get(_)("alert.exportSuccess", { values: { type: "IFC onderdelenmodel", path } }));
+}
+
+export async function exportManufacturerHandoff() {
+  const p = get(project);
+  if (!p?.kozijnen?.length) return;
+  const { open } = await getOpenDialog();
+  const parent = await open({ directory: true, multiple: false, title: "Kies map voor producentenoverdracht" });
+  if (!parent) return;
+  const result = await api("export_manufacturer_handoff", { outputDir: parent });
+  if (exportUnavailable(result)) return;
+  toast.success(`Indicatieve producentenoverdracht gemaakt: ${result}`);
+}
+
 // ── IFC Import & Compare ───────────────────────────────────
 
 export async function importIfcFile() {
@@ -194,8 +248,27 @@ export async function importIfcFile() {
   if (!path) return;
   const result = await api("import_ifc_file", { filePath: path });
   if (importUnavailable(result)) return;
-  toast.success(`IFC bestand geimporteerd: ${path}`);
-  return result;
+  const parsed = typeof result === "string" ? JSON.parse(result) : result;
+  const assemblies = parsed.assemblies?.length ?? 0;
+  const parts = parsed.assemblies?.reduce((sum, assembly) => sum + (assembly.parts?.length ?? 0), 0) ?? 0;
+  toast.success(`IFC gelezen: ${parsed.windows?.length ?? 0} ramen, ${parsed.doors?.length ?? 0} deuren, ${assemblies} samenstellingen, ${parts} onderdelen.`);
+  return parsed;
+}
+
+export async function restoreOwnIfcProject() {
+  const { open } = await getOpenDialog();
+  const path = await open({
+    filters: [{ name: "IFC", extensions: ["ifc"] }],
+    multiple: false,
+    title: "Kies een OFS-onderdelen-IFC",
+  });
+  if (!path) return;
+  const restored = await api("restore_own_ifc_project", { filePath: path });
+  if (importUnavailable(restored)) return;
+  await refreshProject();
+  if (restored.kozijnen?.length) await selectKozijn(restored.kozijnen[0].id);
+  markDirty();
+  toast.warning("IFC-basisproject hersteld. Controleer profielen, verbindingen en glasopbouw voordat je calculeert of produceert.");
 }
 
 function toastIfcDiffSummary(result) {

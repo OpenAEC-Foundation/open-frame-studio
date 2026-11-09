@@ -7,23 +7,15 @@ pub fn export_cnc_gcode(
     id: String,
     output_dir: String,
 ) -> Result<Vec<String>, String> {
+    let _ = output_dir;
     let project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let kozijn = project.kozijnen.iter().find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-
-    let parts = ofs_core::cnc::generate_cnc_parts(kozijn);
-    let gcode = ofs_core::cnc::gcode::GenericGCode;
-    use ofs_core::cnc::postprocessor::CncPostProcessor;
-    let files = gcode.generate(&parts)?;
-
-    let mut written = Vec::new();
-    for (filename, content) in files {
-        let path = std::path::Path::new(&output_dir).join(&filename);
-        std::fs::write(&path, &content).map_err(|e| format!("Write error: {}", e))?;
-        written.push(filename);
+    if kozijn.recovered_from_ifc {
+        return Err("CNC-export is geblokkeerd voor een IFC-basisproject: systeemprofielen, verbindingen en bewerkingen moeten eerst worden gevalideerd".into());
     }
-    Ok(written)
+    Err("CNC-export is nog niet vrijgegeven: er is geen gevalideerde producentconfiguratie met profielen, verbindingen, gereedschappen en machineassen".into())
 }
 
 #[tauri::command]
@@ -35,5 +27,8 @@ pub fn get_cnc_parts(
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let kozijn = project.kozijnen.iter().find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
+    if kozijn.recovered_from_ifc {
+        return Err("CNC-onderdelen zijn niet gevalideerd voor een IFC-basisproject".into());
+    }
     Ok(ofs_core::cnc::generate_cnc_parts(kozijn))
 }

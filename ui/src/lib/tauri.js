@@ -3,12 +3,19 @@
  *
  * In Tauri: delegates to the real invoke.
  * In browser: delegates to WASM module (ofs-wasm).
- * Falls back to sensible defaults if WASM isn't loaded yet.
+ * Falls back to an explicitly labelled UI preview if WASM is unavailable.
  */
+import uiPackage from "../../package.json";
+
 export const isTauri = typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
 export const isWeb = !isTauri;
 
 let wasm = null;
+let webRuntimeMode = isTauri ? "desktop" : "preview";
+
+export function getWebRuntimeMode() {
+  return webRuntimeMode;
+}
 
 /**
  * Initialize WASM module for web mode.
@@ -17,15 +24,27 @@ let wasm = null;
 export async function initWasm() {
   if (isTauri || wasm) return;
   try {
-    // Use fetch + instantiate to avoid Rollup resolving the path
+    // A plain Vite build can copy an old ignored WASM bundle. Refuse that
+    // bundle instead of silently running an older domain model than the UI.
+    const packageUrl = new URL("/wasm/package.json", window.location.origin).href;
+    const response = await fetch(packageUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error("WASM-pakket ontbreekt");
+    const wasmPackage = await response.json();
+    if (wasmPackage.version !== uiPackage.version) {
+      throw new Error(`WASM-versie ${wasmPackage.version || "onbekend"} komt niet overeen met UI ${uiPackage.version}`);
+    }
+
+    // Use fetch + instantiate to avoid Rollup resolving the path.
     const jsUrl = new URL("/wasm/ofs_wasm.js", window.location.origin).href;
     const wasmUrl = new URL("/wasm/ofs_wasm_bg.wasm", window.location.origin).href;
     const module = await import(/* @vite-ignore */ jsUrl);
     await module.default(wasmUrl);
     wasm = module;
+    webRuntimeMode = "wasm";
     console.log("[web] WASM module loaded");
   } catch (e) {
-    console.warn("[web] WASM not available, using fallback:", e);
+    webRuntimeMode = "preview";
+    console.warn("[web] WASM niet actueel; UI-preview zonder betrouwbare modelbewerkingen:", e);
   }
 }
 
@@ -35,7 +54,7 @@ export async function invoke(cmd, args) {
     return tauriInvoke(cmd, args);
   }
 
-  // Web mode: try WASM first, fall back to defaults
+  // Web mode: try WASM first, fall back to a labelled UI preview.
   if (wasm) {
     return wasmCommand(cmd, args);
   }
@@ -44,52 +63,15 @@ export async function invoke(cmd, args) {
 
 // ── Shared demo/fallback shapes ─────────────────────────────
 
-function emptyDiffJson() {
-  return JSON.stringify({ added: [], removed: [], modified: [], unchanged: 0 });
-}
-
-function emptyCostEstimate() {
-  return {
-    nlSfb: { code: "31.21", description: "Buitenkozijnen, -ramen, -deuren; hout" },
-    materialCost: 0, glassCost: 0, hardwareCost: 0, gasketCost: 0, panelCost: 0,
-    surfaceTreatmentCost: 0, laborHours: 0, laborCost: 0, totalCost: 0, lineItems: [],
-  };
+function unavailableInWeb(cmd) {
+  console.warn(`[web] desktopfunctie niet beschikbaar: ${cmd}`);
+  throw new Error("Deze functie is niet beschikbaar in de webversie. Gebruik de desktopapp.");
 }
 
 function defaultPricingConfig() {
   return {
     discountPercentage: 0, btwPercentage: 21, btwVerlegd: false,
     transportCost: 0, montageCostPerHour: 45, montageHours: 0,
-  };
-}
-
-function bcfTopicStub(args, comments = []) {
-  const now = new Date().toISOString();
-  return {
-    guid: args?.guid || String(Date.now()),
-    title: args?.title || "Demo topic",
-    description: args?.description || "",
-    status: args?.status || "Open",
-    priority: "Normal",
-    creationDate: now,
-    modifiedDate: now,
-    assignedTo: null,
-    relatedKozijnIds: [],
-    comments,
-  };
-}
-
-function quotationStub(args, version = 1) {
-  return {
-    id: args?.quotationId || `demo-${Date.now()}`,
-    version,
-    status: args?.status || "draft",
-    createdAt: new Date().toISOString(),
-    validUntil: "",
-    kozijnMarks: [],
-    totalInclBtw: args?.newTotal ?? args?.totalInclBtw ?? 0,
-    notes: "",
-    changeDescription: args?.changeDescription || "",
   };
 }
 
@@ -255,7 +237,7 @@ function wasmCommand(cmd, args) {
               args?.profileId, args?.profileName, args?.profileWidth ?? null, args?.profileDepth ?? null))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
 
-      // Commands that return unchanged kozijn (updates not yet in WASM)
+      // Unsupported edits must not report an unchanged kozijn as a success.
       case "update_grid_sizes":
       case "update_cell_hardware":
       case "auto_select_hardware":
@@ -264,7 +246,7 @@ function wasmCommand(cmd, args) {
       case "update_frame_colors":
       case "add_frame_extension":
       case "remove_frame_extension":
-        return args?.id ? J(wasm.get_kozijn(args.id)) : null;
+        return unavailableInWeb(cmd);
 
       case "get_custom_profiles":
         return typeof wasm.get_custom_profiles === "function"
@@ -272,7 +254,7 @@ function wasmCommand(cmd, args) {
           : [];
       case "load_profile_library":
       case "add_custom_profile":
-        return "[]";
+        return unavailableInWeb(cmd);
       case "get_sjablonen": return loadWebSjablonen();
       case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
       case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);
@@ -294,10 +276,11 @@ function wasmCommand(cmd, args) {
       case "vliesgevel_update_panel":
         console.warn(`[web] vliesgevel command not available in web mode: ${cmd}`);
         return null;
-      case "get_cost_estimate": return emptyCostEstimate();
-      case "get_cost_estimate_project": return [];
+      case "get_cost_estimate":
+      case "get_cost_estimate_project":
+        return unavailableInWeb(cmd);
       case "get_pricing_config": return defaultPricingConfig();
-      case "update_pricing_config": return null;
+      case "update_pricing_config": return unavailableInWeb(cmd);
 
       case "get_platform": return "web";
       case "load_settings":
@@ -314,11 +297,12 @@ function wasmCommand(cmd, args) {
       case "check_blender_connection":
         return "not_available";
 
-      // New feature commands — return empty defaults in WASM mode
+      // Read-only views may be empty; edits must not claim to be saved.
       case "get_quotations": return [];
-      case "create_quotation": return quotationStub(args);
-      case "update_quotation_status": return quotationStub(args);
-      case "create_quotation_revision": return quotationStub(args, 2);
+      case "create_quotation":
+      case "update_quotation_status":
+      case "create_quotation_revision":
+        return unavailableInWeb(cmd);
       case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
       case "get_project_energy":
         return typeof wasm.get_project_energy === "function"
@@ -342,18 +326,16 @@ function wasmCommand(cmd, args) {
           ? J(wasm.generate_dop_for_kozijn(args?.id))
           : dopStub();
       case "get_bcf_topics": return [];
-      case "create_bcf_topic": return bcfTopicStub(args);
-      case "update_bcf_topic_status": return bcfTopicStub(args);
+      case "create_bcf_topic":
+      case "update_bcf_topic_status":
       case "add_bcf_comment":
-        return bcfTopicStub(args, [{ guid: String(Date.now()), author: args?.author || "", date: new Date().toISOString(), comment: args?.comment || "" }]);
+        return unavailableInWeb(cmd);
       case "get_combinations": return [];
       case "create_combination":
-        return { id: `demo-${Date.now()}`, name: args?.name || "", mark: args?.mark || "", members: [], couplings: [] };
       case "add_to_combination":
-        return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
       case "add_coupling":
-        return { id: args?.combinationId, name: "", mark: "", members: [], couplings: [{ memberAId: args?.memberAId, memberBId: args?.memberBId, couplingType: args?.couplingType, couplingWidth: args?.couplingWidth || 0 }] };
-      case "remove_combination": return null;
+      case "remove_combination":
+        return unavailableInWeb(cmd);
       case "generate_purchase_proposals": return [];
       case "generate_purchase_orders":
         return typeof wasm.generate_purchase_orders === "function"
@@ -370,7 +352,7 @@ function wasmCommand(cmd, args) {
       case "import_ifc_file": return null;
       case "compare_ifc_roundtrip":
       case "compare_ifc_files":
-        return emptyDiffJson();
+        return null;
 
       default:
         console.warn(`[web] unhandled WASM command: ${cmd}`, args);
@@ -401,36 +383,36 @@ function browserFallback(cmd, args) {
     case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
     case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);
     case "get_quotations": return [];
-    case "create_quotation": return quotationStub(args);
-    case "update_quotation_status": return quotationStub(args);
-    case "create_quotation_revision": return quotationStub(args, 2);
+    case "create_quotation":
+    case "update_quotation_status":
+    case "create_quotation_revision":
+      return unavailableInWeb(cmd);
     case "get_production_plan": return { jobs: [], totalHours: 0, estimatedDays: 0, deliveryDate: "" };
     case "get_project_energy": return energyStub(args);
     case "get_project_circularity": return circularityStub();
     case "get_project_plausibility": return plausibilityStub();
-    case "update_kozijn_layout": return null;
+    case "update_kozijn_layout": return unavailableInWeb(cmd);
     case "check_certification": return certStub();
     case "generate_dop_for_kozijn": return dopStub();
     case "get_bcf_topics": return [];
-    case "create_bcf_topic": return bcfTopicStub(args);
-    case "update_bcf_topic_status": return bcfTopicStub(args);
+    case "create_bcf_topic":
+    case "update_bcf_topic_status":
     case "add_bcf_comment":
-      return bcfTopicStub(args, [{ guid: String(Date.now()), author: args?.author || "", date: new Date().toISOString(), comment: args?.comment || "" }]);
+      return unavailableInWeb(cmd);
     case "get_combinations": return [];
     case "create_combination":
-      return { id: `demo-${Date.now()}`, name: args?.name || "", mark: args?.mark || "", members: [], couplings: [] };
     case "add_to_combination":
-      return { id: args?.combinationId, name: "", mark: "", members: [{ kozijnId: args?.kozijnId, offsetX: args?.offsetX || 0, offsetY: args?.offsetY || 0 }], couplings: [] };
     case "add_coupling":
-      return { id: args?.combinationId, name: "", mark: "", members: [], couplings: [{ memberAId: args?.memberAId, memberBId: args?.memberBId, couplingType: args?.couplingType, couplingWidth: args?.couplingWidth || 0 }] };
-    case "remove_combination": return null;
+    case "remove_combination":
+      return unavailableInWeb(cmd);
     case "generate_purchase_proposals": return [];
     case "generate_purchase_orders": return [];
     case "get_cnc_parts": return [];
     case "get_pricing_config": return defaultPricingConfig();
-    case "update_pricing_config": return null;
-    case "get_cost_estimate": return emptyCostEstimate();
-    case "get_cost_estimate_project": return [];
+    case "update_pricing_config":
+    case "get_cost_estimate":
+    case "get_cost_estimate_project":
+      return unavailableInWeb(cmd);
     case "get_vliesgevel_production": return vgProductionStub();
     case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
     case "validate_project_ids": return [];
@@ -442,7 +424,7 @@ function browserFallback(cmd, args) {
     case "import_ifc_file": return null;
     case "compare_ifc_roundtrip":
     case "compare_ifc_files":
-      return emptyDiffJson();
+      return null;
     case "get_platform": return "web";
     case "load_settings":
       return localStorage.getItem("ofs-settings") || JSON.stringify({

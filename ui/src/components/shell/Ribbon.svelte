@@ -20,7 +20,7 @@
     exportIfc, exportDxf, exportKozijnstaat, exportWorkshop,
     exportGltf, exportProduction, sendToBlender,
     importDxfProfile, importCatalog,
-    exportCncGcode, exportLabels, exportIfcWithLod,
+    exportLabels, exportIfcWithLod, exportIfcProjectWithLod, exportIfcLibrary, exportIfcPartsProject, exportManufacturerHandoff, restoreOwnIfcProject,
     importIfcFile, compareIfcRoundtrip, compareIfcFiles,
   } from "../../lib/export.js";
   import ShapeManager from "../panels/ShapeManager.svelte";
@@ -28,6 +28,7 @@
   import { get } from "svelte/store";
   import { invoke } from "../../lib/tauri.js";
   import { toast } from "../../stores/toast.js";
+  import { project } from "../../stores/project.js";
 
   let showShapeManager = $state(false);
   let ifcLod = $state("300");
@@ -452,6 +453,34 @@
             </svg>
             <span>IFC</span>
           </button>
+          <button class="ribbon-btn" onclick={() => exportIfcProjectWithLod(ifcLod)} disabled={!$project?.kozijnen?.length}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
+              <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+            </svg>
+            <span>Project IFC</span>
+          </button>
+          <button class="ribbon-btn" onclick={exportIfcLibrary} disabled={!$project?.kozijnen?.length} title="Herbruikbare IFC4 kozijn typen">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="3" width="16" height="18" rx="2"/>
+              <path d="M8 8h8M8 12h8M8 16h5"/>
+            </svg>
+            <span>Typebieb IFC</span>
+          </button>
+          <button class="ribbon-btn" onclick={exportIfcPartsProject} disabled={!$project?.kozijnen?.length} title="Kozijnsamenstellingen met losse profielen en ruiten; nog geen productie-IFC">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="1"/>
+              <path d="M7 3v18M17 3v18M3 12h18"/>
+            </svg>
+            <span>Onderdelen IFC</span>
+          </button>
+          <button class="ribbon-btn" onclick={exportManufacturerHandoff} disabled={!$project?.kozijnen?.length} title="IFC, JSON en CSV met gekoppelde onderdeel-ID's en indicatieve lijsten">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="16" rx="1"/>
+              <path d="M7 9h10M7 13h10M7 17h7"/>
+            </svg>
+            <span>Producentenoverdracht</span>
+          </button>
           <button class="ribbon-btn" onclick={exportDxf} disabled={!$currentKozijn}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
@@ -463,7 +492,7 @@
         <select class="sjabloon-select" style="min-width:100px" bind:value={ifcLod}>
           <option value="200">LOD 200</option>
           <option value="300">LOD 300</option>
-          <option value="400">LOD 400</option>
+          <option value="400" disabled>LOD 400 (in ontwikkeling)</option>
         </select>
       </div>
 
@@ -477,7 +506,14 @@
               <path d="M12 15V3m0 0l-4 4m4-4l4 4"/>
               <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
             </svg>
-            <span>IFC Import</span>
+            <span>IFC Inspectie</span>
+          </button>
+          <button class="ribbon-btn" onclick={restoreOwnIfcProject} disabled={!!$project?.kozijnen?.length} title="Herstel een bewerkbaar basisproject uit een eigen OFS-onderdelen-IFC; begin in een leeg project">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 3v13m0 0l-4-4m4 4l4-4"/>
+              <rect x="4" y="17" width="16" height="4" rx="1"/>
+            </svg>
+            <span>IFC Basis herstellen</span>
           </button>
           <button class="ribbon-btn" onclick={compareIfcRoundtrip}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -640,14 +676,14 @@
       <div class="ribbon-group">
         <span class="group-label">CNC / Labels</span>
         <div class="group-buttons">
-          <button class="ribbon-btn" onclick={exportCncGcode} disabled={!$currentKozijn}>
+          <button class="ribbon-btn" disabled title="G-code is niet vrijgegeven zonder gevalideerde producent- en machineconfiguratie">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="6" width="20" height="12" rx="2"/>
               <path d="M6 10h4v4H6z"/>
               <line x1="14" y1="10" x2="18" y2="10"/>
               <line x1="14" y1="14" x2="18" y2="14"/>
             </svg>
-            <span>CNC G-code</span>
+            <span>G-code niet vrijgegeven</span>
           </button>
           <button class="ribbon-btn" onclick={exportLabels}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

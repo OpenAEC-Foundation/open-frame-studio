@@ -128,9 +128,9 @@ pub fn remove_kozijn(id: &str) -> Result<String, String> {
 pub fn duplicate_kozijn(id: &str, new_mark: &str) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        let mut dup = p.kozijnen[idx].clone();
-        dup.id = uuid::Uuid::new_v4();
-        dup.mark = new_mark.to_string();
+        // Keep browser duplication aligned with the desktop model: a copy
+        // must get new persistent IFC part IDs as well as a new kozijn ID.
+        let dup = p.kozijnen[idx].duplicate(new_mark);
         let json = serde_json::to_string(&dup).unwrap();
         p.kozijnen.push(dup);
         Ok(json)
@@ -618,4 +618,25 @@ pub fn get_project_export_data() -> Result<String, String> {
         }).collect();
         serde_json::to_string(&data).unwrap()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_duplicate_rekeys_ifc_part_ids() {
+        new_project("WASM duplicatie", "W-1").unwrap();
+        let original: serde_json::Value =
+            serde_json::from_str(&create_kozijn("Vast raam", "K01", 1200.0, 1500.0).unwrap())
+                .unwrap();
+        let duplicate: serde_json::Value = serde_json::from_str(
+            &duplicate_kozijn(original["id"].as_str().unwrap(), "K02").unwrap(),
+        )
+        .unwrap();
+
+        assert_ne!(original["id"], duplicate["id"]);
+        assert_ne!(original["partIds"], duplicate["partIds"]);
+        assert_eq!(duplicate["mark"], "K02");
+    }
 }

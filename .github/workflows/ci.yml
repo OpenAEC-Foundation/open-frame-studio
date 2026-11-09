@@ -50,20 +50,43 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: ui
-        run: npm install
+        run: npm ci
+
+      - name: Check candidate version labels
+        run: node scripts/check-version.mjs
 
       - name: Build frontend
+        if: matrix.platform != 'ubuntu-22.04'
         working-directory: ui
         run: npm run build
 
+      - name: Install browser build tools
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          rustup target add wasm32-unknown-unknown
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build browser with current Rust core
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: ui
+        run: npm run build:web
+
       - name: Check Rust workspace
-        run: cargo check -p ofs-core -p open-frame-studio
+        run: cargo check -p ofs-core -p open-frame-studio --locked
 
       # Zonder deze stap bood de hele ofs-core-testsuite nul CI-bescherming
       # (cargo check type-checkt geen #[cfg(test)]-code).
       - name: Test ofs-core
-        run: cargo test -p ofs-core --lib
+        run: cargo test -p ofs-core --lib --locked
+
+      - name: Generate IFC acceptance fixture
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          cargo run -p ofs-core --example ifc_acceptance_fixture --locked -- "$RUNNER_TEMP/ofs-ifc-acceptance"
+          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/01-los-kozijn.ifc"
+          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/03-onderdelen.ifc"
+          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/05-onderdelen-revisie.ifc"
 
       - name: Build Tauri app (no bundle)
         working-directory: src-tauri
-        run: cargo build
+        run: cargo build --locked

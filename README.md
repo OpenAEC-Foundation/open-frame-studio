@@ -1,12 +1,13 @@
-# Open Frame Studio v0.6.0
+# Open Frame Studio v0.7.0-beta.1
 
-**Free, open-source kozijn (window frame) design software for the Dutch construction industry.**
+**Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
 Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — accessible, professional-grade tools for Architecture, Engineering & Construction.
 
-![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
+
+> **Release-status:** de laatst gepubliceerde versie is [v0.6.0](https://github.com/OpenAEC-Foundation/open-frame-studio/releases). `v0.7.0-beta.1` beschrijft de broncodekandidaat. Publiceer een installer pas na de controles in [release-readiness](docs/release-readiness.md).
 
 > **Versie bumpen:** draai `node scripts/bump-version.mjs <nieuwe-versie>` (bv. `0.5.2`).
 > Dat werkt de versie in één keer overal bij: `Cargo.toml` (alle Rust-crates + `ofs-cloud /health`),
@@ -18,7 +19,7 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 
 ## What is Open Frame Studio?
 
-Open Frame Studio is a desktop application for designing, documenting, and exporting kozijnen (window and door frames). A free, professional-grade alternative to commercial kozijnsoftware.
+Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwisselen van kozijnen. De Rust-kern wordt gedeeld met een beperkte browservariant. De cloud-API en losse werkvloerpagina's zijn nog niet aangesloten op dezelfde projectworkflow.
 
 ### Key Features
 
@@ -26,10 +27,10 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 - **Interactive Profile Editor** — Visual point-by-point cross-section editing with drag handles, edge splitting, mirroring, snap-to-grid, and undo/redo
 - **AI Configurator Assistant** — Natural language kozijn design via OpenAI-compatible API (works with OpenAI, Ollama, or any compatible endpoint). Type "Maak een draaikiep 900x1400" and it creates the kozijn.
 - **Template Library** — Pre-built templates: draaikiepraam, dubbel draaikiepraam, schuifpui, voordeur, melkmeisje, melkmeisje met bovenlicht
-- **80+ Profielen** — Uitgebreide profielbibliotheek voor hout, aluminium, PVC en hout-aluminium met realistische sponning-doorsnedes
+- **Profielbibliotheek** — Voorbeeldprofielen voor hout, aluminium, PVC en hout-aluminium; systeem- en leveranciersdetails vragen controle door een producent
 - **3D Viewer** — Three.js-based 3D preview with frame extrusion and transparent glass panels
-- **IFC Export** — Generate IFC files with ILS Houten Kozijnen v2.0 property sets for BIM workflows
-- **DXF Export** — Workshop-ready DXF drawings with dimension lines
+- **IFC4-uitwisseling (bèta)** — Los kozijn, project, beperkte typebibliotheek, afzonderlijke onderdelen en een indicatief IFC/JSON/CSV-overdrachtspakket. De gedetailleerde export accepteert momenteel rechthoekige kozijnen met vaste beglazing; de `OFS_`-eigenschappen zijn niet als NBVT ILS v2.0 gevalideerd.
+- **DXF Export** — Tekeningen met maatlijnen; controleer maatvoering en bewerkingen vóór productie
 - **PDF Kozijnstaat** — Professional kozijnstaat reports (PDF + Excel)
 - **Werkplaatstekening** — A3 workshop drawings with title block and OpenAEC branding
 - **Blender/Bonsai Integration** — Send kozijnen directly to Blender via TCP socket for IFC modeling
@@ -44,6 +45,17 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 | **Aluminium** | Standaard aluminium profielen |
 | **Kunststof (PVC)** | Standaard PVC profielen |
 | **Hout-Aluminium** | Combinatieprofielen |
+
+---
+
+## Changelog v0.7.0-beta.1 (ontwikkelstand, 2026-11-09)
+
+- IFC4-export voor één kozijn, projectkozijnen, een beperkte `IfcWindowType`-bibliotheek en een onderdelenproject met stabiele `GlobalId`'s. Ongeschikte vormen en indelingen worden vóór bestandsschrijven afgewezen; LOD400 is uitgeschakeld totdat profiel- en verbindingsdetails zijn uitgewerkt.
+- Indicatieve producentenoverdracht met onderdelen-IFC, `overdracht.json` en `onderdelen.csv`. De kruisverwijzing koppelt IFC-onderdelen aan zaag- en glaslijstregels; zij is geen importadapter of CNC-vrijgave.
+- Normcontroles zijn een indicatieve voorcontrole. De CNC-weergave toont zaagsneden als preview; generieke G-code-export is geblokkeerd totdat producentprofielen en machinebewerkingen zijn gevalideerd.
+- IFC-inspectie en wijzigingsvergelijking op identiteit; een eigen onderdelen-IFC kan beperkt worden hersteld als bewerkbaar basisproject. Ontbrekende productiegegevens worden daarbij niet ingevuld.
+- Een visuele linkimport van het onderdelenmodel is in Revit 2026.5 uitgevoerd. Tekla, SketchUp, hsbDesign, native bewerkbaarheid en producentencalculatie vragen nog acceptatieproeven. Zie het [acceptatieprotocol](docs/ifc-acceptatie-revit-tekla-sketchup-hsbcad.md).
+- De desktop- en webfunctionaliteit lopen nog uiteen. Zie [release-readiness](docs/release-readiness.md) voor de vereiste bouw-, test- en uitwisselcontroles.
 
 ---
 
@@ -131,7 +143,7 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 | 2D Editor | SVG (reactive Svelte bindings) |
 | 3D Viewer | [Three.js](https://threejs.org/) |
 | Export / Import | Native Rust in `ofs-core` (IFC, DXF, PDF, glTF, XLSX, CSV) |
-| Styling | OpenAEC Design System (CSS custom properties + Tailwind) |
+| Styling | OpenAEC Design System (CSS custom properties) |
 
 ---
 
@@ -141,6 +153,7 @@ Open Frame Studio is a desktop application for designing, documenting, and expor
 
 - [Node.js](https://nodejs.org/) 20+
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable)
+- [Tauri CLI 2](https://v2.tauri.app/start/prerequisites/) voor `cargo tauri` en de systeembibliotheken die Tauri op het gekozen platform vereist
 
 ### Build from Source
 
@@ -150,13 +163,13 @@ git clone https://github.com/OpenAEC-Foundation/Open-Frame-Studio.git
 cd Open-Frame-Studio
 
 # Install frontend dependencies
-cd ui && npm install && cd ..
+cd ui && npm ci && cd ..
 
 # Run in development mode
-cd ui && npm run tauri dev
+cargo tauri dev
 
 # Build for production
-cd ui && npm run tauri build
+cargo tauri build
 ```
 
 ### Browser Preview (no Tauri required)
@@ -165,9 +178,9 @@ cd ui && npm run tauri build
 cd ui && npm run dev
 ```
 
-The app includes a full browser mock layer, so you can develop and preview the UI without the Tauri runtime. There is also a real web build (`npm run build:web`, backed by the `ofs-wasm` crate).
+`npm run dev` laat de interface zien zonder desktopbackend en gebruikt alleen een WASM-bundel als diens versie overeenkomt met de UI; anders toont de app een herkenbare demo-preview. Een actuele browserbuild met `ofs-wasm` wordt gemaakt met `npm run build:web`; daarvoor zijn `wasm-pack` en de Rust-target `wasm32-unknown-unknown` nodig.
 
-**Web mode limitations:** the browser version does not yet match the desktop app. Vliesgevel (curtain wall) editing and file export/import (IFC, DXF, PDF, XLSX, CNC) are desktop-only until the wasm module is rebuilt against the current `ofs-core`. Custom templates do work in web mode — they are persisted in `localStorage`.
+**Webbeperking:** de browser heeft geen volledige desktoppariteit. Bestandsimport/-export en meerdere project-, vliesgevel-, calculatie- en productiecommando's hebben daar nog geen echte implementatie. Gebruik de browserweergave niet als bewijs van een werkende producentenworkflow.
 
 ---
 
@@ -190,13 +203,16 @@ Open-Frame-Studio/
 │       ├── main.rs         # Entry point + command registration
 │       ├── state.rs        # Application state
 │       └── commands/       # Tauri IPC commands
+├── ofs-wasm/               # Browserbinding van ofs-core; eigen build nodig
+├── ofs-cloud/              # Losse API-scaffold, nog geen gedeelde projectdienst
+├── ofs-web/                # Losse prototypepagina's voor configuratie/werkvloer
 ├── ui/                     # Svelte frontend
 │   └── src/
 │       ├── App.svelte      # Main app with workspace tabs
 │       ├── components/     # Shell, Editor, Panels, Profile Editor, Viewer3D
 │       ├── stores/         # Svelte stores (project, kozijn, profiles, AI assistant, history)
 │       ├── styles/         # OpenAEC design tokens & themes
-│       └── lib/            # Tauri invoke wrapper, AI tools & system prompt, browser mocks
+│       └── lib/            # Tauri invoke wrapper, AI tools en beperkte browseradapters
 └── profiles/               # Profile library (JSON)
     ├── wood/               # Houten profielen
     ├── aluminum/           # Aluminium profielen
@@ -214,8 +230,9 @@ All dimensions are stored in **millimeters** (kozijnindustrie standaard). The UI
 
 ## Standards
 
-- **ILS Houten Kozijnen v2.0** — Dutch BIM standard property sets for wooden window frames
-- **IFC 4** — Industry Foundation Classes for BIM interoperability
+- **IFC4** — toegepast voor de ondersteunde kozijn- en onderdelenexport; conformiteit en importgedrag worden per doelpakket getoetst
+- **NBVT ILS Houten Kozijnen v2.0** — referentie voor een toekomstige veld-voor-veld toets; de huidige `OFS_`-eigenschappen claimen geen ILS-conformiteit
+- **Bbl/KVT/CE** — bestaande controles zijn indicatief; zij vervangen geen projectspecifieke normbeoordeling, gevalideerde DoP of producentverklaring
 
 ---
 
@@ -227,7 +244,7 @@ Contributions are welcome! Please open an issue or pull request.
 
 ## License
 
-This work is licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/).
+De repository bevat momenteel tegenstrijdige licentievermeldingen: [LICENSE](LICENSE) en eerdere README-versies noemen CC BY-SA 4.0, terwijl Cargo-metadata en schermen AGPL-3.0 noemen. De projecteigenaar moet de bedoelde licentie vastleggen voordat een nieuwe binaire release wordt gepubliceerd.
 
 © 2026 OpenAEC Foundation
 

@@ -29,29 +29,16 @@ pub fn generate_cnc_parts(kozijn: &crate::kozijn::Kozijn) -> Vec<CncPart> {
     let mut parts = Vec::new();
 
     for cut in &prod.cut_list {
-        let mut ops = Vec::new();
-        // Cross cuts at both ends
-        ops.push(CncOperation::CrossCut { position_mm: 0.0, angle_deg: cut.miter_left_deg });
-        ops.push(CncOperation::CrossCut { position_mm: cut.gross_length_mm, angle_deg: cut.miter_right_deg });
-
-        // Mortise/tenon for pen/slis joints
-        if cut.miter_left_deg.abs() < 1.0 || cut.miter_right_deg.abs() < 1.0 {
-            // Horizontal members get tenons
-            let mt = cut.member_type.label_nl();
-            if mt.contains("dorpel") || mt.contains("Dorpel") || mt.contains("boven") || mt.contains("Boven") {
-                let pw = 20.0; // pen length
-                ops.push(CncOperation::Tenon { x: 0.0, y: 0.0, width: pw, length: cut.gross_length_mm.min(20.0) });
-                ops.push(CncOperation::Tenon { x: cut.gross_length_mm - pw, y: 0.0, width: pw, length: 20.0 });
-            }
-        }
-
-        // Sponning groove along length
-        ops.push(CncOperation::Groove {
-            start_x: 20.0,
-            end_x: cut.gross_length_mm - 20.0,
-            depth: 17.0,
-            width: 12.0,
-        });
+        // Indicative cutting preview only. Joint, rebate, tooling and machine
+        // coordinates require a verified producer system; inventing those
+        // operations here would make the preview look production-ready.
+        let ops = vec![
+            CncOperation::CrossCut { position_mm: 0.0, angle_deg: cut.miter_left_deg },
+            CncOperation::CrossCut {
+                position_mm: cut.gross_length_mm,
+                angle_deg: cut.miter_right_deg,
+            },
+        ];
 
         parts.push(CncPart {
             piece_id: cut.piece_id.clone(),
@@ -63,4 +50,21 @@ pub fn generate_cnc_parts(kozijn: &crate::kozijn::Kozijn) -> Vec<CncPart> {
         });
     }
     parts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{generate_cnc_parts, CncOperation};
+    use crate::kozijn::Kozijn;
+
+    #[test]
+    fn preview_does_not_invent_joint_or_rebate_operations() {
+        let kozijn = Kozijn::new("Kozijn", "K01", 1200.0, 1500.0);
+        let parts = generate_cnc_parts(&kozijn);
+        assert!(!parts.is_empty());
+        assert!(parts.iter().all(|part| {
+            part.operations.len() == 2
+                && part.operations.iter().all(|op| matches!(op, CncOperation::CrossCut { .. }))
+        }));
+    }
 }

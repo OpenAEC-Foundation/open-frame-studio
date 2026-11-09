@@ -28,6 +28,39 @@ pub struct Kozijn {
     /// grid for layout/geometry; old projects (grid only) keep working.
     #[serde(default)]
     pub layout: Option<crate::layout::VakNode>,
+    /// Persisted identity of rectangular-grid parts for IFC revisions.
+    /// Empty on older projects; their former ordinal IDs remain the fallback.
+    #[serde(default, skip_serializing_if = "PartIds::is_empty")]
+    part_ids: PartIds,
+    /// Basic reconstruction from an IFC exchange model lacks verified joints,
+    /// glazing build-up and profile snapshots; machine output must stay blocked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub recovered_from_ifc: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartIds {
+    /// One slot per column/row. Slot zero has no preceding divider.
+    columns: Vec<Uuid>,
+    rows: Vec<Uuid>,
+    cells: Vec<Uuid>,
+}
+
+fn is_false(value: &bool) -> bool { !*value }
+
+impl PartIds {
+    fn new(columns: usize, rows: usize) -> Self {
+        Self {
+            columns: (0..columns).map(|_| Uuid::new_v4()).collect(),
+            rows: (0..rows).map(|_| Uuid::new_v4()).collect(),
+            cells: (0..columns * rows).map(|_| Uuid::new_v4()).collect(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.columns.is_empty() && self.rows.is_empty() && self.cells.is_empty()
+    }
 }
 
 /// A free-form member extension beyond the rectangular grid
@@ -71,6 +104,81 @@ pub enum ExtensionType {
 }
 
 impl Kozijn {
+    fn legacy_part_id(&self, ordinal: u128) -> Uuid {
+        Uuid::from_u128(
+            (self.id.as_u128() ^ 0x4f46535f50415254535f474c4f42414c_u128)
+                .wrapping_add(ordinal),
+        )
+    }
+
+    pub(crate) fn frame_part_id(&self, index: usize) -> Uuid {
+        self.legacy_part_id(index as u128 + 1)
+    }
+
+    pub(crate) fn vertical_part_id(&self, index: usize) -> Uuid {
+        self.part_ids.columns.get(index + 1).copied()
+            .unwrap_or_else(|| self.legacy_part_id(index as u128 + 5))
+    }
+
+    pub(crate) fn horizontal_part_id(&self, index: usize) -> Uuid {
+        self.part_ids.rows.get(index + 1).copied().unwrap_or_else(|| {
+            self.legacy_part_id(self.grid.columns.len() as u128 + index as u128 + 4)
+        })
+    }
+
+    pub(crate) fn glass_part_id(&self, cell_index: usize) -> Uuid {
+        self.part_ids.cells.get(cell_index).copied().unwrap_or_else(|| {
+            self.legacy_part_id(
+                self.grid.columns.len() as u128 + self.grid.rows.len() as u128
+                    + cell_index as u128 + 3,
+            )
+        })
+    }
+
+    pub(crate) fn restore_grid_part_ids(
+        &mut self,
+        vertical: Vec<Uuid>,
+        horizontal: Vec<Uuid>,
+        glass: Vec<Uuid>,
+    ) -> Result<(), String> {
+        if vertical.len() + 1 != self.grid.columns.len()
+            || horizontal.len() + 1 != self.grid.rows.len()
+            || glass.len() != self.cells.len()
+        {
+            return Err("IFC-herstel: aantal onderdeel-ID's past niet bij de vakindeling".into());
+        }
+        let mut columns = vec![Uuid::new_v4()];
+        columns.extend(vertical);
+        let mut rows = vec![Uuid::new_v4()];
+        rows.extend(horizontal);
+        self.part_ids = PartIds { columns, rows, cells: glass };
+        Ok(())
+    }
+
+    /// Capture the IDs used by legacy files before the grid order changes.
+    fn materialize_part_ids(&mut self) {
+        let cols = self.grid.columns.len();
+        let rows = self.grid.rows.len();
+        while self.part_ids.columns.len() < cols {
+            let index = self.part_ids.columns.len();
+            self.part_ids.columns.push(self.legacy_part_id(index as u128 + 4));
+        }
+        while self.part_ids.rows.len() < rows {
+            let index = self.part_ids.rows.len();
+            self.part_ids.rows.push(self.legacy_part_id(cols as u128 + index as u128 + 3));
+        }
+        while self.part_ids.cells.len() < cols * rows {
+            let index = self.part_ids.cells.len();
+            self.part_ids.cells.push(self.legacy_part_id(
+                cols as u128 + rows as u128 + index as u128 + 3,
+            ));
+        }
+        self.part_ids.columns.truncate(cols);
+        self.part_ids.rows.truncate(rows);
+        self.part_ids.cells.truncate(cols * rows);
+        self.cells.resize_with(cols * rows, Cell::default);
+    }
+
     pub fn new(name: &str, mark: &str, width: f64, height: f64) -> Self {
         let id = Uuid::new_v4();
         Self {
@@ -122,6 +230,8 @@ impl Kozijn {
             series_id: None,
             extensions: vec![],
             layout: None,
+            part_ids: PartIds::new(1, 1),
+            recovered_from_ifc: false,
         }
     }
 
@@ -178,6 +288,8 @@ impl Kozijn {
             series_id: None,
             extensions: vec![],
             layout: None,
+            part_ids: PartIds::new(1, 1),
+            recovered_from_ifc: false,
         }
     }
 
@@ -187,6 +299,7 @@ impl Kozijn {
         clone.id = Uuid::new_v4();
         clone.mark = new_mark.to_string();
         clone.name = format!("{} (kopie)", self.name);
+        clone.part_ids = PartIds::new(clone.grid.columns.len(), clone.grid.rows.len());
         clone
     }
 
@@ -194,6 +307,9 @@ impl Kozijn {
     pub fn rebuild_cells(&mut self) {
         let num_cells = self.grid.columns.len() * self.grid.rows.len();
         self.cells.resize_with(num_cells, Cell::default);
+        self.part_ids.columns.resize_with(self.grid.columns.len(), Uuid::new_v4);
+        self.part_ids.rows.resize_with(self.grid.rows.len(), Uuid::new_v4);
+        self.part_ids.cells.resize_with(num_cells, Uuid::new_v4);
     }
 
     /// Inner width (excluding frame members)
@@ -221,6 +337,9 @@ impl Kozijn {
             for i in 0..self.grid.columns.len() {
                 let col_end = accumulated + self.grid.columns[i].size;
                 if position > accumulated && position < col_end {
+                    self.materialize_part_ids();
+                    let old_cols = self.grid.columns.len();
+                    let rows = self.grid.rows.len();
                     let mut left = position - accumulated;
                     let mut right = col_end - position;
                     // Reserve room for the divider itself: shrink both halves
@@ -240,12 +359,24 @@ impl Kozijn {
                             divider_profile: Some(ProfileRef::default_divider()),
                         },
                     );
+                    self.part_ids.columns.insert(i + 1, Uuid::new_v4());
+                    let old_cells = std::mem::take(&mut self.cells);
+                    let old_ids = std::mem::take(&mut self.part_ids.cells);
+                    for row in 0..rows {
+                        for col in 0..old_cols {
+                            self.cells.push(old_cells[row * old_cols + col].clone());
+                            self.part_ids.cells.push(old_ids[row * old_cols + col]);
+                            if col == i {
+                                self.cells.push(Cell::default());
+                                self.part_ids.cells.push(Uuid::new_v4());
+                            }
+                        }
+                    }
                     break;
                 }
                 accumulated = col_end;
             }
         }
-        self.rebuild_cells();
     }
 
     /// Add a horizontal divider (creates a new row). The new tussendorpel
@@ -260,6 +391,9 @@ impl Kozijn {
             for i in 0..self.grid.rows.len() {
                 let row_end = accumulated + self.grid.rows[i].size;
                 if position > accumulated && position < row_end {
+                    self.materialize_part_ids();
+                    let cols = self.grid.columns.len();
+                    let old_rows = self.grid.rows.len();
                     let mut top = position - accumulated;
                     let mut bottom = row_end - position;
                     // Reserve room for the divider itself (see add_column).
@@ -277,12 +411,26 @@ impl Kozijn {
                             divider_profile: Some(ProfileRef::default_divider()),
                         },
                     );
+                    self.part_ids.rows.insert(i + 1, Uuid::new_v4());
+                    let old_cells = std::mem::take(&mut self.cells);
+                    let old_ids = std::mem::take(&mut self.part_ids.cells);
+                    for row in 0..old_rows {
+                        for col in 0..cols {
+                            self.cells.push(old_cells[row * cols + col].clone());
+                            self.part_ids.cells.push(old_ids[row * cols + col]);
+                        }
+                        if row == i {
+                            for _ in 0..cols {
+                                self.cells.push(Cell::default());
+                                self.part_ids.cells.push(Uuid::new_v4());
+                            }
+                        }
+                    }
                     break;
                 }
                 accumulated = row_end;
             }
         }
-        self.rebuild_cells();
     }
 }
 
@@ -639,9 +787,13 @@ pub enum WoodType {
 #[serde(rename_all = "camelCase")]
 pub struct Placement {
     pub wall_id: Option<String>,
+    /// Origin of the lower-left corner in project coordinates, millimetres.
     pub x: f64,
     pub y: f64,
     pub z: f64,
+    /// Rotation of the width axis about project Z, in degrees.
+    /// At zero degrees the window width points along +X and its depth
+    /// points along -Y; its height always points along +Z.
     pub orientation: f64,
 }
 
@@ -649,6 +801,10 @@ pub struct Placement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
+    /// Persistent identity for project-level IFC GlobalIds. Older .ofs files
+    /// receive one on load and retain it after the next save.
+    #[serde(default = "Uuid::new_v4")]
+    pub id: Uuid,
     pub format_version: String,
     pub project_info: ProjectInfo,
     pub kozijnen: Vec<Kozijn>,
@@ -677,6 +833,7 @@ pub struct Project {
 impl Project {
     pub fn new(name: &str, number: &str) -> Self {
         Self {
+            id: Uuid::new_v4(),
             format_version: "1.3".into(),
             project_info: ProjectInfo {
                 name: name.to_string(),
@@ -723,6 +880,82 @@ pub struct Series {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn older_project_gets_persistent_id_on_next_save() {
+        let project = Project::new("Bestaand", "P-1");
+        let mut value = serde_json::to_value(&project).unwrap();
+        value.as_object_mut().unwrap().remove("id");
+        let migrated: Project = serde_json::from_value(value).unwrap();
+        assert_ne!(migrated.id, Uuid::nil());
+        let saved = serde_json::to_string(&migrated).unwrap();
+        let reopened: Project = serde_json::from_str(&saved).unwrap();
+        assert_eq!(reopened.id, migrated.id);
+    }
+
+    #[test]
+    fn inserting_column_preserves_existing_part_and_cell_identity() {
+        let mut k = Kozijn::new("Test", "K-1", 1600.0, 1400.0);
+        k.add_column(500.0);
+        k.cells[1].glazing.glass_type = "Rechter ruit".into();
+        let old_divider = k.vertical_part_id(0);
+        let old_left = k.glass_part_id(0);
+        let old_right = k.glass_part_id(1);
+        k.add_column(250.0);
+        assert_eq!(k.vertical_part_id(1), old_divider);
+        assert_eq!(k.glass_part_id(0), old_left);
+        assert_eq!(k.glass_part_id(2), old_right);
+        assert_ne!(k.glass_part_id(1), old_right);
+        assert_eq!(k.cells[2].glazing.glass_type, "Rechter ruit");
+        let reopened: Kozijn = serde_json::from_str(&serde_json::to_string(&k).unwrap()).unwrap();
+        assert_eq!(reopened.vertical_part_id(1), old_divider);
+        assert_eq!(reopened.glass_part_id(2), old_right);
+    }
+
+    #[test]
+    fn inserting_row_preserves_existing_part_and_cell_identity() {
+        let mut k = Kozijn::new("Test", "K-2", 1200.0, 1600.0);
+        k.add_row(500.0);
+        k.cells[1].glazing.glass_type = "Onderste ruit".into();
+        let old_divider = k.horizontal_part_id(0);
+        let old_bottom = k.glass_part_id(1);
+        k.add_row(250.0);
+        assert_eq!(k.horizontal_part_id(1), old_divider);
+        assert_eq!(k.glass_part_id(2), old_bottom);
+        assert_eq!(k.cells[2].glazing.glass_type, "Onderste ruit");
+    }
+
+    #[test]
+    fn legacy_ordinal_ids_are_retained_when_grid_is_split() {
+        let mut k = Kozijn::new("Oud", "K-3", 1600.0, 1400.0);
+        k.add_column(500.0);
+        let mut value = serde_json::to_value(&k).unwrap();
+        value.as_object_mut().unwrap().remove("partIds");
+        let mut legacy: Kozijn = serde_json::from_value(value).unwrap();
+        let old_divider = legacy.vertical_part_id(0);
+        let old_right = legacy.glass_part_id(1);
+        assert_eq!(old_divider, legacy.legacy_part_id(5));
+        assert_eq!(old_right, legacy.legacy_part_id(7));
+        legacy.add_column(250.0);
+        assert_eq!(legacy.vertical_part_id(1), old_divider);
+        assert_eq!(legacy.glass_part_id(2), old_right);
+    }
+
+    #[test]
+    fn multirow_split_preserves_each_existing_cell_and_duplicate_rekeys() {
+        let mut k = Kozijn::new("Raster", "K-4", 1600.0, 1600.0);
+        k.add_column(500.0);
+        k.add_row(500.0);
+        k.cells[3].glazing.glass_type = "Rechtsonder".into();
+        let before: Vec<_> = (0..4).map(|i| k.glass_part_id(i)).collect();
+        k.add_column(250.0);
+        let retained: Vec<_> = [0, 2, 3, 5].iter().map(|&i| k.glass_part_id(i)).collect();
+        assert_eq!(retained, before);
+        assert_eq!(k.cells[5].glazing.glass_type, "Rechtsonder");
+        let copy = k.duplicate("K-5");
+        assert_ne!(copy.id, k.id);
+        assert_ne!(copy.glass_part_id(5), k.glass_part_id(5));
+    }
 
     #[test]
     fn add_column_reserves_divider_space() {

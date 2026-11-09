@@ -49,17 +49,19 @@
 
 <div class="view">
   <div class="toolbar">
-    <h2>Certificatie (CE / SKH / KOMO)</h2>
+    <h2>Indicatieve normvoorcontrole (CE / SKH / KOMO)</h2>
     <div class="toolbar-actions">
       <button class="action-btn" onclick={runChecks}>Controleren</button>
       <button class="action-btn primary" onclick={generateDop} disabled={!$currentKozijn}>
-        {dopLoading ? "Genereren..." : "Genereer DoP"}
+        {dopLoading ? "Genereren..." : "Genereer concept-DoP"}
       </button>
     </div>
   </div>
 
+  <p class="scope-note">Deze controles gebruiken de beschikbare modelgegevens. Een geslaagde controle is geen CE- of KOMO-certificering en geen productievrijgave.</p>
+
   {#if !$currentKozijn}
-    <p class="hint">Selecteer een kozijn om de certificatie-checks uit te voeren.</p>
+    <p class="hint">Selecteer een kozijn om de indicatieve controles uit te voeren.</p>
   {:else if loading}
     <p class="hint">Controleren...</p>
   {:else}
@@ -68,7 +70,7 @@
         <h3>CE EN 14351-1</h3>
         {#if ceChecks.length > 0}
           <span class="badge" class:pass={allCePassed} class:fail={!allCePassed}>
-            {allCePassed ? "Voldoet" : "Aandachtspunten"}
+            {allCePassed ? "Checks geslaagd" : "Aandachtspunten"}
           </span>
         {/if}
       </div>
@@ -94,7 +96,7 @@
         <h3>SKH / KOMO</h3>
         {#if skhChecks.length > 0}
           <span class="badge" class:pass={allSkhPassed} class:fail={!allSkhPassed}>
-            {allSkhPassed ? "Voldoet" : "Aandachtspunten"}
+            {allSkhPassed ? "Checks geslaagd" : "Aandachtspunten"}
           </span>
         {/if}
       </div>
@@ -118,7 +120,7 @@
     {#if perfClass}
       <div class="cert-section">
         <div class="section-header">
-          <h3>Prestatieklassen (EN 14351-1)</h3>
+          <h3>Indicatieve prestatieklassen (EN 14351-1)</h3>
         </div>
         <div class="perf-grid">
           <div class="perf-card"><span class="perf-lbl">Luchtdoorlatendheid</span><span class="perf-val">{perfClass.airPermeability || "—"}</span><span class="perf-std">EN 12207</span></div>
@@ -134,7 +136,7 @@
     {#if dop && dop.dopNumber}
       <div class="cert-section dop-section">
         <div class="section-header">
-          <h3>Prestatieverklaring (DoP) — EN 14351-1</h3>
+          <h3>Concept prestatieverklaring (DoP) — EN 14351-1</h3>
           <span class="badge neutral">Concept</span>
         </div>
         <div class="dop-doc">
@@ -149,7 +151,7 @@
             <div><span class="lbl">AVCP-systeem</span><span>{dop.avcpSystem}</span></div>
             <div><span class="lbl">Materiaal</span><span>{dop.material}</span></div>
             <div><span class="lbl">Afmeting (b×h)</span><span>{Math.round(dop.widthMm)} × {Math.round(dop.heightMm)} mm</span></div>
-            <div><span class="lbl">Uw (gedeclareerd)</span><span>{dop.declaredUw.toFixed(2)} W/m²K</span></div>
+            <div><span class="lbl">Uw (berekend, te verifiëren)</span><span>{dop.declaredUw.toFixed(2)} W/m²K</span></div>
             <div><span class="lbl">Aangemelde instantie</span><span class="placeholder">{dop.notifiedBody}</span></div>
             <div><span class="lbl">Fabrikant</span><span class="placeholder">{dop.manufacturer}</span></div>
           </div>
@@ -184,6 +186,7 @@
   .action-btn { padding: var(--sp-2) var(--sp-4); background: var(--bg-surface-alt); color: var(--text-primary); border: 1px solid var(--border-color, #333); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: default; }
   .action-btn.primary { background: var(--amber); color: var(--bg-surface); border-color: transparent; }
   .hint { color: var(--text-muted); font-size: 13px; font-style: italic; }
+  .scope-note { padding: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-4); border-left: 3px solid var(--amber); background: var(--bg-surface-alt); color: var(--text-secondary); font-size: 12px; }
 
   .cert-section { margin-bottom: var(--sp-4); }
   .section-header { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-2); }
