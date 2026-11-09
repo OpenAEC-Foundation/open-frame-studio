@@ -1,4 +1,4 @@
-# Open Frame Studio v0.7.0-beta.1
+# Open Frame Studio v2026.46.0
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -7,13 +7,12 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Release-status:** de laatst gepubliceerde versie is [v0.6.0](https://github.com/OpenAEC-Foundation/open-frame-studio/releases). `v0.7.0-beta.1` beschrijft de broncodekandidaat. Publiceer een installer pas na de controles in [release-readiness](docs/release-readiness.md).
+> **Release-status:** `v2026.46.0` is de installer-prerelease voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
 
-> **Versie bumpen:** draai `node scripts/bump-version.mjs <nieuwe-versie>` (bv. `0.5.2`).
-> Dat werkt de versie in één keer overal bij: `Cargo.toml` (alle Rust-crates + `ofs-cloud /health`),
-> `ui/package.json` (waaruit de UI-titelbalk/menu/instellingen leest via `ui/src/lib/version.js`),
-> `src-tauri/tauri.conf.json`, de `ofs-web`-pagina's en de README-titel. Voeg daarna een
-> changelog-regel toe en draai `npm install` in `ui/` voor de lockfile.
+> **Versie bumpen:** draai `node scripts/bump-version.mjs --next` voor het volgende `JJJJ.W.N`-nummer
+> volgens de ISO-week in Nederland, of geef expliciet een nummer op (bijvoorbeeld `2026.46.0`).
+> Het script werkt Cargo, Tauri, UI, beide lockfiles, losse webpagina's en de README-titel bij.
+> Controleer daarna met `node scripts/check-version.mjs vJJJJ.W.N` en voeg releasenotities toe.
 
 ---
 
@@ -48,7 +47,7 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 
 ---
 
-## Changelog v0.7.0-beta.1 (ontwikkelstand, 2026-11-09)
+## Changelog v2026.46.0 (installer-prerelease, 2026-11-09)
 
 - IFC4-export voor één kozijn, projectkozijnen, een beperkte `IfcWindowType`-bibliotheek en een onderdelenproject met stabiele `GlobalId`'s. Ongeschikte vormen en indelingen worden vóór bestandsschrijven afgewezen; LOD400 is uitgeschakeld totdat profiel- en verbindingsdetails zijn uitgewerkt.
 - Indicatieve producentenoverdracht met onderdelen-IFC, `overdracht.json` en `onderdelen.csv`. De kruisverwijzing koppelt IFC-onderdelen aan zaag- en glaslijstregels; zij is geen importadapter of CNC-vrijgave.

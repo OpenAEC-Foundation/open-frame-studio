@@ -7,8 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag matching the source (e.g., v0.7.0-beta.1)'
+        description: 'Version tag matching the source (e.g., v2026.46.0)'
         required: true
+      prerelease:
+        description: 'Publish as a beta prerelease'
+        type: boolean
+        required: true
+        default: true
 
 jobs:
   verify:
@@ -48,6 +53,7 @@ jobs:
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
       version: ${{ steps.get-version.outputs.version }}
+      prerelease: ${{ steps.get-version.outputs.prerelease }}
 
     steps:
       - uses: actions/checkout@v6
@@ -57,8 +63,14 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "prerelease=${{ inputs.prerelease }}" >> $GITHUB_OUTPUT
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            if [[ "${GITHUB_REF#refs/tags/}" == *-* ]]; then
+              echo "prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "prerelease=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Create release
@@ -74,9 +86,46 @@ jobs:
               name: `Open Frame Studio ${version}`,
               body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE)`,
               draft: true,
-              prerelease: version.includes('-')
+              prerelease: '${{ steps.get-version.outputs.prerelease }}' === 'true'
             });
             return data.id;
+
+      - name: Write beta release notes
+        uses: actions/github-script@v8
+        env:
+          release_id: ${{ steps.create-release.outputs.result }}
+          release_version: ${{ steps.get-version.outputs.version }}
+        with:
+          script: |
+            const version = process.env.release_version;
+            const body = [
+              `# Open Frame Studio ${version}`,
+              '',
+              '**Bèta voor ontwerp- en BIM-uitwisselproeven. Geen productie-, CNC- of normvrijgave.**',
+              '',
+              '### Installers',
+              '- Windows: ondertekende NSIS-installers voor het hele systeem (administrator) en voor de huidige gebruiker.',
+              '- macOS: universele DMG voor Intel en Apple Silicon; deze build is nog niet genotariseerd.',
+              '- Linux: DEB en AppImage.',
+              '',
+              '### Huidige grenzen',
+              '- Gedetailleerde IFC4-uitvoer ondersteunt rechthoekige kozijnen met vaste beglazing. LOD400, bijzondere vormen, bewegende delen en vliesgevels vallen buiten deze export.',
+              '- IFC, JSON en CSV voor producentenoverdracht bevatten indicatieve gegevens; import in producentensoftware en machinebewerkingen zijn niet gevalideerd.',
+              '- Generieke G-code-export is geblokkeerd. CE, Bbl en SKH/KOMO zijn indicatieve voorcontroles.',
+              '- Alleen een visuele Revit-linkproef is uitgevoerd; Tekla, SketchUp en hsbDesign moeten nog worden geaccepteerd.',
+              '- Een installatietest op een schone machine is nog niet uitgevoerd.',
+              '',
+              '### Licentievermelding',
+              'De repository bevat een bestaand verschil tussen de CC BY-SA 4.0-tekst in LICENSE en AGPL-3.0 in Cargo/UI-metadata. Deze bèta wijzigt geen licentie; de rechthebbenden moeten dit verschil nog vastleggen.',
+              '',
+              `Broncode en releasecontroles: https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${version}/docs/release-readiness.md`,
+            ].join('\n');
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.release_id),
+              body,
+            });
 
   build:
     needs: create-release
@@ -93,10 +142,10 @@ jobs:
             args: '--target universal-apple-darwin'
             target: 'macos'
           - platform: 'windows-latest'
-            args: ''
+            args: '--bundles nsis'
             target: 'windows-system'
           - platform: 'windows-latest'
-            args: ''
+            args: '--bundles nsis'
             target: 'windows-user'
 
     runs-on: ${{ matrix.platform }}
@@ -135,19 +184,18 @@ jobs:
         working-directory: ui
         run: npm run build
 
-      - name: Set user install mode
-        if: matrix.target == 'windows-user'
+      - name: Set Windows install mode
+        if: contains(matrix.target, 'windows')
         shell: pwsh
         run: |
-          $conf = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          if (-not $conf.bundle.PSObject.Properties['windows']) {
-            $conf.bundle | Add-Member -NotePropertyName 'windows' -NotePropertyValue @{}
+          $conf = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json -AsHashtable
+          if ("${{ matrix.target }}" -eq "windows-system") {
+            $mode = "perMachine"
+          } else {
+            $mode = "currentUser"
           }
-          if (-not $conf.bundle.windows.PSObject.Properties['nsis']) {
-            $conf.bundle.windows | Add-Member -NotePropertyName 'nsis' -NotePropertyValue @{}
-          }
-          $conf.bundle.windows.nsis.installMode = "currentUser"
-          $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+          $conf['bundle']['windows'] = @{ 'nsis' = @{ 'installMode' = $mode } }
+          $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json -Encoding utf8
 
       - name: Clear beforeBuildCommand (frontend already built)
         shell: node {0}
@@ -223,10 +271,13 @@ jobs:
           $VERSION = "${{ needs.create-release.outputs.version }}"
           $NSIS_DIR = "target/release/bundle/nsis"
           $EXE = Get-ChildItem "$NSIS_DIR/*-setup.exe" | Select-Object -First 1
-          if ($EXE) {
-            Write-Host "Re-uploading signed installer: $($EXE.Name)"
-            gh release upload $VERSION "$($EXE.FullName)" --clobber --repo "${{ github.repository }}"
+          if (-not $EXE) { throw "Windows system NSIS installer ontbreekt" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $EXE.FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "Windows system installer heeft geen geldige Authenticode-handtekening: $($signature.Status)"
           }
+          Write-Host "Re-uploading signed installer: $($EXE.Name)"
+          gh release upload $VERSION "$($EXE.FullName)" --clobber --repo "${{ github.repository }}"
 
       - name: Upload user installer to release
         if: matrix.target == 'windows-user'
@@ -237,17 +288,54 @@ jobs:
           $VERSION = "${{ needs.create-release.outputs.version }}"
           $NSIS_DIR = "target/release/bundle/nsis"
           $EXE = Get-ChildItem "$NSIS_DIR/*-setup.exe" | Select-Object -First 1
+          if (-not $EXE) { throw "Windows user NSIS installer ontbreekt" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $EXE.FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "Windows user installer heeft geen geldige Authenticode-handtekening: $($signature.Status)"
+          }
           $NEW_NAME = $EXE.Name -replace '_x64-setup\.exe$', '_x64_user-setup.exe'
           $NEW_PATH = Join-Path $EXE.DirectoryName $NEW_NAME
           Rename-Item $EXE.FullName $NEW_PATH
           gh release upload $VERSION "$NEW_PATH" --clobber --repo "${{ github.repository }}"
           Write-Host "Uploaded user installer: $NEW_NAME"
 
+  verify-assets:
+    needs: [create-release, build]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require all installer assets before publication
+        uses: actions/github-script@v8
+        env:
+          release_id: ${{ needs.create-release.outputs.release_id }}
+        with:
+          script: |
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.release_id),
+              per_page: 100,
+            });
+            const expected = [
+              ['Windows system NSIS', /_x64-setup\.exe$/],
+              ['Windows user NSIS', /_x64_user-setup\.exe$/],
+              ['macOS universal DMG', /_universal\.dmg$/],
+              ['Linux DEB', /\.deb$/],
+              ['Linux AppImage', /\.AppImage$/],
+            ];
+            const missing = expected.filter(([, pattern]) => !assets.some(asset => pattern.test(asset.name) && asset.size > 0));
+            if (missing.length) {
+              throw new Error(`Installers ontbreken of zijn leeg: ${missing.map(([name]) => name).join(', ')}. Gevonden: ${assets.map(asset => asset.name).join(', ')}`);
+            }
+            core.info(`Gecontroleerde installers: ${assets.map(asset => `${asset.name} (${asset.size} bytes)`).join(', ')}`);
+
   publish-release:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs: [create-release, build]
+    needs: [create-release, verify-assets]
 
     steps:
       - name: Publish release
@@ -255,6 +343,7 @@ jobs:
         env:
           release_id: ${{ needs.create-release.outputs.release_id }}
           release_version: ${{ needs.create-release.outputs.version }}
+          release_prerelease: ${{ needs.create-release.outputs.prerelease }}
         with:
           script: |
             await github.rest.repos.updateRelease({
@@ -262,5 +351,5 @@ jobs:
               repo: context.repo.repo,
               release_id: process.env.release_id,
               draft: false,
-              prerelease: process.env.release_version.includes('-')
+              prerelease: process.env.release_prerelease === 'true'
             });

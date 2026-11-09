@@ -1,6 +1,6 @@
 # IFC-acceptatie: Revit, Tekla, SketchUp en hsbcad
 
-Status: 9 november 2026, bronkandidaat v0.7.0-beta.1 (nog niet als installer uitgebracht). Deze vier pakketten zijn door de opdrachtgever als eerste doel genoemd. De hier genoemde proeven betreffen de huidige, beperkte IFC4-export van Open Frame Studio (OFS), niet een claim dat ieder kozijn of iedere productieketen al uitwisselbaar is.
+Status: 9 november 2026, bronkandidaat v2026.46.0 voor een installer-prerelease. Deze vier pakketten zijn door de opdrachtgever als eerste doel genoemd. De hier genoemde proeven betreffen de huidige, beperkte IFC4-export van Open Frame Studio (OFS), niet een claim dat ieder kozijn of iedere productieketen al uitwisselbaar is.
 
 ## Uitwisselcontract en toepassingsgrens
 

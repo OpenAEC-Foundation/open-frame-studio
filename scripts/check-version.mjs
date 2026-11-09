@@ -6,6 +6,9 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const cargo = read("Cargo.toml");
 const version = cargo.match(/\[workspace\.package\][\s\S]*?\bversion\s*=\s*"([^"]+)"/)?.[1];
 if (!version) throw new Error("Workspace version ontbreekt in Cargo.toml");
+if (!/^\d{4}\.([1-9]|[1-4]\d|5[0-3])\.(0|[1-9]\d*)$/.test(version)) {
+  throw new Error(`Versie ${version} volgt niet JJJJ.W.N (ISO-week zonder voorloopnul)`);
+}
 const requestedTag = process.argv[2];
 if (requestedTag && requestedTag !== `v${version}`) {
   throw new Error(`Release-tag ${requestedTag} komt niet overeen met bronversie v${version}`);

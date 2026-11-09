@@ -1,6 +1,6 @@
-# Releasegereedheid — v0.7.0-beta.1
+# Releasegereedheid — v2026.46.0
 
-Status op 9 november 2026: **bronkandidaat voor GitHub `main`; geen publieke installer of productievrijgave**. De laatst gepubliceerde versie is v0.6.0. Een geslaagde bronbuild zegt niets over de werking van een gebundelde desktopapp of de import in een producentenpakket.
+Status op 9 november 2026: **kandidaat voor een installer-prerelease; geen productievrijgave**. De releaseworkflow bouwt installers voor evaluatie. Een geslaagde bronbuild of installerupload bewijst nog niet de werking op een schone machine of de import in een producentenpakket.
 
 ## Afgebakende bètascope
 
@@ -36,14 +36,14 @@ De unit- en parsercontroles toetsen structuur, maat en ID-stabiliteit. De [appli
 | Gate | Slaagvoorwaarde | Huidige stand |
 |---|---|---|
 | Versie en bron | UI, Cargo, lockfile, Tauri, README en losse pagina's hebben één versie; distributies komen uit dezelfde commit | Lokale versiecontrole en bronbuild geslaagd; GitHub-CI na push nog afwachten |
-| Desktopinstallatie | Een gebundelde installer start, opent/bewaart een bestaand `.ofs`-project en exporteert de proefset op een schone machine | Nog niet uitgevoerd voor v0.7.0-beta.1 |
+| Desktopinstallatie | Een gebundelde installer start, opent/bewaart een bestaand `.ofs`-project en exporteert de proefset op een schone machine | Nog niet uitgevoerd voor v2026.46.0 |
 | Browser | Nieuwe WASM wordt gebouwd en geladen; niet-ondersteunde acties geven geen schijnresultaat | Lokale `build:web` en browserproef met maken/dupliceren geslaagd; gedeployde site nog controleren |
 | BIM-referentie | Revit, Tekla, SketchUp en hsbDesign: import zonder fouten; maat, positie, eigenschappen, objecttelling en revisie aantoonbaar | Alleen visuele Revit-linkproef voor onderdelenmodel uitgevoerd |
 | Producent | Eén afgesproken systeemkozijn met leveranciersprofielen, verbindingen, glas, toleranties en prijs-/zaag-/machine-uitvoer vergeleken met een gecontroleerde referentie | Nog geen producentadapter of acceptatie |
 | Norm-/machinevrijgave | Onbekende invoer geeft onbekend of onvoldoende; CNC en controles worden pas als vrijgegeven aangeboden na systeem- en machinevalidatie | Fail-closed voor ontbrekende verklaringen en generieke G-code; producent- en normvalidatie blijft open |
 | Licentie | `LICENSE`, Cargo-metadata, UI en README noemen dezelfde door projecteigenaar bevestigde licentie | Open: CC BY-SA 4.0 en AGPL-3.0 staan nu door elkaar |
 
-Een bètacodepush naar GitHub is geen release: maak pas een versie-tag en publiceer pas binaries nadat de relevante gates geslaagd zijn. Zet acceptatiebevindingen en de exacte ondersteunde producttypen in de releasenotities. Bestaande exportbestanden met oude ILS-achtige propertysetnamen kunnen andere namen hebben dan nieuwe `OFS_`-eigenschappen; controleer migratie bij afnemers.
+De prerelease levert installers voor evaluatie. De versie-tag, geüploade bestanden en groene CI zijn geen bewijs van productiegeschiktheid; de open gates hierboven blijven zichtbaar in de releasenotities. Bestaande exportbestanden met oude ILS-achtige propertysetnamen kunnen andere namen hebben dan nieuwe `OFS_`-eigenschappen; controleer migratie bij afnemers.
 
 ### Lokale integratiecontrole op 9 november 2026
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Bump the Open Frame Studio version in EVERY place at once.
 //
-//   node scripts/bump-version.mjs 0.5.2
+//   node scripts/bump-version.mjs --next
+//   node scripts/bump-version.mjs 2026.46.0
 //
 // Most of the app already derives its version from a single source:
 //   • the Svelte UI reads ui/package.json      (via ui/src/lib/version.js)
@@ -21,15 +22,43 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const next = process.argv[2];
-if (!next || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(next)) {
-  console.error("Usage: node scripts/bump-version.mjs <semver>   (e.g. 0.5.2)");
-  process.exit(1);
-}
-
 // The current version is the single source we key off (ui/package.json).
 const pkgPath = join(root, "ui/package.json");
 const prev = JSON.parse(readFileSync(pkgPath, "utf8")).version;
+const yearWeekVersion = /^(\d{4})\.([1-9]|[1-4]\d|5[0-3])\.(0|[1-9]\d*)$/;
+
+function currentIsoYearWeek() {
+  const fields = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date()).filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const thursday = new Date(Date.UTC(fields.year, fields.month - 1, fields.day));
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+  const year = thursday.getUTCFullYear();
+  const firstDay = new Date(Date.UTC(year, 0, 1));
+  const week = Math.ceil((((thursday - firstDay) / 86400000) + 1) / 7);
+  return { year, week };
+}
+
+let next = process.argv[2];
+const showNext = next === "--show-next";
+if (next === "--next" || showNext) {
+  const { year, week } = currentIsoYearWeek();
+  const previous = yearWeekVersion.exec(prev);
+  const sequence = previous && Number(previous[1]) === year && Number(previous[2]) === week
+    ? Number(previous[3]) + 1 : 0;
+  next = `${year}.${week}.${sequence}`;
+}
+if (!next || !yearWeekVersion.test(next)) {
+  console.error("Usage: node scripts/bump-version.mjs --next | --show-next | <JJJJ.W.N>   (e.g. 2026.46.0)");
+  process.exit(1);
+}
+if (showNext) {
+  console.log(next);
+  process.exit(0);
+}
 if (prev === next) {
   console.log(`Version is already ${next} — nothing to do.`);
   process.exit(0);
