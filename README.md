@@ -7,9 +7,9 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Release-status:** `v2026.46.1` is de installer-prerelease voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
+> **Release-status:** `v2026.46.2` is de laatste release (alfa) voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
 
-> **Updaten:** de desktopapp heeft nog geen automatische updater. Een nieuwe GitHub-release verschijnt daarom niet vanzelf in een al geïnstalleerde app. Download na publicatie de passende installer rechtstreeks van [v2026.46.1](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/tag/v2026.46.1) en voer die uit; deze bèta staat niet op de stabiele `latest`-releasepagina.
+> **Updaten:** de desktopapp heeft nog geen automatische updater. Een nieuwe GitHub-release verschijnt daarom niet vanzelf in een al geïnstalleerde app. Download de passende installer rechtstreeks van de [laatste release (`latest`)](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/latest) en voer die uit, of werk bij via de OpenAEC Installer. Die leest de laatste release uit een feed die periodiek wordt vernieuwd, dus een update kan er een paar uur later staan. Een release moet daarvoor als stabiele `latest` zijn gemarkeerd; een prerelease ziet de installer niet.
 
 > **Versie bumpen:** draai `node scripts/bump-version.mjs --next` voor het volgende `JJJJ.W.N`-nummer
 > volgens de ISO-week in Nederland, of geef expliciet een nummer op (bijvoorbeeld `2026.46.0`).
