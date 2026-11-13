@@ -66,11 +66,14 @@ jobs:
             echo "prerelease=${{ inputs.prerelease }}" >> $GITHUB_OUTPUT
           else
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-            if [[ "${GITHUB_REF#refs/tags/}" == *-* ]]; then
-              echo "prerelease=true" >> $GITHUB_OUTPUT
-            else
-              echo "prerelease=false" >> $GITHUB_OUTPUT
-            fi
+            # Calendar versions (JJJJ.W.N, enforced by check-version.mjs) never
+            # contain a hyphen, so the old "tag contains -" test could never be
+            # true and every tag push became a stable 'Latest' release without
+            # the beta limits. Until a production release is agreed
+            # (docs/release-readiness.md), a tag push is a beta prerelease; a
+            # stable release needs an explicit workflow_dispatch with
+            # prerelease=false.
+            echo "prerelease=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Create release
