@@ -341,6 +341,11 @@
     {#if $currentKozijn.layout}
       <div class="section">
         <h3>{$_('props.gridSizes')}</h3>
+        <button class="convert-btn" onclick={() => { selectedLayoutLeafId.set(null); setKozijnLayout(null); }}>
+          ← Terug naar raster
+        </button>
+        <p class="hint-text">Verwijdert de vrije indeling (vakken, vullingen en getrapte vorm
+          gaan verloren; ongedaan maken kan met Ctrl+Z). Nodig om dit kozijn naar IFC te exporteren.</p>
         <p class="hint-text">Vrije indeling actief — vakken bewerk je in de tekening:
           klik een vak om te splitsen/vullen, versleep de deellijnen, Ctrl+klik
           plaatst een tussenstijl op de klikpositie (Ctrl+Alt = tussendorpel).</p>

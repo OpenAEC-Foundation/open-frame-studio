@@ -259,8 +259,10 @@ function wasmCommand(cmd, args) {
               args?.profileId, args?.profileName, args?.profileWidth ?? null, args?.profileDepth ?? null))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
 
-      // Unsupported edits must not report an unchanged kozijn as a success.
       case "update_grid_sizes":
+        return J(wasm.update_grid_sizes(args?.id, Float64Array.from(args?.columnSizes || []), Float64Array.from(args?.rowSizes || [])));
+
+      // Unsupported edits must not report an unchanged kozijn as a success.
       case "update_cell_hardware":
       case "auto_select_hardware":
       case "update_security_class":

@@ -10,6 +10,7 @@ import { toast } from "../stores/toast.js";
 import { currentKozijn, selectKozijn } from "../stores/kozijn.js";
 import { project, refreshProject, markDirty } from "../stores/project.js";
 import { refreshCustomProfiles } from "../stores/profiles.js";
+import { ifcPreflight } from "./ifcSupport.js";
 
 // In web mode file export/import commands resolve to null (no filesystem);
 // be honest about it instead of showing a success toast. In Tauri mode
@@ -169,9 +170,20 @@ export async function exportLabels() {
   toast.success(get(_)("alert.exportSuccess", { values: { type: "Labels PDF", path } }));
 }
 
+// Explain a refusal up front (before the save dialog) instead of a red toast
+// after the user already picked a file name. The Rust side stays fail-closed.
+function ifcRefused(check) {
+  if (check.ok) return false;
+  toast.warning(check.message);
+  return true;
+}
+
 export async function exportIfcWithLod(lod) {
   const k = get(currentKozijn);
   if (!k) return;
+  const check = ifcPreflight([k], lod, { allowLodFallback: true });
+  if (ifcRefused(check)) return;
+  lod = check.lod;
   const { save } = await getSaveDialog();
   const path = await save({
     filters: [{ name: "IFC", extensions: ["ifc"] }],
@@ -182,11 +194,15 @@ export async function exportIfcWithLod(lod) {
   const result = await api("export_ifc", { id: k.id, outputPath: path, lod: String(lod) });
   if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: `IFC LOD${lod}`, path } }));
+  if (check.downgraded) toast.warning(check.message);
 }
 
 export async function exportIfcProjectWithLod(lod) {
   const p = get(project);
   if (!p?.kozijnen?.length) return;
+  const check = ifcPreflight(p.kozijnen, lod, { allowLodFallback: true });
+  if (ifcRefused(check)) return;
+  lod = check.lod;
   const { save } = await getSaveDialog();
   const path = await save({
     filters: [{ name: "IFC", extensions: ["ifc"] }],
@@ -196,11 +212,13 @@ export async function exportIfcProjectWithLod(lod) {
   const result = await api("export_ifc_project", { outputPath: path, lod: String(lod) });
   if (exportUnavailable(result)) return;
   toast.success(get(_)("alert.exportSuccess", { values: { type: `Project IFC LOD${lod}`, path } }));
+  if (check.downgraded) toast.warning(check.message);
 }
 
 export async function exportIfcLibrary() {
   const p = get(project);
   if (!p?.kozijnen?.length) return;
+  if (ifcRefused(ifcPreflight(p.kozijnen, "200"))) return;
   const { save } = await getSaveDialog();
   const path = await save({
     filters: [{ name: "IFC", extensions: ["ifc"] }],
@@ -215,6 +233,7 @@ export async function exportIfcLibrary() {
 export async function exportIfcPartsProject() {
   const p = get(project);
   if (!p?.kozijnen?.length) return;
+  if (ifcRefused(ifcPreflight(p.kozijnen, "200"))) return;
   const { save } = await getSaveDialog();
   const path = await save({
     filters: [{ name: "IFC", extensions: ["ifc"] }],
@@ -229,6 +248,7 @@ export async function exportIfcPartsProject() {
 export async function exportManufacturerHandoff() {
   const p = get(project);
   if (!p?.kozijnen?.length) return;
+  if (ifcRefused(ifcPreflight(p.kozijnen, "200"))) return;
   const { open } = await getOpenDialog();
   const parent = await open({ directory: true, multiple: false, title: "Kies map voor producentenoverdracht" });
   if (!parent) return;
@@ -295,6 +315,9 @@ function toastIfcDiffSummary(result) {
 }
 
 export async function compareIfcRoundtrip() {
+  // The backend re-exports the project at LOD 300 to compare against.
+  const p = get(project);
+  if (p?.kozijnen?.length && ifcRefused(ifcPreflight(p.kozijnen, "300"))) return;
   const { open } = await getOpenDialog();
   const path = await open({
     filters: [{ name: "IFC", extensions: ["ifc"] }],

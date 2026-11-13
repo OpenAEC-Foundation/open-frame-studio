@@ -2068,11 +2068,8 @@ mod tests {
         let error = generate_ifc_parts_project(&project, &path.to_string_lossy()).unwrap_err();
         assert!(error.contains("vaste beglazing"));
         assert!(!path.exists());
-
-        let mut tiny = Project::new("Ongeldige glasmaat", "P-46");
-        tiny.kozijnen.push(Kozijn::new("Te smal", "K-03", 135.0, 300.0));
-        let error = generate_ifc_parts_project(&tiny, &path.to_string_lossy()).unwrap_err();
-        assert!(error.contains("ongeldige indicatieve"));
-        assert!(!path.exists());
+        // De glasmaat volgt de sponningregel (dagmaat + 2×(sponning − speling)) en
+        // is dus altijd positief; de oude "te klein kozijn → negatieve ruit"-
+        // weigering kan niet meer optreden. De validatie blijft als vangnet.
     }
 }

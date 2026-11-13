@@ -227,24 +227,11 @@ pub fn update_kozijn_dimensions(
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    // Scale columns proportionally
-    let old_inner_w = kozijn.inner_width();
-    let new_inner_w = width - 2.0 * kozijn.frame.frame_width;
-    let scale_w = new_inner_w / old_inner_w;
-    for col in &mut kozijn.grid.columns {
-        col.size *= scale_w;
-    }
-
-    // Scale rows proportionally
-    let old_inner_h = kozijn.inner_height();
-    let new_inner_h = height - 2.0 * kozijn.frame.frame_width;
-    let scale_h = new_inner_h / old_inner_h;
-    for row in &mut kozijn.grid.rows {
-        row.size *= scale_h;
-    }
-
     kozijn.frame.outer_width = width;
     kozijn.frame.outer_height = height;
+    // Re-fit vakken to the new binnenmaat incl. tussenstijlen (invariant of
+    // add_column/add_row; plain new/old scaling drifted and broke IFC export).
+    kozijn.fit_grid_to_frame();
 
     Ok(kozijn.clone())
 }
@@ -264,16 +251,9 @@ pub fn update_grid_sizes(
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    for (i, col) in kozijn.grid.columns.iter_mut().enumerate() {
-        if let Some(&new_size) = column_sizes.get(i) {
-            col.size = new_size.max(100.0); // minimum 100mm
-        }
-    }
-    for (i, row) in kozijn.grid.rows.iter_mut().enumerate() {
-        if let Some(&new_size) = row_sizes.get(i) {
-            row.size = new_size.max(100.0);
-        }
-    }
+    // Typed sizes stay exact; untouched vakken absorb the difference so the
+    // dimension chain keeps closing on the binnenmaat.
+    kozijn.set_grid_sizes_fitted(&column_sizes, &row_sizes);
 
     Ok(kozijn.clone())
 }
@@ -294,25 +274,9 @@ pub fn update_frame_profile(
         .ok_or("Kozijn niet gevonden")?;
     kozijn.frame.profile = ProfileRef { id: profile_id, name: profile_name };
     if let Some(w) = profile_width {
-        let old_fw = kozijn.frame.frame_width;
         kozijn.frame.frame_width = w;
-        // Rescale grid to fit new frame width
-        let old_inner = kozijn.frame.outer_width - 2.0 * old_fw;
-        let new_inner = kozijn.frame.outer_width - 2.0 * w;
-        if old_inner > 0.0 && new_inner > 0.0 {
-            let scale = new_inner / old_inner;
-            for col in &mut kozijn.grid.columns {
-                col.size *= scale;
-            }
-        }
-        let old_inner_h = kozijn.frame.outer_height - 2.0 * old_fw;
-        let new_inner_h = kozijn.frame.outer_height - 2.0 * w;
-        if old_inner_h > 0.0 && new_inner_h > 0.0 {
-            let scale_h = new_inner_h / old_inner_h;
-            for row in &mut kozijn.grid.rows {
-                row.size *= scale_h;
-            }
-        }
+        // Re-fit the grid: the frame width is also the tussenstijl width.
+        kozijn.fit_grid_to_frame();
     }
     if let Some(d) = profile_depth {
         kozijn.frame.frame_depth = d;

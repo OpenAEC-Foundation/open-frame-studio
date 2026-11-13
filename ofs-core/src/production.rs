@@ -209,29 +209,36 @@ fn miter_gross_length(net: f64, material: &Material, fw: f64) -> f64 {
     net + SAW_KERF_MM + 2.0 * (fw.max(0.0) + weld)
 }
 
+/// Sponninghoogte (glasinval) waarmee glas en glaslatten gemaakt worden: die van
+/// het gekozen profiel, anders de norm per materiaal (hout 17, PVC 20, alu 25 —
+/// `profile::norm_glasinval`). Elk nieuw kozijn en elk sjabloon heeft nog geen
+/// snapshot; vroeger viel het glas dan terug op dagmaat − 8 mm, een ruit die
+/// KLEINER is dan de opening en in de sponning zou vallen.
+fn effective_sponning_hoogte(
+    snapshot: Option<&crate::profile::ProfileSnapshot>,
+    material: &Material,
+) -> f64 {
+    match snapshot {
+        Some(snap) => snap.resolved_sponning_hoogte(material),
+        None => crate::profile::norm_glasinval(material),
+    }
+}
+
 /// Glasmaat voor één dagmaat, per R2 (KVT 12.2 / NPR 3577-uitleg, zie
-/// docs/profielmaten-onderzoek.md §5): met profielsnapshot valt het glas in de
-/// sponning — glasmaat = sponningmaat − 2 × omtrekspeling (5 mm per zijde,
-/// NPR-minimum). Kozijnen zonder snapshot houden de historische dagmaat −
-/// 2 × GLASS_CLEARANCE_MM, zodat oude projecten identiek blijven. Gedeeld
-/// door het grid-pad en het layout-pad zodat beide dezelfde glasmaat leveren.
+/// docs/profielmaten-onderzoek.md §5): het glas valt in de sponning —
+/// glasmaat = sponningmaat − 2 × omtrekspeling (5 mm per zijde, NPR-minimum),
+/// met de sponninghoogte uit het profiel of de materiaalnorm (zie
+/// `effective_sponning_hoogte`). Gedeeld door het grid-pad en het layout-pad
+/// zodat beide dezelfde glasmaat leveren.
 fn glass_size_for_day(
     day_w: f64,
     day_h: f64,
     snapshot: Option<&crate::profile::ProfileSnapshot>,
     material: &Material,
 ) -> (f64, f64) {
-    match snapshot {
-        Some(snap) => {
-            let sh = snap.resolved_sponning_hoogte(material);
-            let oversize = 2.0 * sh - 2.0 * GLASS_EDGE_CLEARANCE_MM;
-            ((day_w + oversize).max(0.0), (day_h + oversize).max(0.0))
-        }
-        None => (
-            day_w - 2.0 * GLASS_CLEARANCE_MM,
-            day_h - 2.0 * GLASS_CLEARANCE_MM,
-        ),
-    }
+    let sh = effective_sponning_hoogte(snapshot, material);
+    let oversize = 2.0 * sh - 2.0 * GLASS_EDGE_CLEARANCE_MM;
+    ((day_w + oversize).max(0.0), (day_h + oversize).max(0.0))
 }
 
 /// Glaslat-zaaglengte (som van de vier latten) voor één dagmaat, per KVT
@@ -249,21 +256,18 @@ fn glaslat_total_length(
     material: &Material,
     gl: &crate::glaslat::Glaslat,
 ) -> f64 {
-    match snapshot {
-        Some(snap) => {
-            let sh = snap.resolved_sponning_hoogte(material);
-            let sponningmaat_w = day_w.max(0.0) + 2.0 * sh;
-            let sponningmaat_h = day_h.max(0.0) + 2.0 * sh;
-            let horizontaal = (sponningmaat_w - 1.0).max(0.0);
-            let verticaal = if gl.mitered {
-                (sponningmaat_h - 1.0).max(0.0)
-            } else {
-                (sponningmaat_h - 2.0 * gl.height_mm - 1.0).max(0.0)
-            };
-            2.0 * horizontaal + 2.0 * verticaal
-        }
-        None => 2.0 * (day_w.max(0.0) + day_h.max(0.0)),
-    }
+    // Same sponning as the glass (profile snapshot or material norm), so bead
+    // and glass always agree on the rebate.
+    let sh = effective_sponning_hoogte(snapshot, material);
+    let sponningmaat_w = day_w.max(0.0) + 2.0 * sh;
+    let sponningmaat_h = day_h.max(0.0) + 2.0 * sh;
+    let horizontaal = (sponningmaat_w - 1.0).max(0.0);
+    let verticaal = if gl.mitered {
+        (sponningmaat_h - 1.0).max(0.0)
+    } else {
+        (sponningmaat_h - 2.0 * gl.height_mm - 1.0).max(0.0)
+    };
+    2.0 * horizontaal + 2.0 * verticaal
 }
 
 /// Vleugelleden (raamhout/deurhout) voor één vak op het layout-pad — dezelfde
@@ -1720,9 +1724,10 @@ mod tests {
     }
 
     #[test]
-    fn test_glaslat_lengths_without_snapshot_keep_legacy_perimeter() {
-        // Regression: pre-snapshot kozijnen keep the historic day-size
-        // perimeter for the bead cut length.
+    fn test_glaslat_lengths_without_snapshot_use_material_norm_sponning() {
+        // Kozijnen zonder profielsnapshot (elk nieuw kozijn/sjabloon) rekenen
+        // met de materiaalnorm (hout 17 mm) i.p.v. de kale dagmaat-omtrek, zodat
+        // de lat bij de glasmaat past. Identiek aan een expliciete 17 mm snapshot.
         let mut k = Kozijn::new("Test", "T09", 900.0, 1400.0);
         k.cells[0].glaslat = Some(crate::glaslat::Glaslat::default()); // 15x17, verstek
         assert!(k.frame.profile_snapshot.is_none());
@@ -1730,9 +1735,9 @@ mod tests {
         let prod = compute_production_data(&k);
         assert_eq!(prod.glaslat_list.len(), 1);
         let item = &prod.glaslat_list[0];
-        let gw = 900.0 - 2.0 * 67.0; // 766
-        let gh = 1400.0 - 2.0 * 67.0; // 1266
-        assert!((item.total_length_mm - 2.0 * (gw + gh)).abs() < 0.01);
+        let sm_w = 766.0 + 2.0 * 17.0; // sponningmaat 800
+        let sm_h = 1266.0 + 2.0 * 17.0; // sponningmaat 1300
+        assert!((item.total_length_mm - (2.0 * (sm_w - 1.0) + 2.0 * (sm_h - 1.0))).abs() < 0.01);
         assert_eq!(item.quantity, 4);
     }
 
@@ -1767,9 +1772,10 @@ mod tests {
     }
 
     #[test]
-    fn test_glass_size_without_snapshot_keeps_legacy_clearance() {
-        // Regression: pre-snapshot kozijnen keep the historic
-        // dagmaat − 2 × GLASS_CLEARANCE_MM glass size.
+    fn test_glass_size_without_snapshot_follows_material_norm() {
+        // Een nieuw kozijn heeft nog geen profielsnapshot. Het glas moet dan
+        // toch in de sponning vallen (norm hout 17 mm → dagmaat + 24), niet de
+        // oude dagmaat − 8 mm: een ruit KLEINER dan de opening.
         let k = Kozijn::new("Test", "T12", 900.0, 1400.0);
         assert!(k.frame.profile_snapshot.is_none());
 
@@ -1777,8 +1783,17 @@ mod tests {
         let glass = &prod.glass_list[0];
         let day_w = 900.0 - 2.0 * 67.0; // 766
         let day_h = 1400.0 - 2.0 * 67.0; // 1266
-        assert!((glass.width_mm - (day_w - 2.0 * GLASS_CLEARANCE_MM)).abs() < 0.01);
-        assert!((glass.height_mm - (day_h - 2.0 * GLASS_CLEARANCE_MM)).abs() < 0.01);
+        assert!((glass.width_mm - (day_w + 24.0)).abs() < 0.01);
+        assert!((glass.height_mm - (day_h + 24.0)).abs() < 0.01);
+        // Identiek aan een expliciete snapshot met dezelfde 17 mm sponning.
+        let mut with_snap = k.clone();
+        with_snap.frame.profile_snapshot = Some(crate::profile::ProfileSnapshot {
+            sponning_hoogte: Some(17.0),
+            ..Default::default()
+        });
+        let g2 = &compute_production_data(&with_snap).glass_list[0];
+        assert!((g2.width_mm - glass.width_mm).abs() < 1e-9);
+        assert!((g2.height_mm - glass.height_mm).abs() < 1e-9);
     }
 
     #[test]

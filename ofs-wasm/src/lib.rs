@@ -146,14 +146,19 @@ pub fn update_kozijn_dimensions(id: &str, width: f64, height: f64) -> Result<Str
         let k = &mut p.kozijnen[idx];
         k.frame.outer_width = width;
         k.frame.outer_height = height;
-        // Recalculate grid
-        let fw = k.frame.frame_width;
-        if k.grid.columns.len() == 1 {
-            k.grid.columns[0].size = width - 2.0 * fw;
-        }
-        if k.grid.rows.len() == 1 {
-            k.grid.rows[0].size = height - 2.0 * fw;
-        }
+        // Re-fit all vakken (not only single-column grids) incl. tussenstijlen.
+        k.fit_grid_to_frame();
+        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+/// Browser twin of the Tauri `update_grid_sizes`: typed vak sizes stay exact,
+/// untouched vakken absorb the difference (chain keeps closing on binnenmaat).
+#[wasm_bindgen]
+pub fn update_grid_sizes(id: &str, column_sizes: Vec<f64>, row_sizes: Vec<f64>) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        p.kozijnen[idx].set_grid_sizes_fitted(&column_sizes, &row_sizes);
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -363,26 +368,9 @@ pub fn update_frame_profile(
             name: profile_name.to_string(),
         };
         if let Some(w) = profile_width {
-            let old_fw = k.frame.frame_width;
             k.frame.frame_width = w;
-            // Rescale the grid to the new frame width (same semantics as the
-            // Tauri command).
-            let old_inner = k.frame.outer_width - 2.0 * old_fw;
-            let new_inner = k.frame.outer_width - 2.0 * w;
-            if old_inner > 0.0 && new_inner > 0.0 {
-                let scale = new_inner / old_inner;
-                for col in &mut k.grid.columns {
-                    col.size *= scale;
-                }
-            }
-            let old_inner_h = k.frame.outer_height - 2.0 * old_fw;
-            let new_inner_h = k.frame.outer_height - 2.0 * w;
-            if old_inner_h > 0.0 && new_inner_h > 0.0 {
-                let scale_h = new_inner_h / old_inner_h;
-                for row in &mut k.grid.rows {
-                    row.size *= scale_h;
-                }
-            }
+            // Re-fit the grid (same semantics as the Tauri command).
+            k.fit_grid_to_frame();
         }
         if let Some(d) = profile_depth {
             k.frame.frame_depth = d;

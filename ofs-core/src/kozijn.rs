@@ -322,6 +322,60 @@ impl Kozijn {
         self.frame.outer_height - 2.0 * self.frame.frame_width
     }
 
+    /// Re-fit the grid to the current frame (outer size + frame width) while
+    /// keeping the invariant Σ(vakken) + (n−1)·frame_width = binnenmaat — the
+    /// same one `add_column`/`add_row` establish. Callers change
+    /// `outer_*`/`frame_width` first, then call this. Scaling the vakken by
+    /// new_inner/old_inner alone ignores the tussenstijlen and drifts (1200 →
+    /// 1210 mm is already 0,63 mm off), which the IFC preflight rejects.
+    pub fn fit_grid_to_frame(&mut self) {
+        let fw = self.frame.frame_width;
+        let cols_target = self.inner_width() - fw * self.grid.columns.len().saturating_sub(1) as f64;
+        let rows_target = self.inner_height() - fw * self.grid.rows.len().saturating_sub(1) as f64;
+        let mut cols: Vec<f64> = self.grid.columns.iter().map(|c| c.size).collect();
+        let mut rows: Vec<f64> = self.grid.rows.iter().map(|r| r.size).collect();
+        fit_sizes(&mut cols, cols_target, &[]);
+        fit_sizes(&mut rows, rows_target, &[]);
+        for (c, s) in self.grid.columns.iter_mut().zip(cols) {
+            c.size = s;
+        }
+        for (r, s) in self.grid.rows.iter_mut().zip(rows) {
+            r.size = s;
+        }
+    }
+
+    /// Apply explicit vak sizes (typed by the user) and restore the grid
+    /// invariant by letting the vakken the user did NOT touch absorb the
+    /// difference, so a typed value stays exactly as typed.
+    pub fn set_grid_sizes_fitted(&mut self, column_sizes: &[f64], row_sizes: &[f64]) {
+        let fw = self.frame.frame_width;
+        let cols_target = self.inner_width() - fw * self.grid.columns.len().saturating_sub(1) as f64;
+        let rows_target = self.inner_height() - fw * self.grid.rows.len().saturating_sub(1) as f64;
+        let apply = |current: Vec<f64>, wanted: &[f64], target: f64| -> Vec<f64> {
+            let mut sizes = current.clone();
+            let mut pinned = vec![false; sizes.len()];
+            for (i, s) in sizes.iter_mut().enumerate() {
+                if let Some(&w) = wanted.get(i) {
+                    let w = w.max(100.0); // minimum 100mm
+                    if (w - current[i]).abs() > 1e-6 {
+                        pinned[i] = true;
+                    }
+                    *s = w;
+                }
+            }
+            fit_sizes(&mut sizes, target, &pinned);
+            sizes
+        };
+        let cols = apply(self.grid.columns.iter().map(|c| c.size).collect(), column_sizes, cols_target);
+        let rows = apply(self.grid.rows.iter().map(|r| r.size).collect(), row_sizes, rows_target);
+        for (c, s) in self.grid.columns.iter_mut().zip(cols) {
+            c.size = s;
+        }
+        for (r, s) in self.grid.rows.iter_mut().zip(rows) {
+            r.size = s;
+        }
+    }
+
     /// Add a vertical divider (creates a new column). The new tussenstijl
     /// occupies `frame_width` mm, which is subtracted proportionally from the
     /// two new column sizes so that Σ(kolommen) + Σ(tussenstijlen) stays
@@ -429,6 +483,36 @@ impl Kozijn {
                     break;
                 }
                 accumulated = row_end;
+            }
+        }
+    }
+}
+
+/// Scale `sizes` so they sum to `target`. Entries flagged in `pinned` keep
+/// their value; only the others absorb the difference (proportionally). When
+/// everything is pinned (or the free entries would go non-positive) all
+/// entries are scaled instead, so the result is always positive and exact.
+fn fit_sizes(sizes: &mut [f64], target: f64, pinned: &[bool]) {
+    if sizes.is_empty() || target <= 0.0 {
+        return;
+    }
+    let is_pinned = |i: usize| pinned.get(i).copied().unwrap_or(false);
+    let pinned_sum: f64 = sizes.iter().enumerate().filter(|(i, _)| is_pinned(*i)).map(|(_, s)| *s).sum();
+    let free_sum: f64 = sizes.iter().enumerate().filter(|(i, _)| !is_pinned(*i)).map(|(_, s)| *s).sum();
+    let free_target = target - pinned_sum;
+    if free_sum > 0.0 && free_target > 0.0 {
+        let scale = free_target / free_sum;
+        for (i, s) in sizes.iter_mut().enumerate() {
+            if !is_pinned(i) {
+                *s *= scale;
+            }
+        }
+    } else {
+        let sum: f64 = sizes.iter().sum();
+        if sum > 0.0 {
+            let scale = target / sum;
+            for s in sizes.iter_mut() {
+                *s *= scale;
             }
         }
     }
@@ -974,6 +1058,56 @@ mod tests {
         assert!((ratio - 400.0 / 666.0).abs() < 1e-6);
         // Both columns stay positive.
         assert!(k.grid.columns.iter().all(|c| c.size > 0.0));
+    }
+
+    fn grid_closes(k: &Kozijn) {
+        let fw = k.frame.frame_width;
+        let cols: f64 = k.grid.columns.iter().map(|c| c.size).sum();
+        let rows: f64 = k.grid.rows.iter().map(|r| r.size).sum();
+        let cols_total = cols + fw * (k.grid.columns.len() - 1) as f64;
+        let rows_total = rows + fw * (k.grid.rows.len() - 1) as f64;
+        assert!((cols_total - k.inner_width()).abs() < 1e-6, "cols {} != inner {}", cols_total, k.inner_width());
+        assert!((rows_total - k.inner_height()).abs() < 1e-6, "rows {} != inner {}", rows_total, k.inner_height());
+    }
+
+    #[test]
+    fn fit_grid_keeps_chain_closed_after_resize_and_profile_change() {
+        let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
+        k.add_column(500.0);
+        k.add_row(600.0);
+        grid_closes(&k);
+        // Maatwijziging: 1200 -> 1210 was 0,63 mm off with plain new/old scaling.
+        k.frame.outer_width = 1210.0;
+        k.fit_grid_to_frame();
+        grid_closes(&k);
+        k.frame.outer_width = 1500.0;
+        k.frame.outer_height = 1700.0;
+        k.fit_grid_to_frame();
+        grid_closes(&k);
+        // Profielbreedte 67 -> 78 verandert ook de dividerbreedte.
+        k.frame.frame_width = 78.0;
+        k.fit_grid_to_frame();
+        grid_closes(&k);
+        assert!(k.grid.columns.iter().all(|c| c.size > 0.0));
+        assert!(k.grid.rows.iter().all(|r| r.size > 0.0));
+    }
+
+    #[test]
+    fn typed_vak_size_stays_exact_and_neighbours_absorb() {
+        let mut k = Kozijn::new("Test", "K01", 1600.0, 1500.0);
+        k.add_column(500.0);
+        k.add_column(900.0);
+        let before: Vec<f64> = k.grid.columns.iter().map(|c| c.size).collect();
+        let rows: Vec<f64> = k.grid.rows.iter().map(|r| r.size).collect();
+        let mut wanted = before.clone();
+        wanted[0] = 300.0;
+        k.set_grid_sizes_fitted(&wanted, &rows);
+        assert!((k.grid.columns[0].size - 300.0).abs() < 1e-9, "typed value must stay exact");
+        grid_closes(&k);
+        // The untouched vakken kept their mutual ratio.
+        let r_before = before[1] / before[2];
+        let r_after = k.grid.columns[1].size / k.grid.columns[2].size;
+        assert!((r_before - r_after).abs() < 1e-9);
     }
 
     #[test]
