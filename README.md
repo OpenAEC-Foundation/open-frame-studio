@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.46.1
+# Open Frame Studio v2026.46.2
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.46.2 (installer-prerelease, 2026-11-13)
+
+- **IFC-export blijft werken na een maatwijziging.** Vakmaten werden bij maat-, profiel- en vakmaatwijzigingen herschaald zonder de tussenstijlen mee te rekenen, waardoor de maatketen niet meer sloot en elke IFC-export en producentenoverdracht werd geweigerd (1200 → 1210 mm was al genoeg). De keten sluit nu altijd; een getypte vakmaat blijft exact staan en de overige vakken vangen het verschil op. De browserversie herschaalt nu ook kozijnen met meerdere vakken.
+- **IFC-weigeringen worden vooraf uitgelegd.** Vrije indeling, aanbouw en niet-rechthoekige kozijnen worden gemeld vóór het opslaan-dialoog, met de naam van het kozijn. LOD 300 met draaiende delen of deuren valt automatisch terug op LOD 200, met melding. Nieuwe knop **Terug naar raster** in de eigenschappen als herstelpad voor de vrije indeling.
+- **Glasmaat in de sponning.** Kozijnen zonder gekozen profiel gaven dagmaat − 8 mm (een ruit kleiner dan de opening). Glas en glaslatten rekenen nu met de sponning uit het profiel of de materiaalnorm (hout 17, PVC 20, alu 25 mm): hout geeft dagmaat + 24 mm, gelijk aan een expliciet gekozen profiel. Het producentenpakket krijgt zo een bestelmaat die niet kleiner is dan de zichtmaat.
 
 ## Changelog v2026.46.1 (installer-prerelease, 2026-11-09)
 
