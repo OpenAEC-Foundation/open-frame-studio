@@ -7,9 +7,9 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Releasekanaal** — Versie `v2026.47.0` verschijnt via GitHub Latest en de OpenAEC Installer voor ontwerp- en BIM-uitwisselproeven. [Releasecontroles](docs/release-readiness.md) · [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases)
+> **Releasekanaal** — Open Frame Studio gebruikt GitHub Latest voor de installers van v2026.47.0. De software is bedoeld voor ontwerp- en BIM-uitwisselproeven. [Releasecontroles](docs/release-readiness.md) · [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases)
 
-> **Updaten:** de desktopapp heeft nog geen automatische updater. Een nieuwe GitHub-release verschijnt daarom niet vanzelf in een al geïnstalleerde app. Download de passende installer rechtstreeks van de [laatste release (`latest`)](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/latest) en voer die uit, of werk bij via de OpenAEC Installer. Die leest de laatste release uit een feed die periodiek wordt vernieuwd, dus een update kan er een paar uur later staan. Een release moet daarvoor als stabiele `latest` zijn gemarkeerd; een prerelease ziet de installer niet.
+> **Installeren en bijwerken** — Download de installer voor je besturingssysteem via de [laatste GitHub-release](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/latest) en voer die uit. De OpenAEC Installer heeft Open Frame Studio op 19 november 2026 uit zijn catalogus verwijderd. [Wijziging in de Installer-catalogus](https://github.com/OpenAEC-Foundation/openaec-installer/commit/b6da4a008b1df85488a06b87daf039c7bbef864f)
 
 > **Versie bumpen:** draai `node scripts/bump-version.mjs --next` voor het volgende `JJJJ.W.N`-nummer
 > volgens de ISO-week in Nederland, of geef expliciet een nummer op (bijvoorbeeld `2026.46.0`).
