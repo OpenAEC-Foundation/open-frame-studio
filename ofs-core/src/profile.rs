@@ -42,6 +42,15 @@ impl ProfileRef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileSnapshot {
+    /// Number of closing seal circuits on a hinged system sash (AD / MD).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sealing_levels: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meeting_gap: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_face_width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_build_depth: Option<f64>,
     /// Width of the bead and glazing together in systems with selectable beads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bead_width_base: Option<f64>,

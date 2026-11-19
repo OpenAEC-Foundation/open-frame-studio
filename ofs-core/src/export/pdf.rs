@@ -495,6 +495,41 @@ pub fn generate_production_pdf(
             y -= 4.0;
         }
 
+        let seals: Vec<_> = prod.gasket_list.iter().filter_map(|item| {
+            let r = item.reference.as_ref()?;
+            let quantity = if item.quantity == 0 { "opgave".into() } else { item.quantity.to_string() };
+            Some(vec![r.piece_id.clone(), r.profile_name.clone(), item.gasket_type.label_nl().into(),
+                r.line.label_nl().into(), format!("{:.1}", item.length_mm), quantity])
+        }).collect();
+        if !seals.is_empty() {
+            y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 25.0);
+            ops.extend(text_ops("Rubberlijst", 12.0, margin, y, font_bold(), AMBER));
+            y -= 5.0;
+            ops.extend(text_ops("Netto modelomtrek in mm. Bepaal groefpositie en snijtoeslag volgens het profielsysteem.",
+                8.0, margin, y, font(), DEEP_FORGE));
+            y -= 4.0;
+            y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y,
+                &["Positie", "Profiel", "Dichting", "Meetlijn", "Lengte (mm)", "Aantal"],
+                &[29.0, 57.0, 52.0, 47.0, 24.0, 16.0], &wrap_details(&seals)) - 5.0;
+        }
+        let hardware: Vec<_> = prod.hardware_list.iter().filter(|item| item.quantity > 0).filter_map(|item| {
+            let piece = item.piece_id.as_ref()?;
+            Some(vec![piece.clone(), item.component.clone(), item.description.clone(), item.quantity.to_string()])
+        }).collect();
+        if !hardware.is_empty() {
+            y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 22.0);
+            ops.extend(text_ops("Beslag per vleugel", 12.0, margin, y, font_bold(), AMBER));
+            y -= 6.0;
+            y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y,
+                &["Positie", "Component", "Montage / omschrijving", "Aantal"],
+                &[32.0, 44.0, 72.0, 16.0], &wrap_details(&hardware)) - 5.0;
+        }
+        for item in prod.hardware_list.iter().filter(|i| i.piece_id.is_some() && i.quantity == 0) {
+            y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 11.0);
+            let line = format!("{}   {}   {}", item.piece_id.as_deref().unwrap_or(""), item.component, item.description);
+            ops.extend(text_ops(&line, 8.0, margin, y, font_bold(), DEEP_FORGE));
+            y -= 6.0;
+        }
         if !prod.bom.is_empty() {
             y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 16.0);
             ops.extend(text_ops("Stuklijst (BOM)", 12.0, margin, y, font_bold(), AMBER));
@@ -504,6 +539,7 @@ pub fn generate_production_pdf(
             let rows: Vec<Vec<String>> = prod.bom.iter().map(|i| vec![
                 i.category.clone(), i.description.clone(), i.unit.clone(), format!("{:.2}", i.quantity),
             ]).collect();
+            let rows = if seals.is_empty() { rows } else { wrap_details(&rows) };
             pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows);
         }
 
@@ -541,6 +577,29 @@ fn ensure_table_space(doc: &mut PdfDocument, ops: &mut Vec<Op>, mark: &str, y: f
     doc.pages.push(PdfPage::new(Mm(A4_W), Mm(A4_H), std::mem::take(ops)));
     ops.extend(text_ops(&format!("Productiestaten - {mark} (vervolg)"), 14.0, 12.0, A4_H - 12.0, font_bold(), DEEP_FORGE));
     A4_H - 22.0
+}
+
+// The workshop table renderer permits 30 characters per cell. Keep the full
+// system/stock designation by flowing long values onto continuation lines.
+fn wrap_details(rows: &[Vec<String>]) -> Vec<Vec<String>> {
+    let mut out = Vec::new();
+    for row in rows {
+        let columns: Vec<Vec<String>> = row.iter().map(|value| {
+            let mut lines = Vec::new();
+            let mut rest = value.as_str();
+            while let Some((end, _)) = rest.char_indices().nth(30) {
+                let split = rest[..end].rfind(' ').filter(|i| *i > 0).unwrap_or(end);
+                lines.push(rest[..split].to_owned());
+                rest = rest[split..].trim_start();
+            }
+            lines.push(rest.to_owned());
+            lines
+        }).collect();
+        for i in 0..columns.iter().map(Vec::len).max().unwrap_or(0) {
+            out.push(columns.iter().map(|column| column.get(i).cloned().unwrap_or_default()).collect());
+        }
+    }
+    out
 }
 
 fn pdf_table(doc: &mut PdfDocument, ops: &mut Vec<Op>, mark: &str, x0: f32, y0: f32, headers: &[&str], widths: &[f32], rows: &[Vec<String>]) -> f32 {

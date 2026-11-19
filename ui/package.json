@@ -1,7 +1,7 @@
 {
   "name": "open-frame-studio-ui",
   "private": true,
-  "version": "2026.47.0",
+  "version": "2026.47.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

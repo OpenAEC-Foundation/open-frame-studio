@@ -30,6 +30,7 @@
   import { PANEL_TYPE_KEYS, panelLabel, memberLabel, timberMemberType } from "../../lib/labels.js";
   import { archJointLabel, endLabel, jointMemberLabel, receiverLabel } from "../../lib/dividerJoinery.js";
   import HardwarePanel from "./HardwarePanel.svelte";
+  import HardwareSchedule from "./HardwareSchedule.svelte";
   import JointPanel from "./JointPanel.svelte";
   import GlazingPanel from "./GlazingPanel.svelte";
   import GlazingDimensions from "./GlazingDimensions.svelte";
@@ -39,6 +40,7 @@
   import PanelFillingPanel from "./PanelFillingPanel.svelte";
   import GlaslatPanel from "./GlaslatPanel.svelte";
   import ProfileSelector from "./ProfileSelector.svelte";
+  import PerimeterStopPanel from "./PerimeterStopPanel.svelte";
   import ProfileCrossSection from "./ProfileCrossSection.svelte";
   import { RAL_COLORS, ralToHex } from "../../lib/ral-colors.js";
 
@@ -77,6 +79,14 @@
     return geom.cellRects?.find(cr => cr.cellIndex === index);
   }
   $: opening = selectedOpening($currentKozijn, $currentGeometry, $selectedLayoutLeafId, $selectedCellIndex);
+  $: systemMaterial = ["pvc", "aluminum"].includes($currentKozijn?.frame.material) ? $currentKozijn.frame.material : null;
+  $: supportsStop = ["rectangular", "arched", "round", "trapezoid", "arched_trapezoid"].includes(
+    $currentKozijn?.frame.shape?.shapeType ?? "rectangular"
+  ) && !containsOutsideLeaf($currentKozijn?.layout);
+
+  function containsOutsideLeaf(node) {
+    return node?.kind === "leaf" ? node.vulling?.type === "buiten" : node?.children?.some(c => containsOutsideLeaf(c.node));
+  }
   $: timber = $currentGeometry?.curvedTimber?.find(piece => timberMemberType(piece) === $selectedMember?.type && piece.index === $selectedMember.index);
   $: dividerParts = $currentGeometry?.curvedDividerTimber?.filter(p =>
     $selectedMember?.type === (p.vertical ? "divider_v" : "divider_h") && $selectedMember.index === p.sourceIndex) ?? [];
@@ -322,6 +332,7 @@
         <ProfileSelector
           label={$_('props.sillProfile')}
           filter="sill"
+          systemProfile={systemMaterial ? $currentKozijn.frame.profile : null}
           value={$currentKozijn.frame.sillProfile}
           onchange={(detail) => updateSillProfile(detail.id, detail.name)}
         />
@@ -464,12 +475,14 @@
 
     {#if $currentKozijn.layout && $selectedLayoutLeafId}
       <VakVullingPanel />
+      <HardwareSchedule leaves={opening?.hardwareLeaves ?? []} />
     {/if}
     {#if opening?.fit && !$selectedMember}
-      <GlazingDimensions fit={opening.fit} paired={!!opening.secondFit && !opening.fit.contours?.sashOuter}
+      <GlazingDimensions fit={opening.fit} leaf={opening.secondFit ? "left" : null}
+        paired={!!opening.secondFit && !opening.fit.contours?.sashOuter && !opening.fit.systemSeals}
         timber={typeof $currentKozijn.frame.material === "object" || $currentKozijn.frame.material === "wood_aluminum"} />
-      {#if opening.secondFit?.contours?.sashOuter}
-        <GlazingDimensions fit={opening.secondFit}
+      {#if opening.secondFit?.sashOuter}
+        <GlazingDimensions fit={opening.secondFit} leaf="right"
           timber={typeof $currentKozijn.frame.material === "object" || $currentKozijn.frame.material === "wood_aluminum"} />
       {/if}
     {/if}
@@ -514,6 +527,7 @@
         <ProfileSelector
           label={$_('member.profile')}
           filter={getMemberProfileFilter($selectedMember)}
+          systemProfile={systemMaterial ? $currentKozijn.frame.profile : null}
           value={getMemberProfile($selectedMember)}
           onchange={(detail) => handleMemberProfileChange(detail)}
         />
@@ -585,7 +599,7 @@
           </label>
         {/if}
 
-        {#if ["turn_tilt", "turn", "tilt"].includes(selectedCell.panelType)}
+        {#if ["turn_tilt", "turn", "sliding", "lift_slide"].includes(selectedCell.panelType)}
           <div class="field">
             <label>{$_('props.openingDirection')}</label>
             <select value={selectedCell.openingDirection || "left"}
@@ -595,10 +609,11 @@
             </select>
           </div>
         {/if}
-        {#if ["turn_tilt", "turn", "tilt", "top_hung", "bottom_hung", "pivot"].includes(selectedCell.panelType)}
+        {#if ["turn_tilt", "turn", "tilt", "top_hung", "bottom_hung", "pivot", "sliding", "lift_slide"].includes(selectedCell.panelType)}
           <ProfileSelector
-            label={$_('props.sashProfile')}
-            filter="sash"
+            label={$_(systemMaterial ? 'system.sashProfile' : 'props.sashProfile')}
+            filter={systemMaterial && ["sliding", "lift_slide"].includes(selectedCell.panelType) ? "sliding_sash" : "sash"}
+            material={systemMaterial}
             value={selectedCell.sashProfile}
             onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />
@@ -606,11 +621,11 @@
             <div class="field-row">
               <div class="field">
                 <label>{$_('props.sashWidth')}</label>
-                <div class="value">{selectedCell.sashWidth ?? 69} mm</div>
+                <div class="value">{selectedCell.sashWidth ?? (systemMaterial ? $currentKozijn.frame.frameWidth : 69)} mm</div>
               </div>
               <div class="field">
                 <label>{$_('props.sashDepth')}</label>
-                <div class="value">{selectedCell.sashDepth ?? 90} mm</div>
+                <div class="value">{selectedCell.sashDepth ?? (systemMaterial ? $currentKozijn.frame.frameDepth : 90)} mm</div>
               </div>
             </div>
           {/if}
@@ -628,8 +643,8 @@
             </select>
           </div>
           <ProfileSelector
-            label={$_('props.doorProfile')}
-            filter="sash"
+            label={$_(systemMaterial ? 'system.doorProfile' : 'props.doorProfile')}
+            filter="sash" material={systemMaterial}
             value={selectedCell.sashProfile}
             onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />
@@ -638,7 +653,7 @@
       <GlazingPanel />
       <GlaslatPanel visible={true} />
       <PanelFillingPanel visible={true} />
-      <HardwarePanel visible={true} />
+      <HardwarePanel leaves={opening?.hardwareLeaves ?? []} />
       <JointPanel visible={true} />
     {:else}
       <div class="section hint">
@@ -697,6 +712,12 @@
       </div>
     </div>
 
+    {#if systemMaterial}
+      {#key JSON.stringify([$currentKozijn.id, $currentKozijn.frame.perimeterStop])}
+        <PerimeterStopPanel frame={$currentKozijn.frame} geometry={$currentGeometry?.perimeterStop} supported={supportsStop} />
+      {/key}
+    {/if}
+    {#if !systemMaterial || $currentKozijn.frame.edges?.length}
     <div class="section">
       <h3>Randen</h3>
       {#each ["Links", "Rechts", "Boven", "Onder"] as eName, ei}
@@ -759,6 +780,7 @@
       {/each}
     </div>
 
+    {/if}
     <div class="section">
       <h3>{$_('props.extensions')}</h3>
       {#if ($currentKozijn.extensions || []).length > 0}

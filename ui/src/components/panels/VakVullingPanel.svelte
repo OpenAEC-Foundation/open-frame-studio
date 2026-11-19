@@ -97,7 +97,7 @@
         </select>
       </div>
       <label class="check">
-        <input type="checkbox" checked={!!v.hardware} onchange={(e) => patch({ hardware: e.target.checked })} />
+        <input type="checkbox" checked={v.hardware ?? ["pvc", "aluminum"].includes($currentKozijn?.frame.material)} onchange={(e) => patch({ hardware: e.target.checked })} />
         Hang- en sluitwerk
       </label>
     {/if}

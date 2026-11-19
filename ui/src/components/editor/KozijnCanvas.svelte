@@ -7,6 +7,7 @@
   import { circleDiameter, contourPath, openingPath } from "../../lib/contour2d.js";
   import { timberMemberType, memberLabel, dividerPieceLabel } from "../../lib/labels.js";
   import { jointPaths } from "../../lib/dividerJoinery.js";
+  import { fittingDrawing } from "../../lib/hardwareDrawing.js";
   import { _ } from "svelte-i18n";
 
   let { geometry, kozijn, zoom = 0.35, oncellcontextmenu, dividerClipId } = $props();
@@ -734,7 +735,7 @@
    */
   function hardwarePositions(cellIndex, rect) {
     const cell = kozijn.cells[cellIndex];
-    if (!cell) return { hinges: [], handle: null };
+    if (!cell || ["pvc","aluminum"].includes(kozijn.frame?.material)) return { hinges: [], handle: null };
     const type = cell.panelType;
     const dir = cell.openingDirection || "right";
     if (!["turn", "turn_tilt", "tilt", "door"].includes(type)) return { hinges: [], handle: null };
@@ -778,6 +779,23 @@
   {/if}
 {/snippet}
 
+{#snippet sealElevation(fit, source, rect, outward)}
+  {#if fit.systemSeals}
+    {@const paths = fit.contours}
+    {@const bead = insetOpening(fit.rebate, fit.beadHeight)}
+    {@const beadCovers = paths ? fit.beadHeight >= paths.rebateHeight : bead.width <= fit.day.width}
+    {#if (fit.sealThickness ?? 2) > 0}
+      <path class="glass-gasket" d={openingPath(beadCovers ? paths?.beadInner : paths?.day, beadCovers ? bead : fit.day)}
+        fill="none" stroke="#343536" stroke-width="2" pointer-events="none" />
+    {/if}
+    {#if fit.sashOuter && fit.systemSeals.hinged && fit.systemSeals.sealingLevels}
+      <!-- In the elevation the outermost lip hides the deeper sealing levels. -->
+      <path class="sash-gasket" d={outward ? openingPath(source?.openingContour,rect) : openingPath(paths?.sashOuter,fit.sashOuter)}
+        fill="none" stroke="#343536" stroke-width="2" pointer-events="none" />
+    {/if}
+  {/if}
+{/snippet}
+
 {#snippet glazingFace(fit, glassColor, cellIndex)}
   {#if fit.contours}
     {@const c = fit.contours}
@@ -801,7 +819,8 @@
   {@const beadInner = insetOpening(fit.rebate, fit.beadHeight)}
   {@const inside = fit.beadPosition !== "buiten"}
   {@const rim = inside ? fit.rebate : fit.day}
-  <g class="glazing-face" stroke={seamColor} pointer-events="none">
+  <g class="glazing-face" stroke={seamColor} pointer-events="none"
+    clip-path={fit.systemSeals && fittedCells.get(cellIndex)?.hardwareLeaves?.[0]?.opensOutward ? `url(#${clipId}-cell-${cellIndex})` : null}>
     {#if fit.sashOuter}
       <rect {...fit.sashOuter} fill={frameColor} class="sash-outline" />
     {/if}
@@ -843,6 +862,12 @@
           </clipPath>
         {/if}
       {/each}
+    {:else}
+      {#each geometry.cellRects as cr}
+        {#if cr.hardwareLeaves?.[0]?.opensOutward}
+          <clipPath id={clipId + "-cell-" + cr.cellIndex}><rect {...cr.rect} /></clipPath>
+        {/if}
+      {/each}
     {/if}
     <!-- Metselwerk (borstwering) — running bond, in mm user-space so it scales. -->
     <pattern id={brickPatternId} width="120" height="60" patternUnits="userSpaceOnUse">
@@ -855,6 +880,11 @@
       </g>
     </pattern>
   </defs>
+  {#if geometry.perimeterStop}
+    <path class="perimeter-stop" d={contourPath(geometry.perimeterStop.outer) + " " + contourPath(geometry.perimeterStop.inner)}
+      fill-rule="evenodd" fill={kozijn.frame?.colorOutside ? ralToHex(kozijn.frame.colorOutside) : frameColor}
+      stroke={seamColor} stroke-width="1" pointer-events="none" />
+  {/if}
   <!-- Frame members background (drawn first, behind cells). Mitered (verstek)
        and stepped (melkmeisje) frames arrive as closed polygons in
        geometry.framePolygons; fall back to the plain rects otherwise (older
@@ -959,6 +989,7 @@
         {@render sashSeat(fits[0], shape)}
         {#each fits as fit}
           {@render glazingFace(fit, "var(--editor-glass)", leafIndex)}
+          {@render sealElevation(fit, source, r, fit.contours?.sashOpensOutward ?? source?.hardwareLeaves?.[0]?.opensOutward ?? v.opensOutward)}
         {/each}
         <g clip-path={shape ? `url(#${clipId}-cell-${leafIndex})` : null}>
         {#each vullingSymbols(v, r) as sym}
@@ -1062,6 +1093,7 @@
     {@render sashSeat(fits[0], cellRect.openingContour)}
     {#each fits as fit}
       {@render glazingFace(fit, cell?.panelFilling ? "var(--editor-panel)" : "var(--editor-glass)", cellRect.cellIndex)}
+      {@render sealElevation(fit, cellRect, r, fit.contours?.sashOpensOutward ?? cellRect.hardwareLeaves?.[0]?.opensOutward ?? cell?.openingDirection === "outward")}
     {/each}
     <path
       d={cellHitPath(cellRect.openingContour, r, fits)}
@@ -1162,6 +1194,24 @@
   {/each}
   {/if}
   </g>
+
+  {#if !layoutDrag?.moved}
+    {#each geometry.cellRects as cr}
+      {#each cr.hardwareLeaves ?? [] as leaf}
+        {#each leaf.components ?? [] as part}
+          {@const drawing = fittingDrawing(part,leaf.set)}
+          {#if drawing && drawing.face !== "rebate" && (drawing.face !== "opening" || !leaf.opensOutward)}
+            <g class="hardware-fitting" transform={`translate(${part.position.join(" ")}) rotate(${Math.atan2(part.tangent[1],part.tangent[0])*180/Math.PI})`}
+               fill="#aab0b4" stroke="#3e4446" stroke-width="1" pointer-events="none">
+              {#each drawing.boxes as box}
+                <rect x={box[0]-box[3]/2} y={box[1]-box[4]/2} width={box[3]} height={box[4]} rx={box[6]==="disc" ? box[4]/2 : 2}/>
+              {/each}
+            </g>
+          {/if}
+        {/each}
+      {/each}
+    {/each}
+  {/if}
 
   <!-- Transparent member hit areas preserve the visible bead and sash overlap. -->
   {#if !geometry.curvedTimber?.length && !geometry.framePolygons?.length}

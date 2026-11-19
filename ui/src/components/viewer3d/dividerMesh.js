@@ -145,7 +145,7 @@ function sectionCaps(edges, {nx,ny,c,t0,t1}) {
   return faces;
 }
 
-function cutCaps(faces, plane) {
+export function cutCaps(faces, plane) {
   const {nx,ny,c,t0,t1} = plane, edges = [];
   let crosses=false;
   for (const p of faces) {

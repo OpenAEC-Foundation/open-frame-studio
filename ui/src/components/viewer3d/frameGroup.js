@@ -9,6 +9,8 @@ import { cellFits } from "../../lib/glazingFit.js";
 import { contourPoints, contourSide, contourSlab, clipByLine, clipToRect, insetPolygon, sweepRing, timberPlan, trimAtMasonry, splitTimberWeb } from "./curvedMesh.js";
 import { dividerFootprint, frameBandFootprint, masonrySpans, touchesPocket, meshFaces, clipStock, stockMesh, dividerMesh } from "./dividerMesh.js";
 import { machineTimberJoints } from "./tenonMesh.js";
+import { systemClosure } from "./systemClosure.js";
+import { addHardware } from "./hardwareMesh.js";
 // Material colors
 const MATERIAL_COLORS = {
   "wood(meranti)": 0xC4956A,
@@ -211,7 +213,8 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     const key = ref?.id;
     if (!key) return null;
     if (sectionCache.has(key)) return sectionCache.get(key);
-    const section = resolveProfileSection(ref, profileList);
+    const selected = resolveProfileSection(ref, profileList);
+    const section = miterCorners && selected?.def?.material !== baseMat ? null : selected;
     sectionCache.set(key, section);
     return section;
   }
@@ -437,7 +440,9 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     const opensOut = fit?.contours?.sashOpensOutward ?? (v ? v.opensOutward ?? (v.openType === "uitzet") :
       cell?.openingDirection === "outward" || (type === "top_hung" && cell?.openingDirection !== "inward"));
     const w = fit?.contours?.sashWidth ?? (fit?.sashOuter ? (fit.sashOuter.width - fit.day.width) / 2 : 0);
-    const blank = operable && w > 0 ? fitSection(source, w, cell?.sashDepth || undefined, fit) : null;
+    const system = fit?.systemSeals;
+    const depth = cell?.sashDepth || (system && (snap?.sashBuildDepth || source?.def?.ventDepth));
+    const blank = operable && w > 0 ? fitSection(source, w, depth || undefined, fit) : null;
     const sash = blank && orientPocket(blank, outside);
     // The opening direction controls the frame stop, independently of the
     // side from which glass is installed in the movable sash.
@@ -483,8 +488,19 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
         sashInner += face - back;
       }
     }
+    let systemFit = null;
+    if (system?.hinged && sash && miterCorners) {
+      const section = orientPocket(fitSection(defaultSection,fw),opensOut);
+      const overlap = closure?.sashOverlap ?? system.sashOverlapMm ?? Math.max(0,cr.rect.x-fit.sashOuter.x);
+      systemFit = systemClosure(section,sash,frameInner,sashInner,overlap,system);
+      if (systemFit) {
+        sashParts = systemFit.parts;
+        systemFit.byStock = new Map([[section.id,systemFit]]);
+        systemFit.bySide = new Map();
+      }
+    }
     return { rect: cr.rect, opening: cr.openingContour, fits, cellIndex: cr.cellIndex, cell, v, type, door, sash, outside, opensOut,
-      sashInner, sashParts, lip, lipContact, seatStop, clearance, seats: [] };
+      sashInner, sashParts, lip, lipContact, seatStop, clearance, seats: [], systemFit, hardwareLeaves:cr.hardwareLeaves };
   });
 
   function rebateAtMember(section, job, side) {
@@ -506,6 +522,14 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     const stock = orientPocket(section, job.opensOut);
     const material = stock.def?.material || baseMat;
     if (material !== "wood") {
+      if (job.systemFit) {
+        const {byStock,bySide} = job.systemFit;
+        if (!byStock.has(stock.id)) {
+          byStock.set(stock.id,systemClosure(stock,job.sash,frameInner,job.sashInner,overlap,fit.systemSeals));
+        }
+        bySide.set(side,byStock.get(stock.id));
+        return [stock];
+      }
       // PVC, aluminium and clad sections have manufactured channels. Set
       // the leaf against the existing stop without machining a new slot.
       if (overlap > 0) {
@@ -851,25 +875,34 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     }
   }
 
-  // A grid transom runs through a crossing. Split the mullion there so both
-  // solids have a real end face and their inside faces never coincide.
-  for (const [i, rect] of (!curve && geometry.vDividers || []).entries()) {
-    const profile = getSection(!layoutTree && kozijn.grid?.columns?.[i + 1]?.dividerProfile) || defaultSection;
-    const crossings = (geometry.hDividers || []).filter(h =>
-      h.x <= rect.x && h.x + h.width >= rect.x + rect.width &&
-      h.y < rect.y + rect.height && h.y + h.height > rect.y).sort((a, b) => a.y - b.y);
-    let y = rect.y;
-    for (const end of [...crossings, { y: rect.y + rect.height, height: 0 }]) {
-      if (end.y > y) {
-        const segment = { ...rect, y, height: end.y - y };
-        for (const side of ["left", "right"]) addMember(segment, side, profile, {}, true);
-      }
-      y = Math.max(y, end.y + end.height);
+  // In system grids the transoms butt against continuous mullions. A free
+  // subdivision has its own split order and already has disjoint rectangles.
+  function dividerSegments(rect, vertical, others) {
+    const [along,length,across,width] = vertical ? ["y","height","x","width"] : ["x","width","y","height"];
+    const end = rect[along]+rect[length];
+    const stops = others.filter(r => r[across] <= rect[across] && r[across]+r[width] >= rect[across]+rect[width] &&
+      r[along] < end && r[along]+r[length] > rect[along]).sort((a,b)=>a[along]-b[along]);
+    const segments = [];
+    let start = rect[along];
+    for (const stop of stops) {
+      if (stop[along] > start) segments.push({...rect,[along]:start,[length]:stop[along]-start});
+      start = Math.max(start,stop[along]+stop[length]);
     }
+    if (end > start) segments.push({...rect,[along]:start,[length]:end-start});
+    return segments;
   }
-  for (const [i, rect] of (!curve && geometry.hDividers || []).entries()) {
-    const profile = getSection(!layoutTree && kozijn.grid?.rows?.[i + 1]?.dividerProfile) || defaultSection;
-    for (const side of ["top", "bottom"]) addMember(rect, side, profile, {}, true);
+  const continuousMullions = miterCorners && !layoutTree;
+  if (!curve) for (const vertical of [true,false]) {
+    const members = (vertical ? geometry.vDividers : geometry.hDividers) || [];
+    const cross = (vertical ? geometry.hDividers : geometry.vDividers) || [];
+    const grid = vertical ? kozijn.grid?.columns : kozijn.grid?.rows;
+    for (const [i,rect] of members.entries()) {
+      const profile = getSection(!layoutTree && grid?.[i+1]?.dividerProfile) || defaultSection;
+      const segments = vertical === continuousMullions ? [rect] : dividerSegments(rect,vertical,cross);
+      for (const segment of segments) for (const side of vertical ? ["left","right"] : ["top","bottom"]) {
+        addMember(segment,side,profile,{},true);
+      }
+    }
   }
 
   function addRing(rect, section, zInner, mat, role, miter = false, stilesThrough = false, sash = null) {
@@ -885,7 +918,8 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     for (const [side, r] of Object.entries(members)) {
       const { orientation, mirrored } = memberDefaults[side];
       for (const part of machiningSpans(r, orientation === "v", sash?.pocket, miter, miter)) {
-        const pieces = !sash ? [section] : part.cut ? sash.profiles : stoppedSection(sash.profiles.at(-1));
+        const stocks = sash?.bySide?.get(side)?.parts ?? sash?.profiles;
+        const pieces = !sash || sash.meetingSide===side ? [section] : part.cut ? stocks : stoppedSection(stocks.at(-1));
         for (const piece of pieces) {
           const mesh = makeProfileMember(part.rect, piece, mat, orientation, mirrored,
             { side, zInner, miterStart: miter, miterEnd: miter });
@@ -970,6 +1004,11 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     const plan = paths.sashTimber?.length ? timberPlan(paths.sashTimber) : null;
     const stocks = new Map();
     function sectionsAt(x, y, midX = x, midY = y) {
+      if (job.systemFit && job.fits.length===2) {
+        const left=fit===job.fits[0], meetingX=left ? fit.day.x+fit.day.width : fit.day.x;
+        if (Math.abs(x-meetingX)<0.15) return [job.sash];
+      }
+      if (job.systemFit) return job.systemFit.bySide.get(contourSide(paths.day,x,y).side)?.parts || job.sashParts;
       const member = plan?.at(midX, midY);
       if (!member) return job.sashParts;
       if (!stocks.has(member)) {
@@ -986,12 +1025,39 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
     addSweep(outer, day, sectionsAt, job.sashInner, sashMat, "sash", profileAt, plan);
   }
 
+  function addSystemSeals(job) {
+    const {rect} = job;
+    const corners = [[rect.x,rect.y],[rect.x+rect.width,rect.y],[rect.x+rect.width,rect.y+rect.height],[rect.x,rect.y+rect.height]];
+    const opening = job.opening || {segments:corners.map((from,i)=>({kind:"line",from,to:corners[(i+1)%4]}))};
+    const day = contourPoints(opening);
+    const systems = new Set([job.systemFit,...job.systemFit.bySide.values()]);
+    for (const level of ["inner","middle","outer"]) {
+      for (const [field,material,role] of [["stop",frameMat,"system-stop"],["rubber",sealMat,"sash-seal"]]) {
+        const shapes = new Map();
+        for (const system of systems) {
+          const points = system?.seals.find(seal=>seal.level===level)?.[field];
+          if (points) shapes.set(system,points);
+        }
+        if (!shapes.size) continue;
+        const common = sectionFromPoints(role,[...shapes.values()].flat());
+        const sections = new Map([...shapes].map(([system,pts],i)=>[system,[{...common,pts,id:role+i}]]));
+        const at = (x,y) => sections.get(job.systemFit.bySide.get(contourSide(opening,x,y).side) || job.systemFit) || [];
+        const path = depth => insetPolygon(day,common.minU+common.w-depth);
+        for (const mesh of sweepRing(THREE,path(common.w),path(0),at,common.minV+common.d,material,role,path)) {
+          mesh.userData.systemSeal = {cellIndex:job.cellIndex,level};
+          kozijnGroup.add(mesh);
+        }
+      }
+    }
+  }
+
   for (const job of cells) {
     if (job.opening && !job.opening.segments.length) continue;
     if (job.fits.length) {
       const outer = job.fits[0].sashOuter;
       const overlap = job.fits[0].contours?.sashOverlap ?? (outer && job.rect.x - outer.x);
-      if (job.sash && overlap > 1) {
+      if (job.systemFit) addSystemSeals(job);
+      else if (job.sash && overlap > 1) {
         const contact = job.seatStop != null ? job.seatStop + (job.opensOut ? -SEAL_MM : SEAL_MM) :
           job.lipContact ?? (job.opensOut ? job.sashInner : job.sashInner - job.sash.d);
         const compressionFace = contact + (job.opensOut ? SEAL_MM : 0);
@@ -1007,7 +1073,8 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
         if (job.sash && fit.sashOuter) {
           if (fit.contours) addCurvedSash(job, fit);
           else addRing(fit.sashOuter, job.sash, job.sashInner, sashMat, "sash", miterCorners, true,
-            { pocket: fit.rebate, profiles: job.sashParts });
+            { pocket: fit.rebate, profiles: job.sashParts, bySide:job.systemFit?.bySide,
+              meetingSide:job.systemFit && job.fits.length===2 ? fit===job.fits[0] ? "right" : "left" : null });
         }
         addGlazing(job, fit);
       }
@@ -1045,6 +1112,13 @@ export function buildFrameGroup(THREE, kozijn, geometry, profiles) {
           6, slatMat, z + thickness/2 + 3), "panel"));
       }
     }
+  }
+
+  addHardware(THREE,kozijnGroup,cells,frameInner,frameDepth);
+  const stop = geometry.perimeterStop;
+  if (stop?.thicknessMm > 0) {
+    addSlab(contourPoints(stop.outer), [contourPoints(stop.inner)],
+      -frameInner, stop.thicknessMm, frameMat, "perimeter-stop");
   }
 
   // Four wall returns leave a real opening, also when orbiting to the exterior.

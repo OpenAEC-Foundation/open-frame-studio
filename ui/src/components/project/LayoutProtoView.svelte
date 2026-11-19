@@ -197,7 +197,7 @@
                 <option value="buiten">Buitendraaiend</option>
               </select>
             </label>
-            <label class="vcheck"><input type="checkbox" checked={!!selectedLeaf.vulling.hardware} onchange={(e) => patch({ hardware: e.target.checked })} /> Hang- en sluitwerk</label>
+            <label class="vcheck"><input type="checkbox" checked={selectedLeaf.vulling.hardware ?? ["pvc", "aluminum"].includes($currentKozijn?.frame.material)} onchange={(e) => patch({ hardware: e.target.checked })} /> Hang- en sluitwerk</label>
           {/if}
         {:else}
           <span class="hint">Klik een vak in de tekening om te splitsen of een vulling te kiezen.</span>

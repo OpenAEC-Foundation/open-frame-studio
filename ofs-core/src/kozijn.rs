@@ -198,6 +198,7 @@ impl Kozijn {
                 frame_depth: 114.0,
                 profile_snapshot: None,
                 sill: None,
+                perimeter_stop: None,
                 top_profile: None,
                 bottom_profile: None,
                 left_profile: None,
@@ -258,6 +259,7 @@ impl Kozijn {
                 frame_depth: sj.frame_depth,
                 profile_snapshot: None,
                 sill: None,
+                perimeter_stop: None,
                 top_profile: Some(sj.bovendorpel_profile.clone()),
                 bottom_profile: Some(sj.onderdorpel_profile.clone()),
                 left_profile: Some(sj.stijl_profile.clone()),
@@ -344,15 +346,60 @@ impl Kozijn {
             .map(serde_json::from_str::<Option<Material>>).transpose()
             .map_err(|e| format!("Ongeldig profielmateriaal: {e}"))?.flatten();
 
-        self.frame.profile = profile;
+        let previous = std::mem::replace(&mut self.frame.profile, profile);
+        let previous_material = self.frame.material;
         if let Some(value) = material { self.frame.material = value; }
-        if let Some(value) = snapshot { self.frame.profile_snapshot = value; }
+        if let Some(value) = snapshot {
+            self.frame.profile_snapshot = value;
+        } else if previous.id != self.frame.profile.id {
+            self.frame.profile_snapshot = None;
+        }
         if let Some(value) = depth { self.frame.frame_depth = value; }
         if let Some(value) = width {
             self.frame.frame_width = value;
             self.fit_grid_to_frame();
         }
+        if (self.frame.material.is_profile_system() || previous_material.is_profile_system())
+            && (previous.id != self.frame.profile.id || previous_material != self.frame.material)
+        {
+            self.update_inherited_profiles(&previous, &previous_material);
+        }
         Ok(())
+    }
+
+    fn update_inherited_profiles(&mut self, previous: &ProfileRef, previous_material: &Material) {
+        let presets = crate::template::builtin_sjablonen();
+        let old = presets.iter().find(|s| s.stijl_profile.id == previous.id && s.material == *previous_material);
+        let new = presets.iter().find(|s| s.stijl_profile.id == self.frame.profile.id && s.material == self.frame.material);
+        let frame = &self.frame.profile;
+        let replace = |slot: &mut Option<ProfileRef>, before: Option<&ProfileRef>, after: Option<&ProfileRef>| {
+            if slot.as_ref().is_some_and(|p| p.id == previous.id || before.is_some_and(|b| p.id == b.id)) {
+                *slot = Some(after.unwrap_or(frame).clone());
+            }
+        };
+        if self.frame.top_material.is_none() {
+            replace(&mut self.frame.top_profile, old.map(|s| &s.bovendorpel_profile), new.map(|s| &s.bovendorpel_profile));
+        }
+        if self.frame.bottom_material.is_none() {
+            replace(&mut self.frame.sill_profile, old.map(|s| &s.onderdorpel_profile), new.map(|s| &s.onderdorpel_profile));
+            replace(&mut self.frame.bottom_profile, old.map(|s| &s.onderdorpel_profile), new.map(|s| &s.onderdorpel_profile));
+        }
+        if self.frame.left_material.is_none() { replace(&mut self.frame.left_profile, None, None); }
+        if self.frame.right_material.is_none() { replace(&mut self.frame.right_profile, None, None); }
+        for column in &mut self.grid.columns {
+            replace(&mut column.divider_profile, old.map(|s| &s.tussenstijl_profile), new.map(|s| &s.tussenstijl_profile));
+        }
+        for row in &mut self.grid.rows {
+            replace(&mut row.divider_profile, old.map(|s| &s.tussendorpel_profile), new.map(|s| &s.tussendorpel_profile));
+        }
+        for cell in self.cells.iter_mut().filter(|cell| cell.panel_type.is_operable()) {
+            let old_sash = old.map(|s| if cell.panel_type == PanelType::Door { &s.deurhout_profile } else { &s.raamhout_profile });
+            if cell.sash_profile_snapshot.is_none() && cell.sash_profile.as_ref().is_none_or(|p|
+                p.id == previous.id || old_sash.is_some_and(|s| s.id == p.id))
+            {
+                cell.assign_default_sash(&self.frame, new);
+            }
+        }
     }
 
     /// Re-fit the grid to the current frame (outer size + frame width) while
@@ -627,6 +674,9 @@ pub struct Frame {
     /// Structured sill configuration (v1.3+)
     #[serde(default)]
     pub sill: Option<crate::sill::Sill>,
+    /// Optional separate exterior lip. Frame dimensions exclude its projection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perimeter_stop: Option<crate::perimeter_stop::StopProfile>,
     /// Per-member profile overrides (None = use default frame profile)
     #[serde(default)]
     pub top_profile: Option<ProfileRef>,
@@ -815,9 +865,30 @@ impl Cell {
             self.sash_depth = None;
         } else if change_stock || !has_stock {
             let templates = crate::template::builtin_sjablonen();
-            let stock = templates.iter().find(|s| s.stijl_profile.id == frame.profile.id && s.material == frame.material)
-                .or_else(|| templates.iter().find(|s| s.material == frame.material))
-                .cloned().unwrap_or_else(crate::template::default_sjabloon);
+            let stock = templates.iter().find(|s| s.stijl_profile.id == frame.profile.id && s.material == frame.material);
+            self.assign_default_sash(frame, stock);
+        }
+    }
+
+    fn assign_default_sash(&mut self, frame: &Frame, preset: Option<&crate::template::KozijnSjabloon>) {
+        if frame.material.is_profile_system() {
+            let stored = frame.profile_snapshot.as_ref();
+            let catalog = crate::glazing_fit::catalog_snapshot(&frame.profile.id, &frame.material);
+            self.sash_profile = Some(preset.map_or(&frame.profile, |s| if self.panel_type == PanelType::Door {
+                &s.deurhout_profile
+            } else { &s.raamhout_profile }).clone());
+            self.sash_profile_snapshot = None;
+            self.sash_width = Some(stored.and_then(|s| s.sash_face_width)
+                .or_else(|| catalog.and_then(|s| s.sash_face_width)).filter(|v| *v > 0.)
+                .unwrap_or_else(|| preset.map_or(frame.frame_width, |s| s.sash_width)));
+            self.sash_depth = Some(stored.and_then(|s| s.sash_build_depth)
+                .or_else(|| catalog.and_then(|s| s.sash_build_depth)).filter(|v| *v > 0.)
+                .unwrap_or_else(|| preset.map_or(frame.frame_depth, |s| s.sash_depth)));
+        } else if let Some(preset) = preset {
+            self.assign_sash_from_sjabloon(preset);
+        } else {
+            let stock = crate::template::builtin_sjablonen().into_iter().find(|s| s.material == frame.material)
+                .unwrap_or_else(crate::template::default_sjabloon);
             self.assign_sash_from_sjabloon(&stock);
         }
     }
@@ -834,8 +905,8 @@ impl Cell {
             }
             PanelType::Door => {
                 self.sash_profile = Some(sj.deurhout_profile.clone());
-                self.sash_width = Some(sj.frame_width); // deurhout = kozijnhout breedte
-                self.sash_depth = Some(sj.frame_depth);
+                self.sash_width = Some(if sj.material.is_profile_system() { sj.sash_width } else { sj.frame_width });
+                self.sash_depth = Some(if sj.material.is_profile_system() { sj.sash_depth } else { sj.frame_depth });
             }
             _ => {
                 self.sash_profile = None;
@@ -967,6 +1038,12 @@ pub enum Material {
     Aluminum,
     Pvc,
     WoodAluminum,
+}
+
+impl Material {
+    pub fn is_profile_system(&self) -> bool {
+        matches!(self, Self::Pvc | Self::Aluminum)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1131,6 +1208,27 @@ mod tests {
         assert_eq!(k.grid.columns[0].size, 854.0);
         let fit = crate::geometry::compute_2d_geometry(&k).cell_rects.remove(0).fit.unwrap();
         assert_eq!(fit.day.x - fit.glass.x, 20.0);
+    }
+
+    #[test]
+    fn frame_system_change_updates_inherited_profiles_and_preserves_explicit_parts() {
+        let mut k = crate::grid::template_double_turn_tilt_sj(
+            1600., 1300., &crate::template::default_sjabloon());
+        k.frame.right_profile = Some(ProfileRef { id: "eigen-stijl".into(), name: "Eigen stijl".into() });
+        k.cells[1].sash_profile = Some(ProfileRef { id: "eigen-vleugel".into(), name: "Eigen vleugel".into() });
+        let profile = ProfileRef { id: "reynaers-masterline8".into(), name: "MasterLine 8".into() };
+        k.apply_frame_profile(profile.clone(), Some(53.), Some(77.), None, Some(r#""aluminum""#)).unwrap();
+        for p in [&k.frame.top_profile, &k.frame.sill_profile, &k.frame.bottom_profile,
+                  &k.frame.left_profile, &k.grid.columns[1].divider_profile, &k.cells[0].sash_profile] {
+            assert_eq!(p.as_ref().unwrap().id, profile.id);
+        }
+        assert_eq!(k.frame.right_profile.as_ref().unwrap().id, "eigen-stijl");
+        assert_eq!(k.cells[1].sash_profile.as_ref().unwrap().id, "eigen-vleugel");
+        assert_eq!((k.cells[0].sash_width, k.cells[0].sash_depth), (Some(50.), Some(87.)));
+        k.cells[0].change_panel_type(PanelType::FixedGlass, &k.frame);
+        k.cells[0].change_panel_type(PanelType::TurnTilt, &k.frame);
+        assert_eq!(k.cells[0].sash_profile.as_ref().unwrap().id, profile.id);
+        assert_eq!(k.cells[0].sash_depth, Some(87.));
     }
 
     #[test]

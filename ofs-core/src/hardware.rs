@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::kozijn::{Material, OpeningDirection, PanelType};
 
+mod placement;
+pub use placement::{FittingKind, HardwareComponent, HardwareFitIssue, HardwareLeaf, HardwareMount};
+pub(crate) use placement::hardware_leaves;
+
 // ── Security classification ────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -9,11 +13,17 @@ use crate::kozijn::{Material, OpeningDirection, PanelType};
 pub enum SecurityClass {
     #[default]
     None,
+    #[serde(rename = "rc1", alias = "RC1", alias = "r_c1")]
     RC1,
+    #[serde(rename = "rc2", alias = "RC2", alias = "r_c2")]
     RC2,
+    #[serde(rename = "rc3", alias = "RC3", alias = "r_c3")]
     RC3,
+    #[serde(rename = "rc4", alias = "RC4", alias = "r_c4")]
     RC4,
+    #[serde(rename = "rc5", alias = "RC5", alias = "r_c5")]
     RC5,
+    #[serde(rename = "rc6", alias = "RC6", alias = "r_c6")]
     RC6,
 }
 
@@ -177,7 +187,227 @@ pub struct HardwareSet {
     pub ventilation: Option<VentilationConfig>,
     pub closer: Option<CloserConfig>,
     pub security_class: SecurityClass,
+    #[serde(default)]
     pub auto_selected: bool,
+}
+
+impl HardwareSet {
+    /// A change of handing mirrors the assembly while preserving the user's
+    /// configured hinge model, quantity, handle height and lock selection.
+    fn change_handing(
+        &mut self,
+        panel: PanelType,
+        previous: Option<OpeningDirection>,
+        next: Option<OpeningDirection>,
+    ) {
+        if previous == next
+            || !matches!(
+                panel,
+                PanelType::Turn
+                    | PanelType::TurnTilt
+                    | PanelType::Door
+                    | PanelType::Sliding
+                    | PanelType::LiftSlide
+                    | PanelType::Pivot
+            )
+        {
+            return;
+        }
+        let right = match next {
+            Some(OpeningDirection::Right) => true,
+            Some(OpeningDirection::Left) => false,
+            _ => return,
+        };
+        let was_right = match self.hinges.as_ref().map(|h| h.side) {
+            Some(HingeSide::Right) => true,
+            Some(HingeSide::Left) => false,
+            _ => previous == Some(OpeningDirection::Right),
+        };
+        if right == was_right {
+            return;
+        }
+        if let Some(h) = self
+            .hinges
+            .as_mut()
+            .filter(|h| matches!(h.side, HingeSide::Right | HingeSide::Left))
+        {
+            h.side = if right {
+                HingeSide::Right
+            } else {
+                HingeSide::Left
+            };
+        }
+        if let Some(h) = &mut self.handle {
+            h.side = match h.side {
+                HandleSide::Right => HandleSide::Left,
+                HandleSide::Left => HandleSide::Right,
+                HandleSide::Center => HandleSide::Center,
+            };
+        }
+    }
+
+    fn supports_motion(&self, panel: PanelType) -> bool {
+        let sliding = matches!(panel, PanelType::Sliding | PanelType::LiftSlide);
+        if !sliding
+            && self
+                .locking
+                .as_ref()
+                .is_some_and(|l| l.lock_type == LockType::SlidingLock)
+        {
+            return false;
+        }
+        let Some(h) = self.hinges.as_ref().filter(|h| h.count > 0) else {
+            return true;
+        };
+        match panel {
+            PanelType::Turn | PanelType::TurnTilt | PanelType::Door => {
+                matches!(h.side, HingeSide::Left | HingeSide::Right)
+            }
+            PanelType::TopHung | PanelType::Pivot => h.side == HingeSide::Top,
+            PanelType::Tilt | PanelType::BottomHung => h.side == HingeSide::Bottom,
+            _ => false,
+        }
+    }
+}
+
+impl crate::kozijn::Kozijn {
+    fn check_hardware_cell(&self, index: usize) -> Result<(), String> {
+        fn leaves(node: &crate::layout::VakNode) -> usize {
+            match node {
+                crate::layout::VakNode::Leaf { .. } => 1,
+                crate::layout::VakNode::Split { children, .. } => {
+                    children.iter().map(|child| leaves(&child.node)).sum()
+                }
+            }
+        }
+        if self
+            .layout
+            .as_ref()
+            .is_some_and(|l| leaves(l) != self.cells.len())
+        {
+            return Err("Dit indelingsvak heeft geen zelfstandig opgeslagen beslagset".into());
+        }
+        self.cells
+            .get(index)
+            .map(|_| ())
+            .ok_or_else(|| "Cel niet gevonden".into())
+    }
+
+    /// Store explicit selections separately from the derived locations.
+    pub fn set_manual_hardware(
+        &mut self,
+        index: usize,
+        mut set: HardwareSet,
+    ) -> Result<(), String> {
+        self.check_hardware_cell(index)?;
+        let c = &mut self.cells[index];
+        set.auto_selected = false;
+        c.hardware_set = Some(set);
+        Ok(())
+    }
+
+    /// Re-select from the assembled leaf, including the glass build-up and
+    /// profile. A manually changed set is replaced only on explicit selection.
+    pub fn select_hardware(
+        &mut self,
+        index: usize,
+        security: Option<SecurityClass>,
+    ) -> Result<(), String> {
+        self.check_hardware_cell(index)?;
+        let c = &mut self.cells[index];
+        let level = security
+            .or_else(|| c.hardware_set.as_ref().map(|s| s.security_class))
+            .unwrap_or_default();
+        if self.layout.is_none() && !c.panel_type.is_operable() {
+            if !self.frame.material.is_profile_system() {
+                c.hardware_set = None;
+            }
+            return Ok(());
+        }
+        let previous = c.hardware_set.take();
+        c.hardware_set = Some(HardwareSet {
+            hinges: None,
+            locking: None,
+            handle: None,
+            closer: None,
+            ventilation: None,
+            security_class: level,
+            auto_selected: true,
+        });
+        let geo = crate::geometry::compute_2d_geometry(self);
+        let resolved = geo
+            .cell_rects
+            .iter()
+            .find(|c| c.cell_index == index)
+            .and_then(|cr| {
+                if self.frame.material.is_profile_system() {
+                    return cr
+                        .hardware_leaves
+                        .iter()
+                        .find_map(|leaf| leaf.set.as_ref().filter(|s| s.handle.is_some()))
+                        .or_else(|| cr.hardware_leaves.first().and_then(|l| l.set.as_ref()))
+                        .cloned();
+                }
+                let c = &self.cells[index];
+                default_hardware_set(
+                    c.panel_type,
+                    c.opening_direction,
+                    cr.rect.width,
+                    cr.rect.height,
+                    c.glazing.thickness_mm,
+                    &self.frame.material,
+                    level,
+                )
+            });
+        self.cells[index].hardware_set = if self.frame.material.is_profile_system() {
+            resolved.or(previous)
+        } else {
+            resolved
+        };
+        Ok(())
+    }
+
+    pub fn set_hardware_security(
+        &mut self,
+        index: usize,
+        level: SecurityClass,
+    ) -> Result<(), String> {
+        self.check_hardware_cell(index)?;
+        let c = &mut self.cells[index];
+        if let Some(s) = c.hardware_set.as_mut().filter(|s| !s.auto_selected) {
+            s.security_class = level;
+            return Ok(());
+        }
+        if c.hardware_set.is_none() && !c.hardware.is_empty() {
+            return Err("Kies eerst een beslagset om de veiligheidsklasse toe te kennen".into());
+        }
+        self.select_hardware(index, Some(level))
+    }
+
+    pub fn change_cell_opening(
+        &mut self,
+        index: usize,
+        panel: PanelType,
+        direction: Option<OpeningDirection>,
+    ) -> Result<(), String> {
+        self.check_hardware_cell(index)?;
+        let c = &mut self.cells[index];
+        let previous = c.opening_direction;
+        c.change_panel_type(panel, &self.frame);
+        c.opening_direction = direction;
+        if self.frame.material.is_profile_system() {
+            if let Some(set) = c.hardware_set.as_mut().filter(|s| !s.auto_selected) {
+                if set.supports_motion(panel) {
+                    set.change_handing(panel, previous, direction);
+                }
+                return Ok(());
+            }
+            if !c.hardware.is_empty() && c.hardware_set.is_none() {
+                return Ok(());
+            }
+        }
+        self.select_hardware(index, None)
+    }
 }
 
 // ── Auto-selection engine ──────────────────────────────────────────

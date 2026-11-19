@@ -4,6 +4,7 @@
   import { allProfiles } from "../../stores/profiles.js";
   import { buildFrameGroup } from "./frameGroup.js";
   import { inspectTimberJoints } from "./tenonMesh.js";
+  import { sectionCapsAt } from "./systemSection.js";
   import { _ } from "svelte-i18n";
 
   let { visible = true } = $props();
@@ -14,12 +15,29 @@
   let loading = $state(true);
   let loadError = $state(false);
   let inspecting = $state(false);
+  let sectionOn = $state(false);
+  let sectionCaps;
+  const systemFrame = $derived(["pvc","aluminum"].includes($currentKozijn?.frame.material));
   let hasJoints = $derived($currentGeometry?.archJoints?.some(joint => joint.tenon)
     || $currentGeometry?.curvedDividerTimber?.some(p => p.start?.tenon || p.end?.tenon));
 
   function toggleJoinery() {
     inspecting = !inspecting;
     if (kozijnGroup) inspectTimberJoints(kozijnGroup, inspecting, $currentKozijn?.frame?.frameDepth || 114);
+  }
+
+  function showSection(active, height) {
+    renderer.clippingPlanes = [];
+    if (sectionCaps) sectionCaps.visible = active;
+    if (!active || !kozijnGroup) return;
+    const cut = height/2 + 0.07;
+    sectionCaps ??= sectionCapsAt(THREE,kozijnGroup,cut);
+    if (!sectionCaps.parent) kozijnGroup.add(sectionCaps);
+    renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0,-1,0),kozijnGroup.position.y-cut+0.01)];
+  }
+  function toggleSection() {
+    sectionOn = !sectionOn;
+    showSection(sectionOn,$currentKozijn.frame.outerHeight);
   }
 
   // Three.js objects
@@ -190,6 +208,8 @@
       });
     }
 
+    sectionCaps = null;
+    renderer.clippingPlanes = [];
     if (!kozijn || !geometry) return;
 
     kozijnGroup = buildFrameGroup(THREE, kozijn, geometry, profiles);
@@ -204,6 +224,7 @@
     kozijnGroup.position.y += size.y / 2;
 
     scene.add(kozijnGroup);
+    if (untrack(()=>sectionOn) && ["aluminum","pvc"].includes(kozijn.frame.material)) showSection(true,kozijn.frame.outerHeight);
     if (untrack(() => inspecting)) inspectTimberJoints(kozijnGroup, true, kozijn?.frame?.frameDepth || 114);
 
     // Adjust camera distance based on kozijn size
@@ -234,6 +255,8 @@
           ...(child.userData.divider ? { divider: child.userData.divider } : {}),
           ...(child.userData.joinery ? { joinery: child.userData.joinery } : {}),
           ...(child.userData.leaf ? { leaf: child.userData.leaf } : {}),
+          ...(child.userData.systemSeal ? { systemSeal: child.userData.systemSeal } : {}),
+          ...(child.userData.hardware ? { hardware: child.userData.hardware } : {}),
           bbox: {
             x: r1(box.min.x - gp.x),
             y: r1(box.min.y - gp.y),
@@ -343,6 +366,10 @@
     {#if hasJoints && !loading && !loadError}
       <button class="joint-view" aria-pressed={inspecting} onmousedown={(e) => e.stopPropagation()} onclick={toggleJoinery}>
         {$_("viewer3d.inspectTenons")}
+      </button>
+    {:else if systemFrame && !loading && !loadError}
+      <button class="joint-view" aria-pressed={sectionOn} onmousedown={(e) => e.stopPropagation()} onclick={toggleSection}>
+        {$_("viewer3d.section")}
       </button>
     {/if}
   </div>

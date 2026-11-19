@@ -93,7 +93,7 @@ fn lerp(a: Point, b: Point, t: f64) -> Point {
 fn line(from: Point, to: Point) -> Segment {
     Segment::Line { from, to }
 }
-fn cut_angle(axis: Point, face: Point) -> f64 {
+pub(crate) fn cut_angle(axis: Point, face: Point) -> f64 {
     (axis[0] * face[1] - axis[1] * face[0])
         .abs()
         .atan2(dot(axis, face).abs())
@@ -114,7 +114,7 @@ fn circle_on_face(face: JointFace, center: Point, r: f64) -> Point {
     lerp(face[0], face[1], c / root)
 }
 
-fn arc_member(
+pub(crate) fn arc_member(
     outer: &Segment,
     inner: &Segment,
     index: usize,

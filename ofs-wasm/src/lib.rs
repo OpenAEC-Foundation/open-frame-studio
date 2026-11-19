@@ -174,15 +174,56 @@ pub fn update_cell_type(
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
-        if cell_index < k.cells.len() {
-            if let Ok(pt) = serde_json::from_str::<ofs_core::kozijn::PanelType>(&format!("\"{}\"", panel_type)) {
-                k.cells[cell_index].change_panel_type(pt, &k.frame);
-            }
-            k.cells[cell_index].opening_direction = opening_direction
-                .as_deref()
-                .and_then(|d| serde_json::from_str(&format!("\"{}\"", d)).ok());
-        }
+        let pt = serde_json::from_value(serde_json::Value::from(panel_type))
+            .map_err(|e| format!("Ongeldig vaktype: {e}"))?;
+        let direction = opening_direction
+            .map(|s| serde_json::from_value(serde_json::Value::from(s)))
+            .transpose()
+            .map_err(|e| format!("Ongeldige draairichting: {e}"))?;
+        k.change_cell_opening(cell_index, pt, direction)?;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_cell_hardware(
+    id: &str,
+    cell_index: usize,
+    hardware_set_json: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let i = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[i];
+        let set = serde_json::from_str(hardware_set_json)
+            .map_err(|e| format!("Ongeldige beslagset: {e}"))?;
+        k.set_manual_hardware(cell_index, set)?;
+        serde_json::to_string(k).map_err(|e| e.to_string())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn auto_select_hardware(id: &str, cell_index: usize) -> Result<String, String> {
+    with_project(|p| {
+        let i = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[i];
+        k.select_hardware(cell_index, None)?;
+        serde_json::to_string(k).map_err(|e| e.to_string())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_security_class(
+    id: &str,
+    cell_index: usize,
+    security_class: &str,
+) -> Result<String, String> {
+    with_project(|p| {
+        let i = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[i];
+        let level = serde_json::from_value(serde_json::Value::from(security_class))
+            .map_err(|e| format!("Ongeldige klasse: {e}"))?;
+        k.set_hardware_security(cell_index, level)?;
+        serde_json::to_string(k).map_err(|e| e.to_string())
     })?
 }
 
@@ -279,6 +320,16 @@ pub fn update_cell_sash_profile(
         cell.sash_width = Some(sash_width);
         cell.sash_depth = Some(sash_depth);
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+    })?
+}
+
+#[wasm_bindgen]
+pub fn update_perimeter_stop(id: &str, profile_json: &str) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        k.frame.set_perimeter_stop(profile_json)?;
+        serde_json::to_string(k).map_err(|e| e.to_string())
     })?
 }
 

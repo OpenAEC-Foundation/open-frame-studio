@@ -1,7 +1,7 @@
 <script>
   import { _, locale } from "svelte-i18n";
   import { circleDiameter } from "../../lib/contour2d.js";
-  let { fit, timber, paired = false } = $props();
+  let { fit, timber, paired = false, leaf = null } = $props();
   let number = $derived(new Intl.NumberFormat($locale || "nl", { maximumFractionDigits: 1 }));
   function size(rect, contour) {
     const diameter = circleDiameter(contour);
@@ -9,21 +9,33 @@
   }
   let arc = $derived(fit.contours?.glass.segments.find(edge => edge.kind === "arc"));
   let sash = $derived(fit.contours?.sashOuter);
+  let side = $derived(fit.contours?.sashLeaf ?? leaf);
+  let system = $derived(fit.systemSeals);
+  let overlap = $derived(system ? system.sashOverlapMm : fit.contours?.sashOverlap);
+  let clearance = $derived(system ? system.sashClearanceMm : fit.contours?.sashClearance);
   let minBearing = $derived(fit.beadPosition === "buiten" ? 15 : 13);
   let requiredDepth = $derived(fit.glassThickness + 2 * fit.sealThickness + minBearing);
 </script>
 
 <div class="detail">
-  {#if sash}
-    <h3>{$_(fit.contours.sashLeaf === "left" ? "sashFit.left" : fit.contours.sashLeaf === "right" ? "sashFit.right" : "sashFit.title")}</h3>
+  {#if sash || (system && fit.sashOuter)}
+    <h3>{$_(side === "left" ? "sashFit.left" : side === "right" ? "sashFit.right" : "sashFit.title")}</h3>
     <dl class="sash-fit">
       <dt>{$_("sashFit.outerSize")}</dt><dd>{size(fit.sashOuter, sash)} mm</dd>
-      <dt>{$_("sashFit.overlap")}</dt><dd>{number.format(fit.contours.sashOverlap)} mm</dd>
-      {#if fit.contours.sashClearance != null}
-        <dt>{$_("sashFit.clearance")}</dt><dd>{number.format(fit.contours.sashClearance)} mm</dd>
+      {#if overlap != null}
+        <dt>{$_("sashFit.overlap")}</dt><dd>{number.format(overlap)} mm</dd>
       {/if}
-      {#if fit.contours.sashSeatDepth != null}
+      {#if clearance != null}
+        <dt>{$_("sashFit.clearance")}</dt><dd>{number.format(clearance)} mm</dd>
+      {/if}
+      {#if fit.contours?.sashSeatDepth != null}
         <dt>{$_("sashFit.seatDepth")}</dt><dd>{number.format(fit.contours.sashSeatDepth)} mm</dd>
+      {/if}
+      {#if system?.hinged}
+        <dt>{$_("system.sealLevels")}</dt><dd>{system.sealingLevels ?? $_("system.unknown")}</dd>
+      {/if}
+      {#if system?.meetingGapMm != null}
+        <dt>{$_("system.meetingGap")}</dt><dd>{number.format(system.meetingGapMm)} mm</dd>
       {/if}
     </dl>
   {/if}

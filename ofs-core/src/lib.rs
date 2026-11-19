@@ -18,6 +18,7 @@ pub mod thermal;
 pub mod template;
 pub mod joint;
 pub mod edge;
+pub mod perimeter_stop;
 pub mod export;
 pub mod import;
 pub mod ifc_guid;

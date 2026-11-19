@@ -162,7 +162,11 @@ export function contourSlab(THREE, boundary, holes, zMin, depth, material) {
   if (boundary.length < 3 || !(depth > 0)) return null;
   const vectors = pts => pts.map(([x,y]) => new THREE.Vector2(x,-y));
   const shape = new THREE.Shape(vectors(boundary));
-  shape.holes = holes.filter(h => h.length >= 3).map(h => new THREE.Path(vectors(h)));
+  shape.holes = holes.filter(h => h.length >= 3).map(h => {
+    const ring = vectors(h);
+    if (THREE.ShapeUtils.isClockWise(ring)) ring.reverse();
+    return new THREE.Path(ring);
+  });
   const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.z = zMin;

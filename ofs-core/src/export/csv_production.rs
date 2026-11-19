@@ -197,19 +197,17 @@ fn write_glaslijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
 
 fn write_beslaglijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
     let mut w = create_csv(dir, "beslaglijst.csv")?;
-    write_row(&mut w, &["Kozijn", "Cel", "Component", "Omschrijving", "Aantal"])?;
+    let positions = data.iter().flat_map(|p| &p.hardware_list).any(|h| h.piece_id.is_some());
+    let mut headers = vec!["Kozijn", "Cel", "Component", "Omschrijving", "Aantal"];
+    if positions { headers.push("Positie"); }
+    write_row(&mut w, &headers)?;
     for prod in data {
         for item in &prod.hardware_list {
-            write_row(
-                &mut w,
-                &[
-                    &prod.kozijn_mark,
-                    &format!("{}", item.cell_index + 1),
-                    &item.component,
-                    &item.description,
-                    &format!("{}", item.quantity),
-                ],
-            )?;
+            let cell = (item.cell_index + 1).to_string();
+            let quantity = if item.quantity > 0 { item.quantity.to_string() } else { String::new() };
+            let mut fields = vec![prod.kozijn_mark.as_str(), &cell, &item.component, &item.description, &quantity];
+            if positions { fields.push(item.piece_id.as_deref().unwrap_or("")); }
+            write_row(&mut w, &fields)?;
         }
     }
     Ok(())
@@ -217,18 +215,19 @@ fn write_beslaglijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
 
 fn write_rubberlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
     let mut w = create_csv(dir, "rubberlijst.csv")?;
-    write_row(&mut w, &["Kozijn", "Type", "Lengte_mm", "Aantal"])?;
+    let refs = data.iter().flat_map(|p| &p.gasket_list).any(|g| g.reference.is_some());
+    let mut headers = vec!["Kozijn", "Type", "Lengte_mm", "Aantal"];
+    if refs { headers.extend(["Positie", "Profiel", "Netto meetlijn"]); }
+    write_row(&mut w, &headers)?;
     for prod in data {
         for item in &prod.gasket_list {
-            write_row(
-                &mut w,
-                &[
-                    &prod.kozijn_mark,
-                    item.gasket_type.label_nl(),
-                    &format!("{}", item.length_mm.round() as i64),
-                    &format!("{}", item.quantity),
-                ],
-            )?;
+            let length = if item.reference.is_some() { format!("{:.1}", item.length_mm) } else { format!("{:.0}", item.length_mm) };
+            let quantity = if item.quantity > 0 { item.quantity.to_string() } else { String::new() };
+            let mut fields = vec![prod.kozijn_mark.as_str(), item.gasket_type.label_nl(), &length, &quantity];
+            if refs {
+                fields.extend(item.reference.as_ref().map_or([""; 3], |r| [&r.piece_id, &r.profile_name, r.line.label_nl()]));
+            }
+            write_row(&mut w, &fields)?;
         }
     }
     Ok(())

@@ -1,70 +1,28 @@
 <script>
   import { _ } from "svelte-i18n";
   import { allProfiles } from "../../stores/profiles.js";
+  import { resolveProfileSnapshot } from "../../lib/profileSnapshot.js";
 
-  let { value = null, filter = "", label = "Profiel", onchange = null } = $props();
+  let { value = null, filter = "", material = null, systemProfile = null, label = "Profiel", onchange = null } = $props();
 
   let filteredProfiles = $derived(($allProfiles || []).filter(p => {
+    if (material && p.material !== material) return false;
     if (!filter) return true;
-    return (p.applicableAs || []).includes(filter);
-  }));
-
-  // Positive finite number or null — 0 means "not specified" in library data.
-  function mm(v) {
-    return typeof v === "number" && isFinite(v) && v > 0 ? v : null;
-  }
-
-  /**
-   * Resolve the drawing-relevant dimensions from the full ProfileDefinition.
-   * Field semantics follow ofs-core::profile: SponningInfo.depth is the
-   * sponninghoogte (face plane; for PVC the Falzhöhe), glazingRebate the
-   * sponningdiepte (bouwdiepte direction), glasinval the glass edge cover
-   * where it differs from the sponninghoogte (PVC: VEKA 82 MD Glaseinstand
-   * 20 vs Falzhöhe 28), and glaslatHeight the bead height (KVT 12.3.2).
-   *
-   * Values the profile does not carry stay null: ofs-core resolves them to
-   * the norm for the kozijn material (hout 17 / PVC 20 / alu 25 — see
-   * profile::norm_glasinval). The former `sponningHoogte ?? glazingRebate`
-   * crutch is gone deliberately: glazingRebate is the sponningDIEPTE
-   * (bouwdiepte, e.g. 51 mm for wood fixed glazing after the 2026-07 data
-   * correction) and must never be drawn as the 17 mm face rebate.
-   */
-  function resolveSnapshot(p) {
-    const timber = p.material === "wood" || p.material === "wood_aluminum";
-    const side = p.sponning?.position || ({ binnensponning: "binnen", buitensponning: "buiten" })[p.sponning?.type ?? p.sponning?.sponningType];
+    return (p.applicableAs || []).includes(filter) || p.id === systemProfile?.id;
+  }).map(p => {
+    const snapshot = resolveProfileSnapshot(p);
+    const systemSash = ["sash", "sliding_sash"].includes(filter) && ["aluminum", "pvc"].includes(p.material);
     return {
-      // System profiles often store their face-plane Falzhöhe in glazingRebate.
-      sponningDiepte: timber ? mm(p.sponning?.width) ?? mm(p.glazingRebate) : null,
-      sponningHoogte: mm(p.sponning?.depth),
-      beadPosition: ["binnen", "buiten"].includes(side) ? side : null,
-      sashOverlap: mm(p.sponning?.opdekWidth ?? p.sponning?.opdek_width ?? p.overslagHoogte ?? p.ventOverlap),
-      sashClearance: mm(p.aanslagSponning?.clearance),
-      sashSeatDepth: mm(p.aanslagSponning?.depth),
-      glasinval: mm(p.glasinval),
-      glaslatBreedte: mm(p.glaslatWidth),
-      beadWidthBase: mm(p.glazingBead?.widthBase),
-      glaslatHoogte: mm(p.glaslatHeight),
-      aanzichtbreedte: mm(p.sightline),
+      id: p.id, name: p.name, material: p.material, materialSubtype: p.materialSubtype, snapshot,
+      width: (systemSash && snapshot.sashFaceWidth) || p.width,
+      depth: (systemSash && snapshot.sashBuildDepth) || p.depth,
     };
-  }
+  }));
 
   function handleChange(e) {
     const selectedId = e.target.value;
     const profile = filteredProfiles.find(p => p.id === selectedId);
-    if (profile) {
-      onchange?.({
-        id: profile.id,
-        name: profile.name,
-        width: profile.width,
-        depth: profile.depth,
-        material: profile.material,
-        materialSubtype: profile.materialSubtype,
-        // Resolved profile values: consumers that apply the profile to the
-        // frame store these as profile_snapshot so the drawing follows the
-        // real profile instead of hard-coded defaults.
-        snapshot: resolveSnapshot(profile),
-      });
-    }
+    if (profile) onchange?.(profile);
   }
 </script>
 

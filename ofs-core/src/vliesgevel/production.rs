@@ -139,12 +139,12 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                 // Glazing gaskets per panel
                 let perimeter = 2.0 * (gw + gh) + GASKET_OVERLAP_MM;
                 gasket_list.push(GasketListItem {
-                    gasket_type: GasketType::GlazingInner,
+                    reference: None, gasket_type: GasketType::GlazingInner,
                     length_mm: perimeter,
                     quantity: 1,
                 });
                 gasket_list.push(GasketListItem {
-                    gasket_type: GasketType::GlazingOuter,
+                    reference: None, gasket_type: GasketType::GlazingOuter,
                     length_mm: perimeter,
                     quantity: 1,
                 });

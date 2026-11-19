@@ -217,6 +217,10 @@ function wasmCommand(cmd, args) {
         return typeof wasm.update_cell_sash_profile === "function"
           ? J(wasm.update_cell_sash_profile(args?.id, args?.cellIndex, args?.profileId, args?.profileName, args?.sashWidth, args?.sashDepth, args?.profileSnapshotJson ?? null))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
+      case "update_perimeter_stop":
+        return typeof wasm.update_perimeter_stop === "function"
+          ? J(wasm.update_perimeter_stop(args.id, args.profileJson))
+          : unavailableInWeb(cmd);
       case "update_edge_config":
         return typeof wasm.update_edge_config === "function"
           ? J(wasm.update_edge_config(args?.id, args?.edgeIndex, args?.edgeJson))
@@ -268,8 +272,17 @@ function wasmCommand(cmd, args) {
           ? J(wasm.update_cell_glazing(args.id, args.cellIndex, args.glazingJson))
           : unavailableInWeb(cmd);
       case "update_cell_hardware":
+        return typeof wasm.update_cell_hardware === "function"
+          ? J(wasm.update_cell_hardware(args.id, args.cellIndex, args.hardwareSetJson))
+          : unavailableInWeb(cmd);
       case "auto_select_hardware":
+        return typeof wasm.auto_select_hardware === "function"
+          ? J(wasm.auto_select_hardware(args.id, args.cellIndex))
+          : unavailableInWeb(cmd);
       case "update_security_class":
+        return typeof wasm.update_security_class === "function"
+          ? J(wasm.update_security_class(args.id, args.cellIndex, args.securityClass))
+          : unavailableInWeb(cmd);
       case "update_frame_colors":
       case "add_frame_extension":
       case "remove_frame_extension":
@@ -410,6 +423,10 @@ function browserFallback(cmd, args) {
     case "load_profile_library": return [];
     case "get_custom_profiles": return [];
     case "add_custom_profile":
+    case "update_perimeter_stop":
+    case "update_cell_hardware":
+    case "auto_select_hardware":
+    case "update_security_class":
     case "update_cell_glazing": return unavailableInWeb(cmd);
     case "get_sjablonen": return loadWebSjablonen();
     case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);

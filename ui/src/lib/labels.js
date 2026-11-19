@@ -19,6 +19,7 @@ export const PANEL_TYPE_KEYS = {
 };
 
 const MEMBER_TYPE_KEYS = {
+  perimeter_stop: "system.strip",
   frame_arc: "member.arc",
   sash_arc: "member.sashArc",
   frame_top: "member.topRail",
@@ -45,6 +46,11 @@ const GASKET_TYPE_KEYS = {
   glazing_outer: "production.gasketOuter",
   sash_seal: "production.gasketSash",
   frame_seal: "production.gasketFrame",
+  closing_inner: "production.closingInner",
+  closing_centre: "production.closingCentre",
+  closing_outer: "production.closingOuter",
+  closing_single: "production.closingSingle",
+  closing_unspecified: "production.closingUnspecified",
 };
 
 /**

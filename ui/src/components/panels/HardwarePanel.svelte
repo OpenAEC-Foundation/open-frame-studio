@@ -1,5 +1,7 @@
 <script>
   import { _ } from "svelte-i18n";
+  import { toast } from "../../stores/toast.js";
+  import HardwareSchedule from "./HardwareSchedule.svelte";
   import {
     currentKozijn,
     selectedCellIndex,
@@ -8,22 +10,14 @@
     updateSecurityClass,
   } from "../../stores/kozijn.js";
 
-  let { visible = true } = $props();
+  let { visible = true, leaves = [] } = $props();
 
   let collapsed = $state(false);
 
-  let SECURITY_CLASSES = $derived([
-    { value: "none", label: $_('hardware.secNone') },
-    { value: "RC1", label: $_('hardware.secRC1') },
-    { value: "RC2", label: $_('hardware.secRC2') },
-    { value: "RC3", label: $_('hardware.secRC3') },
-    { value: "RC4", label: $_('hardware.secRC4') },
-    { value: "RC5", label: $_('hardware.secRC5') },
-    { value: "RC6", label: $_('hardware.secRC6') },
-  ]);
+  const SECURITY_CLASSES = ["none", "rc1", "rc2", "rc3", "rc4", "rc5", "rc6"];
 
   const OPERABLE_TYPES = [
-    "turn_tilt", "turn", "tilt", "sliding", "door",
+    "turn_tilt", "turn", "tilt", "sliding", "lift_slide", "door", "pivot", "top_hung", "bottom_hung",
   ];
 
   let selectedCell = $derived(
@@ -32,7 +26,10 @@
       : null
   );
 
-  let hw = $derived(selectedCell?.hardwareSet || null);
+  let hw = $derived(leaves[0]?.set ?? selectedCell?.hardwareSet ?? null);
+  let sideHung = $derived(["turn_tilt", "turn", "door"].includes(selectedCell?.panelType));
+  let system = $derived(["pvc", "aluminum"].includes($currentKozijn?.frame.material));
+  let editableSides = $derived(system && sideHung ? ["left", "right"] : ["left", "right", "top", "bottom"]);
 
   let isOperable = $derived(selectedCell
     ? OPERABLE_TYPES.includes(selectedCell.panelType)
@@ -44,24 +41,29 @@
   }
 
   async function onSecurityChange(e) {
-    await updateSecurityClass($selectedCellIndex, e.target.value);
+    await updateSecurityClass($selectedCellIndex, e.target.value).catch(e => toast.error(String(e)));
   }
 
   async function onAutoSelect() {
-    await autoSelectHardware($selectedCellIndex);
+    await autoSelectHardware($selectedCellIndex).catch(e => toast.error(String(e)));
   }
 
   async function onHwChange(field, subfield, value) {
     if (!hw) return;
+    if (typeof value === "number" && !Number.isFinite(value)) return;
     const updated = JSON.parse(JSON.stringify(hw));
     if (subfield) {
       if (!updated[field]) return;
       updated[field][subfield] = value;
+      if (system && sideHung && subfield === "side" && ["left", "right"].includes(value)) {
+        const counterpart = field === "hinges" ? updated.handle : field === "handle" ? updated.hinges : null;
+        if (counterpart) counterpart.side = value === "left" ? "right" : "left";
+      }
     } else {
       updated[field] = value;
     }
     updated.autoSelected = false;
-    await updateCellHardware($selectedCellIndex, updated);
+    await updateCellHardware($selectedCellIndex, updated).catch(e => toast.error(String(e)));
   }
 </script>
 
@@ -83,11 +85,11 @@
           <div class="field">
             <label>{$_('hardware.resistanceClass')}</label>
             <select
-              value={hw?.securityClass || "none"}
+              value={hw?.securityClass?.toLowerCase() || "none"}
               onchange={onSecurityChange}
             >
               {#each SECURITY_CLASSES as sc}
-                <option value={sc.value}>{sc.label}</option>
+                <option value={sc}>{sc === "none" ? $_("hardware.secNone") : sc.toUpperCase()}</option>
               {/each}
             </select>
           </div>
@@ -127,17 +129,17 @@
                   <label>{$_('hardware.side')}</label>
                   <select
                     value={hw.hinges.side}
+                    disabled={system && !sideHung}
                     onchange={(e) => onHwChange("hinges", "side", e.target.value)}
                   >
-                    <option value="left">{$_('hardware.left')}</option>
-                    <option value="right">{$_('hardware.right')}</option>
-                    <option value="top">{$_('hardware.top')}</option>
-                    <option value="bottom">{$_('hardware.bottom')}</option>
+                    {#each editableSides as side}
+                      <option value={side}>{$_("hardware." + side)}</option>
+                    {/each}
                   </select>
                 </div>
               </div>
               <div class="field">
-                <label>{$_('hardware.loadCapacity')}</label>
+                <label>{$_('system.requiredCapacity')}</label>
                 <input
                   type="number"
                   value={Math.round(hw.hinges.loadCapacityKg)}
@@ -174,7 +176,7 @@
                   >
                     <option value="left">{$_('hardware.left')}</option>
                     <option value="right">{$_('hardware.right')}</option>
-                    <option value="center">{$_('hardware.center')}</option>
+                    {#if !system || !sideHung}<option value="center">{$_('hardware.center')}</option>{/if}
                   </select>
                 </div>
                 <div class="field">
@@ -183,9 +185,8 @@
                     type="number"
                     value={hw.handle.heightMm}
                     onchange={(e) => onHwChange("handle", "heightMm", parseFloat(e.target.value))}
-                    min="500"
-                    max="1500"
-                    step="10"
+                    min="0"
+                    step="any"
                   />
                 </div>
               </div>
@@ -257,11 +258,20 @@
               {/if}
             </div>
           {/if}
-        {:else}
+        {:else if selectedCell.hardware?.length && !leaves.some(leaf => leaf.issue)}
+          <div class="section">
+            <h3>{$_("system.fittings")}</h3>
+            {#each selectedCell.hardware as item}
+              <p>{$_("fitting." + (item.hardwareType === "ventilation" ? "vent" : item.hardwareType))}
+                {[item.brand, item.model, item.position].filter(Boolean).join(" · ")}</p>
+            {/each}
+          </div>
+        {:else if !leaves.some(leaf => leaf.issue)}
           <div class="hint">
             <p>{$_('hardware.hintAutoSelect')}</p>
           </div>
         {/if}
+        <HardwareSchedule {leaves} />
       {:else if selectedCell && !isOperable}
         <div class="hint">
           <p>{$_('hardware.hintFixedNoHardware')}</p>

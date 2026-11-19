@@ -41,6 +41,7 @@ fn main() {
             commands::kozijn::update_sill_profile,
             commands::kozijn::update_member_profile,
             commands::kozijn::update_frame_shape,
+            commands::kozijn::update_perimeter_stop,
             commands::kozijn::update_corner_joints,
             commands::kozijn::add_custom_profile,
             commands::kozijn::get_custom_profiles,

@@ -413,7 +413,10 @@ pub fn generate_production_xlsx(
     {
         let ws = wb.add_worksheet();
         ws.set_name("Beslaglijst").map_err(|e| e.to_string())?;
-        let headers = ["Kozijn", "Cel", "Component", "Omschrijving", "Aantal"];
+        let mut headers = vec!["Kozijn", "Cel", "Component", "Omschrijving", "Aantal"];
+        if production_data.iter().flat_map(|p| &p.hardware_list).any(|h| h.piece_id.is_some()) {
+            headers.push("Positie");
+        }
         write_headers(ws, &headers, &hfmt)?;
 
         let mut row = 1u32;
@@ -427,7 +430,12 @@ pub fn generate_production_xlsx(
                 ws.write_number_with_format(row, 1, (item.cell_index + 1) as f64, &dfc).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 2, &item.component, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 3, &item.description, &df).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 4, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                if item.quantity > 0 {
+                    ws.write_number_with_format(row, 4, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                }
+                if let Some(piece) = &item.piece_id {
+                    ws.write_string_with_format(row, 5, piece, &df).map_err(|e| e.to_string())?;
+                }
                 row += 1;
             }
         }
@@ -438,7 +446,9 @@ pub fn generate_production_xlsx(
     {
         let ws = wb.add_worksheet();
         ws.set_name("Rubberlijst").map_err(|e| e.to_string())?;
-        let headers = ["Kozijn", "Type", "Lengte (mm)", "Aantal"];
+        let mut headers = vec!["Kozijn", "Type", "Lengte (mm)", "Aantal"];
+        let refs = production_data.iter().flat_map(|p| &p.gasket_list).any(|g| g.reference.is_some());
+        if refs { headers.extend(["Positie", "Profiel", "Netto meetlijn"]); }
         write_headers(ws, &headers, &hfmt)?;
 
         let mut row = 1u32;
@@ -450,12 +460,26 @@ pub fn generate_production_xlsx(
 
                 ws.write_string_with_format(row, 0, &prod.kozijn_mark, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 1, item.gasket_type.label_nl(), &df).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 2, item.length_mm.round(), &dfc).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 3, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                if let Some(r) = &item.reference {
+                    ws.write_number_with_format(row, 2, item.length_mm, &dfc.clone().set_num_format("0.0")).map_err(|e| e.to_string())?;
+                    ws.write_string_with_format(row, 4, &r.piece_id, &df).map_err(|e| e.to_string())?;
+                    ws.write_string_with_format(row, 5, &r.profile_name, &df).map_err(|e| e.to_string())?;
+                    ws.write_string_with_format(row, 6, r.line.label_nl(), &df).map_err(|e| e.to_string())?;
+                } else {
+                    ws.write_number_with_format(row, 2, item.length_mm.round(), &dfc).map_err(|e| e.to_string())?;
+                }
+                if item.quantity > 0 {
+                    ws.write_number_with_format(row, 3, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                }
                 row += 1;
             }
         }
         autofit_widths(ws, &headers, row)?;
+        if refs {
+            for (column, width) in [(1, 39.0), (5, 40.0), (6, 30.0)] {
+                ws.set_column_width(column, width).map_err(|e| e.to_string())?;
+            }
+        }
     }
 
     // Paneellijst (only if data exists)

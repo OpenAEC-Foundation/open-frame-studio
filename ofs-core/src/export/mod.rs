@@ -25,6 +25,41 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn system_seal_and_hardware_lists_export_physical_positions_and_measured_lengths() {
+        let mut k = Kozijn::new("MD", "V1", 1200.0, 1500.0);
+        k.frame.material = crate::kozijn::Material::Pvc;
+        k.frame.profile = crate::profile::ProfileRef { id: "veka-softline82".into(), name: "Softline 82 MD".into() };
+        k.frame.frame_width = 73.0;
+        k.grid.columns[0].size = k.inner_width();
+        k.grid.rows[0].size = k.inner_height();
+        k.cells[0].panel_type = crate::kozijn::PanelType::TurnTilt;
+        let prod = [compute_production_data(&k)];
+        let dir = std::env::temp_dir().join(format!("ofs-system-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&prod, dir.to_str().unwrap()).unwrap();
+        let seals = fs::read_to_string(dir.join("rubberlijst.csv")).unwrap();
+        assert!(seals.contains("Middendichting;5080.0;1;V1-V1;Softline 82 MD;Buitenomtrek vleugel"));
+        let hardware = fs::read_to_string(dir.join("beslaglijst.csv")).unwrap();
+        assert!(hardware.lines().any(|s| s.contains(";Sluitplaat;") && s.ends_with(";V1-V1")));
+        let book_path = dir.join("productie.xlsx");
+        xlsx::generate_production_xlsx(&prod, book_path.to_str().unwrap()).unwrap();
+        let mut book = open_workbook_auto(&book_path).unwrap();
+        let rubber = book.worksheet_range("Rubberlijst").unwrap();
+        let centre = rubber.rows().find(|r| r[1].to_string() == "Middendichting").unwrap();
+        assert_eq!((centre[2].to_string(), centre[4].to_string(), centre[6].to_string()),
+            ("5080".into(), "V1-V1".into(), "Buitenomtrek vleugel".into()));
+        let parts = book.worksheet_range("Beslaglijst").unwrap();
+        assert!(parts.rows().any(|r| r[2].to_string() == "Sluitplaat" && r[5].to_string() == "V1-V1"));
+        let pdf_path = dir.join("productie.pdf");
+        pdf::generate_production_pdf(&prod, pdf_path.to_str().unwrap()).unwrap();
+        let doc = lopdf::Document::load(pdf_path).unwrap();
+        let text = doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
+        for label in ["Rubberlijst", "Netto modelomtrek", "Middendichting", "5080.0", "Beslag per vleugel", "Sluitplaat"] {
+            assert!(text.contains(label), "{label}");
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn production_files_include_the_formed_panes_cutting_instructions() {
         let mut frame = Kozijn::new("Getoogd", "A1", 1200.0, 1500.0);
         frame.frame.shape.shape_type = ShapeType::Arched;

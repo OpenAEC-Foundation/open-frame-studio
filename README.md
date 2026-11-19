@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.47.0
+# Open Frame Studio v2026.47.1
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -7,7 +7,7 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Releasekanaal** — Open Frame Studio gebruikt GitHub Latest voor de installers van v2026.47.0. De software is bedoeld voor ontwerp- en BIM-uitwisselproeven. [Releasecontroles](docs/release-readiness.md) · [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases)
+> **Releasekanaal** — Open Frame Studio publiceert de actuele installers via GitHub Latest. De software is bedoeld voor ontwerp- en BIM-uitwisselproeven. [Releasecontroles](docs/release-readiness.md) · [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases)
 
 > **Installeren en bijwerken** — Download de installer voor je besturingssysteem via de [laatste GitHub-release](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/latest) en voer die uit. De OpenAEC Installer heeft Open Frame Studio op 19 november 2026 uit zijn catalogus verwijderd. [Wijziging in de Installer-catalogus](https://github.com/OpenAEC-Foundation/openaec-installer/commit/b6da4a008b1df85488a06b87daf039c7bbef864f)
 
@@ -48,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.47.1 (2026-11-19)
+
+- Kunststof en aluminium kozijnen gebruiken de maten en dichtingsniveaus van het gekozen profielsysteem. Een los aanslagprofiel tegen de dagkant krijgt eigen stukken, booglengtes en zaaghoeken in de kortlijst.
+- Het beslag volgt de draaiwijze, de scharnierzijde en de beschikbare montageruimte van elke vleugel. Bij het spiegelen blijven handmatige krukhoogte en aantallen behouden.
+- De 3D-doorsnede toont de aansluiting van vleugel, aanslag en rubbers. De beslag- en rubberlijsten en de PDF-, Excel- en CSV-uitvoer vermelden de bijbehorende stukreferenties.
 
 ## Changelog v2026.47.0 (2026-11-19)
 

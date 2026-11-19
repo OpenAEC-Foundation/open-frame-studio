@@ -6,6 +6,7 @@
   let { visible = true } = $props();
   let shape = $derived($currentKozijn?.frame.shape?.shapeType);
   let round = $derived(shape === "round");
+  let system = $derived(["pvc", "aluminum"].includes($currentKozijn?.frame.material));
   let arched = $derived(shape === "arched" || shape === "arched_trapezoid");
 
   const CORNER_LABELS = ["Linksboven", "Rechtsboven", "Linksonder", "Rechtsonder"];
@@ -92,7 +93,7 @@
   }
 </script>
 
-{#if visible && $currentKozijn}
+{#if visible && $currentKozijn && !(system && round)}
   <div class="joint-panel">
     <h3>{round ? $_("ringJoint.title") : "Hoekverbindingen"}</h3>
     {#if round}
@@ -102,7 +103,7 @@
     <!-- Quick apply buttons -->
     <div class="quick-apply">
       <span class="label">Alle hoeken:</span>
-      <button class="chip" onclick={() => applyToAll("pen_slis")}>Pen/slis</button>
+      {#if !system}<button class="chip" onclick={() => applyToAll("pen_slis")}>Pen/slis</button>{/if}
       <button class="chip" onclick={() => applyToAll("verstek")}>Verstek</button>
       <button class="chip" onclick={() => applyToAll("stomp")}>Stomp</button>
     </div>
@@ -122,11 +123,12 @@
             value={round && joint.jointType !== "pen_slis" ? "stomp" : joint.jointType}
             onchange={(e) => updateJoint(i, "jointType", e.target.value)}
           >
-            {#each (round ? JOINT_TYPES.filter(t => t.value === "pen_slis" || t.value === "stomp") : JOINT_TYPES) as jt}
+            {#each JOINT_TYPES.filter(t => round ? ["pen_slis", "stomp"].includes(t.value) :
+              !system || ["verstek", "stomp", joint.jointType].includes(t.value)) as jt}
               <option value={jt.value}>{typeLabel(jt, archFoot)}</option>
             {/each}
           </select>
-          {#if !round || joint.jointType === "pen_slis"}
+          {#if (!round || joint.jointType === "pen_slis") && !(system && joint.jointType === "verstek")}
           {#if round}<label for={`ring-donor-${i}`}>{$_("archJoint.tenonOn")}</label>{/if}
           <select id={round ? `ring-donor-${i}` : undefined}
             aria-label={$_(round ? "archJoint.tenonOn" : "archJoint.through")}

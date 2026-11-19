@@ -195,6 +195,14 @@ De regels hieronder beschrijven de maatvoering. Bij rechthoekige vakken gebruike
 | **R11** | Neut: kunststof 55 hoog standaard (tot 150), breedtes 67/90; hout pas ≥50 mm boven maaiveld. Voorsponning binnendraaiende deur 6×9 mm. | DTS (KOMO 20676); KVT 11.3; TO 2024 p.12 |
 | **R12** | Import-defaults: de heuristiek `width × 0,36` is verwijderd (schaalde mee met de profielbreedte — root cause van fout #1). Catalogusimport zonder sponningkolom krijgt een vaste waarde per materiaal volgens de veldsemantiek van §7: hout/hout-alu **51** (sponningbreedte vast glas), PVC **28** (Glasfalzhöhe), alu **25** (bibliotheekwaarde, unverified per R1). Onbekend materiaal en DXF-import zonder gedetecteerde sponning schrijven **0 = niet gespecificeerd** (bibliotheekconventie), zodat consumenten per materiaal op de R1-normen terugvallen (`profile::norm_glasinval`) in plaats van op een gegokte maat. | KVT 14.01/DTS; VEKA TPI Softline 82 MD; eigen constatering (`dxf_profile.rs`, `catalog.rs`) |
 
+### Aanslagen en beslag bij kunststof en aluminium
+
+De vleugelaanslag volgt de combinatie van kozijn- en vleugelprofiel. Bij VEKA Softline 82 MD geeft 73 mm kozijn plus 84 mm vleugel met 33 mm overlap een gecombineerd aanzicht van 124 mm. Het model telt de glasrubbers per ruit en de sluitdichtingen per vleugel. De rubberlijst vermeldt voor elke netto omtrek de meetlijn. Groefpositie, rek en kniptoeslagen volgen uit de voorschriften van het gekozen rubber.
+
+Een los profiel tegen de dagkant voeg je in de kozijneigenschappen toe onder **Aanslag tegen de dagkant**. Vul de profielnaam, uitsteek en lipdikte in. De kozijnmaat is de buitenmaat van het basisprofiel. Het paneel toont ook de buitenmaat inclusief aanslag. In de kortlijst hoort `AP1`, `AP2` enzovoort bij de afzonderlijke stukken. De nettolengte loopt over de buitenrand tussen de lange punten. Bij een bocht vermeldt de lijst ook de buitenstraal en de ontwikkelde booglengte. De brutolengte bevat de zaagsnede. Eventuele opspanlengte voor buigen is leveranciersafhankelijk.
+
+De beslaglijst specificeert scharnieren, grepen, sluitpunten en sluitplaten per fysieke vleugel. De beslagposities in het aanzicht zijn modelposities. Voor boorpatronen, draagvermogen en weerstandsklasse zijn de montagegegevens van het gekozen beslagstel nodig.
+
 Aanvullende productie-/validatieregels (uitbreiding, alle ●● tenzij vermeld):
 
 - **Glaslatbevestiging** (KVT 12.5/12.5.1): schroef ≥3,5 dik, hechtlengte ≥15 in kozijnhout (17-lat → schroef ≥32), eindafstand ≤50, h.o.h. ≤200; nagel ≥1,8×38 h.o.h. ≤150; buitenbeglazing RVS verplicht. Neuslat: bolkopschroef ≥4,0 / hechtlengte ≥20 / h.o.h. ≤300; nagel 1,8×43 ≤150; neus ±5 mm buiten de dorpel.

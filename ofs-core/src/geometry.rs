@@ -35,6 +35,8 @@ pub struct Arc2D {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KozijnGeometry2D {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perimeter_stop: Option<crate::perimeter_stop::StopGeometry>,
     /// Effective choices, including material defaults for untouched projects.
     #[serde(default)]
     pub corner_settings: [crate::joint::Joint; 4],
@@ -123,6 +125,9 @@ pub struct KozijnGeometry2D {
 #[serde(rename_all = "camelCase")]
 pub struct CellRect {
     pub rect: Rect2D,
+    /// Generic PVC/aluminium fittings on the actual moving leaf outlines.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hardware_leaves: Vec<crate::hardware::HardwareLeaf>,
     /// Panes specified by the infill which have no manufacturable curved opening.
     #[serde(skip)]
     pub(crate) missing_glass_panes: usize,
@@ -388,6 +393,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                 let cx = col_positions[col_idx];
                 let cy = row_positions[row_idx];
                 cell_rects.push(CellRect {
+                    hardware_leaves: Vec::new(),
                     missing_glass_panes: 0,
                     rect: Rect2D {
                         x: cx,
@@ -464,6 +470,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                 cr.fit = cr.second_fit.take();
             }
         }
+        cr.hardware_leaves = crate::hardware::hardware_leaves(&kozijn.frame, cell, cr);
     }
 
     // ── Dimension lines (NEN 3576 / GA Kozijn style) ──
@@ -843,6 +850,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         kozijn, &curved_timber, &mut curved_divider_timber, &cell_rects, &corner_settings,
     );
     KozijnGeometry2D {
+        perimeter_stop: crate::perimeter_stop::outline(
+            &kozijn.frame, frame_curve.as_ref(), &trapezoid_outer,
+            layout_geom.as_ref().is_some_and(|layout| layout.leaves.iter().any(|l| l.vulling.is_buiten())),
+        ),
         corner_settings,
         arch_joints,
         curved_timber,
@@ -891,6 +902,7 @@ fn layout_dividers_and_cells(lg: &LayoutGeometry) -> (Vec<Rect2D>, Vec<Rect2D>, 
         .iter()
         .filter(|l| !l.vulling.is_buiten())
         .map(|l| CellRect {
+            hardware_leaves: Vec::new(),
             rect: to_rect(&l.rect),
             col: 0,
             row: 0,

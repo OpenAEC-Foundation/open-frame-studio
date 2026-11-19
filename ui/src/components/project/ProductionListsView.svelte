@@ -72,6 +72,8 @@
   $: allGasket = ($productionDataProject || []).flatMap(p =>
     (p.gasketList || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
+  $: hasSealReferences = allGasket.some(g => g.reference);
+  $: hasHardwarePositions = allHw.some(h => h.pieceId);
   $: allPanel = ($productionDataProject || []).flatMap(p =>
     (p.panelList || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
@@ -253,6 +255,7 @@
       <table>
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.cell')}</th><th>{$_('production.component')}</th><th>{$_('production.description')}</th><th>{$_('production.quantity')}</th>
+          {#if hasHardwarePositions}<th>{$_('production.position')}</th>{/if}
         </tr></thead>
         <tbody>
           {#each allHw as item}
@@ -261,24 +264,34 @@
               <td>{item.cellIndex + 1}</td>
               <td>{item.component}</td>
               <td>{item.description}</td>
-              <td class="num">{item.quantity}</td>
+              <td class="num">{item.quantity || '—'}</td>
+              {#if hasHardwarePositions}<td>{item.pieceId ?? '—'}</td>{/if}
             </tr>
           {/each}
         </tbody>
       </table>
 
     {:else if activeTab === "rubberlijst"}
+      {#if hasSealReferences}<p>{$_('production.sealMeasureNote')}</p>{/if}
       <table>
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.type')}</th><th>{$_('production.lengthMm')}</th><th>{$_('production.quantity')}</th>
+          {#if hasSealReferences}
+            <th>{$_('production.position')}</th><th>{$_('production.profile')}</th><th>{$_('production.measureLine')}</th>
+          {/if}
         </tr></thead>
         <tbody>
           {#each allGasket as item}
             <tr>
               <td>{item.mark}</td>
               <td>{gasketLabel($_, item.gasketType)}</td>
-              <td class="num">{Math.round(item.lengthMm)}</td>
-              <td class="num">{item.quantity}</td>
+              <td class="num">{item.reference ? mm.format(item.lengthMm) : Math.round(item.lengthMm)}</td>
+              <td class="num">{item.quantity || '—'}</td>
+              {#if hasSealReferences}
+                <td>{item.reference?.pieceId ?? '—'}</td>
+                <td>{item.reference?.profileName ?? '—'}</td>
+                <td>{item.reference ? $_('production.sealLine.' + item.reference.line) : '—'}</td>
+              {/if}
             </tr>
           {/each}
         </tbody>

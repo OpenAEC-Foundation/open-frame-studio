@@ -212,6 +212,7 @@ export async function updateCellHardware(cellIndex, hardwareSet) {
   });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
 export async function autoSelectHardware(cellIndex) {
@@ -224,6 +225,7 @@ export async function autoSelectHardware(cellIndex) {
   });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
 export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth, profileSnapshot, material, subtype) {
@@ -251,6 +253,16 @@ export async function updateFrameProfile(profileId, profileName, profileWidth, p
   await refreshGeometry(updated.id);
 }
 
+export async function updatePerimeterStop(profile) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  pushSnapshot();
+  const updated = await invoke("update_perimeter_stop", { id: k.id, profileJson: JSON.stringify(profile) });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(updated.id);
+}
+
 export async function updateSillProfile(profileId, profileName) {
   const k = get(currentKozijn);
   if (!k) return;
@@ -258,6 +270,7 @@ export async function updateSillProfile(profileId, profileName) {
   const updated = await invoke("update_sill_profile", { id: k.id, profileId, profileName });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
 export async function updateMemberProfile(memberType, memberIndex, profileId, profileName, profileWidth, profileDepth) {
@@ -356,6 +369,7 @@ export async function updateSecurityClass(cellIndex, securityClass) {
   });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
 export async function updateCellSashProfile(cellIndex, profileId, profileName, sashWidth, sashDepth, snapshot) {

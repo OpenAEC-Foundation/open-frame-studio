@@ -1,5 +1,5 @@
 <script>
-  import { currentKozijn, calculateThermal } from "../../stores/kozijn.js";
+  import { currentGeometry, currentKozijn, calculateThermal } from "../../stores/kozijn.js";
   import { zoom } from "../../stores/ui.js";
   import { kozijnen } from "../../stores/project.js";
   import { _ } from "svelte-i18n";
@@ -12,13 +12,12 @@
     thermalResult = null;
   }
 
-  // Count cells missing hardware
-  $: missingHardware = $currentKozijn
-    ? $currentKozijn.cells.filter(c => {
-        const operable = ["turn_tilt", "turn", "tilt", "sliding", "door"].includes(c.panelType);
-        return operable && !c.hardwareSet;
-      }).length
-    : 0;
+  $: system = ["pvc", "aluminum"].includes($currentKozijn?.frame.material);
+  $: missingHardware = system
+    ? ($currentGeometry?.cellRects ?? []).filter(c => c.hardwareLeaves?.some(l => l.issue)).length
+    : ($currentKozijn?.cells ?? []).filter(c =>
+        !["fixed_glass", "panel", "ventilation"].includes(c.panelType) && !c.hardwareSet && !c.hardware?.length
+      ).length;
 
   $: material = $currentKozijn?.frame?.material?.wood
     || ($currentKozijn?.frame?.material === "aluminum" ? $_('status.aluminum')
@@ -50,7 +49,7 @@
           <path d="M12 9v4m0 4h.01"/>
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
-        {$_('status.missingHardware', { values: { count: missingHardware } })}
+        {$_(system ? 'system.fittingIssues' : 'status.missingHardware', { values: { count: missingHardware } })}
       </span>
     {/if}
   </div>
