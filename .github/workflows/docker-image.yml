@@ -112,7 +112,7 @@ jobs:
         env:
           NUMBER: ${{ steps.release.outputs.number }}
         run: |
-          bash release-source/packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
+          bash packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
             /usr/bin/open-frame-studio "$RUNNER_TEMP/ofs-docker-test"
 
       - name: Upload smoke-test evidence

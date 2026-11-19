@@ -7,7 +7,7 @@
 #   e.g. templates/docker/test-container.sh openaec-blueprint:test /usr/bin/openaec-blueprint docker-test
 #
 # Writes stream.png, memory.txt and container.log to the output folder. Needs
-# Docker, Node (npx) and ImageMagick, as on the GitHub ubuntu runners.
+# Docker, Node (npx), Google Chrome and Python 3, as on the GitHub Ubuntu runners.
 set -euo pipefail
 
 image=$1
@@ -47,11 +47,26 @@ echo "The health endpoint answers OK"
 [ "$(curl -fsS "http://127.0.0.1:$port/gezond")" = OK ] || { echo "::error::/gezond does not answer OK"; exit 1; }
 
 echo "Photographing the stream in a browser"
-command -v convert >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick >/dev/null; }
-npx -y playwright@1.49.1 install --with-deps chromium >/dev/null
-npx -y playwright@1.49.1 screenshot --browser=chromium --viewport-size=1600,1000 --wait-for-timeout=10000 \
+npx -y playwright@1.49.1 screenshot --browser=chromium --channel=chrome --viewport-size=1600,1000 --wait-for-timeout=10000 \
   "http://127.0.0.1:$port/" "$out/stream.png"
-colours=$(convert "$out/stream.png" -format %k info:)
+colours=$(python3 - "$out/stream.png" <<'PY'
+import importlib.util
+import subprocess
+import sys
+import tempfile
+
+with tempfile.TemporaryDirectory() as packages:
+    if importlib.util.find_spec("PIL") is None:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                        "--only-binary=:all:", "--target", packages, "Pillow==13.0.0"],
+                       check=True, stdout=sys.stderr)
+        sys.path.insert(0, packages)
+    from PIL import Image
+    with Image.open(sys.argv[1]) as screenshot:
+        rgb = screenshot.convert("RGB")
+        print(len(rgb.getcolors(rgb.width * rgb.height)))
+PY
+)
 echo "The stream shows $colours colours"
 [ "$colours" -ge 64 ] || { echo "::error::the stream looks empty ($colours colours)"; exit 1; }
 
