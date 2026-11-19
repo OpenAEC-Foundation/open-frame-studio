@@ -140,17 +140,32 @@ function cellToVulling(cell) {
   return { type: "raam", openType: OPENTYPE_FROM_PANELTYPE[pt] || "draai", ...extra };
 }
 
-/** Build a split tree equivalent to a kozijn's rectangular grid + cells. */
-export function gridToLayout(kozijn) {
+// The stored heights of older arched grids are weights below the spring.
+// Dragging or converting to a free layout starts from the visible transoms.
+export function gridRowHeights(kozijn, geometry) {
+  const rows = kozijn?.grid?.rows ?? [];
+  const bars = geometry?.hDividers;
+  if (!geometry?.curvedFrame || bars?.length !== rows.length - 1) return rows.map(r => r.size);
+  const frame = kozijn.frame;
+  return rows.map((_, i) => {
+    const above = bars[i - 1];
+    const top = above ? above.y + above.height : frame.frameWidth;
+    return (bars[i]?.y ?? frame.outerHeight - frame.frameWidth) - top;
+  });
+}
+
+/** Build a split tree equivalent to the drawn grid and its cells. */
+export function gridToLayout(kozijn, geometry) {
   const cols = kozijn?.grid?.columns || [];
   const rows = kozijn?.grid?.rows || [];
   const cells = kozijn?.cells || [];
   const numCols = cols.length || 1;
   if (cols.length === 0 || rows.length === 0) return glas();
-  const rowChildren = rows.map((row, r) => {
+  const heights = gridRowHeights(kozijn, geometry);
+  const rowChildren = rows.map((_, r) => {
     const colChildren = cols.map((col, c) =>
       child(col.size || 1, leaf(cellToVulling(cells[r * numCols + c]))));
-    return child(row.size || 1, colChildren.length > 1 ? splitRow(...colChildren) : colChildren[0].node);
+    return child(heights[r] || 1, colChildren.length > 1 ? splitRow(...colChildren) : colChildren[0].node);
   });
   return rowChildren.length > 1 ? splitCol(...rowChildren) : rowChildren[0].node;
 }
@@ -167,9 +182,9 @@ export function freeGrid(cols = 9, rows = 4) {
  * Recursively partition `rect` according to the split tree.
  * @returns {{leaves: Array<{rect, node}>, dividers: Array<{rect, direction}>}}
  */
-export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], dividers: [] }) {
+export function layoutToRects(node, rect, dividerW = 20, out = { leaves: [], dividers: [] }, clipBuiten = true) {
   layoutRec(node, rect, dividerW, out);
-  clipDividersAgainstBuiten(out);
+  if (clipBuiten) clipDividersAgainstBuiten(out);
   return out;
 }
 

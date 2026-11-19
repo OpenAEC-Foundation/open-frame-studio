@@ -13,6 +13,11 @@ pub struct StockLength {
 #[serde(rename_all = "camelCase")]
 pub struct CutPlan {
     pub allocations: Vec<StockAllocation>,
+    /// Positions made from curved stock, excluded from linear bar nesting.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub curved_piece_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved_piece_ids: Vec<String>,
     pub total_waste_mm: f64,
     pub waste_percentage: f64,
     pub total_bars_used: usize,
@@ -33,6 +38,31 @@ pub struct AllocatedCut {
     pub piece_id: String,
     pub kozijn_mark: String,
     pub length_mm: f64,
+}
+
+/// Nest the actual straight production blanks. Curved stock is ordered by its
+/// developed length and cannot be taken from one of these straight bars.
+pub fn optimize_frame_cuts(kozijnen: &[crate::kozijn::Kozijn], stock_length_mm: f64) -> CutPlan {
+    let mut pieces = Vec::new();
+    let mut curved_piece_ids = Vec::new();
+    let mut unresolved_piece_ids = Vec::new();
+    for kozijn in kozijnen {
+        let prod = crate::production::compute_production_data(kozijn);
+        for cut in &prod.cut_list {
+            if prod.blank_length_mm(cut).is_none() {
+                unresolved_piece_ids.push(cut.piece_id.clone());
+            } else if cut.arc.is_some() {
+                curved_piece_ids.push(cut.piece_id.clone());
+            } else {
+                pieces.push((cut.piece_id.clone(), prod.kozijn_mark.clone(), cut.gross_length_mm));
+            }
+        }
+    }
+    // Production already includes the saw kerf once per blank.
+    let mut plan = optimize_cut_list(pieces, stock_length_mm, 0.0);
+    plan.curved_piece_ids = curved_piece_ids;
+    plan.unresolved_piece_ids = unresolved_piece_ids;
+    plan
 }
 
 /// First Fit Decreasing algorithm for 1D cutting stock problem
@@ -84,6 +114,8 @@ pub fn optimize_cut_list(
     let waste_pct = if total_stock > 0.0 { total_waste / total_stock * 100.0 } else { 0.0 };
 
     CutPlan {
+        curved_piece_ids: Vec::new(),
+        unresolved_piece_ids: Vec::new(),
         total_bars_used: allocations.len(),
         total_waste_mm: total_waste,
         waste_percentage: (waste_pct * 10.0).round() / 10.0,

@@ -2,6 +2,7 @@ import { writable, derived, get } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
 import { refreshProject, markDirty } from "./project.js";
 import { pushSnapshot, clearHistory } from "./history.js";
+import { selectedJoints } from "../lib/dividerJoinery.js";
 
 export const currentKozijn = writable(null);
 export const selectedCellIndex = writable(null);
@@ -11,7 +12,17 @@ export const selectedMember = writable(null);
 // the store so the side panels can edit the vulling of the selected vak.
 export const selectedLayoutLeafId = writable(null);
 
+export function selectDividerPiece(piece) {
+  selectedLayoutLeafId.set(null);
+  selectedCellIndex.set(null);
+  selectedMember.set({
+    type: piece.vertical ? "divider_v" : "divider_h", index: piece.sourceIndex, pieceIndex: piece.pieceIndex,
+  });
+}
+
 export const currentGeometry = writable(null);
+export const selectedTimberJoints = derived([currentGeometry, selectedMember], ([geometry, selected]) =>
+  selectedJoints(geometry, selected));
 
 export async function createKozijn(name, mark, width, height) {
   const k = await invoke("create_kozijn", { name, mark, width, height });
@@ -144,6 +155,18 @@ export async function updateCellGlaslat(cellIndex, glaslat) {
   await refreshGeometry(updated.id);
 }
 
+export async function updateCellGlazing(cellIndex, glazing) {
+  const k = get(currentKozijn);
+  if (!k || cellIndex == null) return;
+  pushSnapshot();
+  const updated = await invoke("update_cell_glazing", {
+    id: k.id, cellIndex, glazingJson: JSON.stringify(glazing),
+  });
+  currentKozijn.set(updated);
+  await refreshProject();
+  await refreshGeometry(k.id);
+}
+
 export async function updateCellEscape(cellIndex, isEscape) {
   const k = get(currentKozijn);
   if (!k) return;
@@ -158,21 +181,21 @@ export async function updateCellEscape(cellIndex, isEscape) {
   await refreshGeometry(updated.id);
 }
 
-export async function addColumn(position) {
+export async function addColumn(position, elevation = false) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  const updated = await invoke("add_column", { id: k.id, position });
+  const updated = await invoke("add_column", { id: k.id, position, elevation });
   currentKozijn.set(updated);
   await refreshProject();
   await refreshGeometry(updated.id);
 }
 
-export async function addRow(position) {
+export async function addRow(position, elevation = false) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  const updated = await invoke("add_row", { id: k.id, position });
+  const updated = await invoke("add_row", { id: k.id, position, elevation });
   currentKozijn.set(updated);
   await refreshProject();
   await refreshGeometry(updated.id);
@@ -203,9 +226,16 @@ export async function autoSelectHardware(cellIndex) {
   await refreshProject();
 }
 
-export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth, profileSnapshot) {
+export async function updateFrameProfile(profileId, profileName, profileWidth, profileDepth, profileSnapshot, material, subtype) {
   const k = get(currentKozijn);
   if (!k) return;
+  let frameMaterial = null;
+  if (material === "wood") {
+    const species = ["meranti", "accoya", "vuren", "eiken"].includes(subtype) ? subtype : k.frame.material?.wood || "meranti";
+    frameMaterial = { wood: species };
+  } else if (["pvc", "aluminum", "wood_aluminum"].includes(material)) {
+    frameMaterial = material;
+  }
   pushSnapshot();
   const updated = await invoke("update_frame_profile", {
     id: k.id, profileId, profileName,
@@ -214,6 +244,7 @@ export async function updateFrameProfile(profileId, profileName, profileWidth, p
     // Resolved sponning/glaslat/aanzicht values from the ProfileDefinition;
     // null leaves the stored snapshot untouched (old backends ignore the arg).
     profileSnapshotJson: profileSnapshot ? JSON.stringify(profileSnapshot) : null,
+    profileMaterialJson: frameMaterial ? JSON.stringify(frameMaterial) : null,
   });
   currentKozijn.set(updated);
   await refreshProject();
@@ -296,9 +327,10 @@ export async function updateCornerJoints(joints) {
   });
   currentKozijn.set(updated);
   await refreshProject();
+  await refreshGeometry(updated.id);
 }
 
-export async function updateGridSizes(columnSizes, rowSizes) {
+export async function updateGridSizes(columnSizes, rowSizes, rowsFromDay = false) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
@@ -306,6 +338,7 @@ export async function updateGridSizes(columnSizes, rowSizes) {
     id: k.id,
     columnSizes,
     rowSizes,
+    rowsFromDay,
   });
   currentKozijn.set(updated);
   await refreshProject();
@@ -325,12 +358,13 @@ export async function updateSecurityClass(cellIndex, securityClass) {
   await refreshProject();
 }
 
-export async function updateCellSashProfile(cellIndex, profileId, profileName, sashWidth, sashDepth) {
+export async function updateCellSashProfile(cellIndex, profileId, profileName, sashWidth, sashDepth, snapshot) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
   const updated = await invoke("update_cell_sash_profile", {
     id: k.id, cellIndex, profileId, profileName, sashWidth, sashDepth,
+    profileSnapshotJson: JSON.stringify(snapshot ?? null),
   });
   currentKozijn.set(updated);
   await refreshProject();
@@ -398,10 +432,11 @@ export async function removeKozijn(id) {
   markDirty();
 }
 
-async function refreshGeometry(id) {
+export async function refreshGeometry(id = get(currentKozijn)?.id) {
+  if (!id) return;
   try {
     const geom = await invoke("get_kozijn_geometry", { id });
-    currentGeometry.set(geom);
+    if (get(currentKozijn)?.id === id) currentGeometry.set(geom);
   } catch (e) {
     console.error("Geometrie laden mislukt:", e);
   }

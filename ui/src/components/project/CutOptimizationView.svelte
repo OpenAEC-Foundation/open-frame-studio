@@ -20,10 +20,12 @@
     loading = false;
   }
 
-  $: bars = result?.bars || [];
-  $: totalBars = result?.totalBars || bars.length;
-  $: wastePercent = result?.wastePercent || 0;
+  $: bars = result?.allocations ?? result?.bars ?? [];
+  $: totalBars = result?.totalBarsUsed ?? result?.totalBars ?? bars.length;
+  $: wastePercent = result?.wastePercentage ?? result?.wastePercent ?? 0;
   $: totalWasteMm = result?.totalWasteMm || 0;
+  $: curvedPieceIds = result?.curvedPieceIds ?? [];
+  $: unresolvedPieceIds = result?.unresolvedPieceIds ?? [];
 
   function cutColor(i) {
     const colors = ["#3b82f6", "#f59e0b", "#22c55e", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316", "#14b8a6"];
@@ -61,36 +63,45 @@
     </div>
   </div>
 
+  {#if curvedPieceIds.length}
+    <p class="curved-pieces"><strong>{$_("production.bentStock")}</strong> · {curvedPieceIds.join(", ")}</p>
+  {/if}
+  {#if unresolvedPieceIds.length}
+    <p class="curved-pieces"><strong>{$_("archJoint.unresolvedPieces")}</strong> · {unresolvedPieceIds.join(", ")}</p>
+  {/if}
   {#if loading}
     <p class="hint">Optimaliseren...</p>
-  {:else if bars.length === 0}
+  {:else if bars.length === 0 && curvedPieceIds.length === 0 && unresolvedPieceIds.length === 0}
     <p class="hint">Geen zaaggegevens beschikbaar. Voeg kozijnen toe aan het project.</p>
   {:else}
     <div class="bars-container">
       {#each bars as bar, barIndex}
+        {@const length = bar.stockLengthMm ?? stockLength}
+        {@const waste = bar.remainingMm ?? bar.waste ?? 0}
         <div class="bar-row">
           <span class="bar-label">Staaf {barIndex + 1}</span>
           <div class="bar-visual">
             {#each (bar.cuts || []) as cut, cutIndex}
+              {@const cutLength = cut.lengthMm ?? cut.length}
               <div
                 class="cut-block"
-                style="width:{(cut.length / stockLength) * 100}%;background:{cutColor(cutIndex)}"
-                title="{cut.mark || ''}: {cut.length}mm ({cut.profile || ''})"
+                style="width:{(cutLength / length) * 100}%;background:{cutColor(cutIndex)}"
+                title="{cut.pieceId ?? cut.mark ?? ''} · {Math.round(cutLength)} mm"
               >
-                <span class="cut-text">{cut.length}</span>
+                <span class="cut-text">{Math.round(cutLength)}</span>
               </div>
             {/each}
-            {#if bar.waste > 0}
+            {#if waste > 0}
               <div
                 class="waste-block"
-                style="width:{(bar.waste / stockLength) * 100}%"
-                title="Verschnitt: {bar.waste}mm"
+                style="width:{(waste / length) * 100}%"
+                title="{Math.round(waste)} mm"
               >
-                <span class="cut-text">{bar.waste}</span>
+                <span class="cut-text">{Math.round(waste)}</span>
               </div>
             {/if}
           </div>
-          <span class="bar-waste">{bar.waste || 0}mm afval</span>
+          <span class="bar-waste">{Math.round(waste)} mm afval</span>
         </div>
       {/each}
     </div>
@@ -114,6 +125,7 @@
   .waste-ok { color: #f59e0b; }
   .waste-poor { color: #ef4444; }
   .hint { color: var(--text-muted); font-size: 13px; font-style: italic; }
+  .curved-pieces { margin: 0 0 var(--sp-3); font-size: 12px; color: var(--text-secondary); }
 
   .bars-container { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
   .bar-row { display: flex; align-items: center; gap: var(--sp-2); }

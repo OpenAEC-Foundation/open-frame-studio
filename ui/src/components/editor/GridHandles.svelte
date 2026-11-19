@@ -1,8 +1,11 @@
 <script>
   import { get } from "svelte/store";
-  import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
+  import { selectDividerPiece } from "../../stores/kozijn.js";
+  import { contourPath } from "../../lib/contour2d.js";
+  import { dividerPieceLabel } from "../../lib/labels.js";
+  import { gridRowHeights } from "../../lib/layout.js";
+  import { _ } from "svelte-i18n";
   import { zoom } from "../../stores/ui.js";
-  import { invoke } from "../../lib/tauri.js";
 
   let { geometry, kozijn, onresize } = $props();
 
@@ -12,12 +15,13 @@
   // Drag state
   let dragging = $state(null); // { axis: 'v'|'h', index, startPos, origSizes }
 
-  function startDragV(index, e) {
+  function startDragV(index, e, piece = null) {
+    if (e.ctrlKey) return;
     e.stopPropagation();
     e.preventDefault();
     const cols = kozijn.grid.columns.map((c) => c.size);
     dragging = {
-      axis: "v",
+      axis: "v", piece,
       index,
       startClientX: e.clientX,
       origSizes: cols,
@@ -26,12 +30,14 @@
     window.addEventListener("mouseup", handleMouseUp);
   }
 
-  function startDragH(index, e) {
+  function startDragH(index, e, piece = null) {
+    if (e.ctrlKey) return;
     e.stopPropagation();
     e.preventDefault();
-    const rows = kozijn.grid.rows.map((r) => r.size);
+    const fromDay = !!piece;
+    const rows = gridRowHeights(kozijn, fromDay ? geometry : null);
     dragging = {
-      axis: "h",
+      axis: "h", piece, fromDay,
       index,
       startClientY: e.clientY,
       origSizes: rows,
@@ -47,6 +53,7 @@
 
     if (dragging.axis === "v") {
       const deltaPx = e.clientX - dragging.startClientX;
+      if (!dragging.currentSizes && Math.abs(deltaPx) < 2) return;
       const deltaMm = deltaPx / currentZoom;
 
       const i = dragging.index;
@@ -72,6 +79,7 @@
       dragging = dragging; // trigger reactivity
     } else {
       const deltaPx = e.clientY - dragging.startClientY;
+      if (!dragging.currentSizes && Math.abs(deltaPx) < 2) return;
       const deltaMm = deltaPx / currentZoom;
 
       const i = dragging.index;
@@ -103,6 +111,7 @@
     window.removeEventListener("mouseup", handleMouseUp);
 
     if (!dragging || !dragging.currentSizes) {
+      if (dragging?.piece) selectDividerPiece(dragging.piece);
       dragging = null;
       return;
     }
@@ -116,6 +125,7 @@
       onresize?.({
         columnSizes: kozijn.grid.columns.map((c) => c.size),
         rowSizes: dragging.currentSizes,
+        rowsFromDay: dragging.fromDay,
       });
     }
 
@@ -125,39 +135,37 @@
   // Compute drag indicator position for vertical divider
   function dragVPos(dragging) {
     if (!dragging || dragging.axis !== "v" || !dragging.currentSizes) return null;
-    const fw = kozijn.frame.frameWidth;
-    const dw = fw; // divider width matches frame width
-    let x = fw;
-    for (let i = 0; i <= dragging.index; i++) {
-      x += dragging.currentSizes[i];
-      if (i < dragging.index) x += dw;
-    }
-    return x + dw / 2;
+    const i = dragging.index, bar = geometry.vDividers[i];
+    return bar.x + bar.width / 2 + dragging.currentSizes[i] - dragging.origSizes[i];
   }
 
   // Compute drag indicator position for horizontal divider
   function dragHPos(dragging) {
     if (!dragging || dragging.axis !== "h" || !dragging.currentSizes) return null;
-    const fw = kozijn.frame.frameWidth;
-    const dw = fw;
-    let y = fw;
-    for (let i = 0; i <= dragging.index; i++) {
-      y += dragging.currentSizes[i];
-      if (i < dragging.index) y += dw;
-    }
-    return y + dw / 2;
+    const i = dragging.index, bar = geometry.hDividers[i];
+    return bar.y + bar.height / 2 + dragging.currentSizes[i] - dragging.origSizes[i];
   }
 </script>
 
 <g class="grid-handles">
+  {#if geometry.curvedFrame && geometry.curvedDividerTimber}
+    {#each geometry.curvedDividerTimber as piece}
+      {@const label = dividerPieceLabel($_, piece, geometry.curvedDividerTimber)}
+      <path d={contourPath(piece.outline)} fill="transparent" class="handle divider-piece-hit"
+        class:handle-v={piece.vertical} class:handle-h={!piece.vertical}
+        role="button" tabindex="0" aria-label={label}
+        onmousedown={(e) => piece.vertical ? startDragV(piece.sourceIndex, e, piece) : startDragH(piece.sourceIndex, e, piece)}
+        onkeydown={(e) => e.key === "Enter" && selectDividerPiece(piece)} />
+    {/each}
+  {:else}
   <!-- Vertical divider handles -->
   {#each geometry.vDividers as div, i}
     {@const cx = div.x + div.width / 2}
     <rect
       x={cx - HIT_AREA / 2}
-      y={div.y}
+      y={geometry.curvedFrame ? geometry.outerRect.y : div.y}
       width={HIT_AREA}
-      height={div.height}
+      height={geometry.curvedFrame ? geometry.outerRect.height : div.height}
       fill="transparent"
       class="handle handle-v"
       pointer-events="all"
@@ -179,6 +187,7 @@
       onmousedown={(e) => startDragH(i, e)}
     />
   {/each}
+  {/if}
 
   <!-- Drag indicator lines -->
   {#if dragging && dragging.axis === "v" && dragging.currentSizes}
@@ -218,6 +227,8 @@
   .handle-v {
     cursor: default;
   }
+  .divider-piece-hit.handle-v { cursor: col-resize; }
+  .divider-piece-hit.handle-h { cursor: row-resize; }
 
   .handle-h {
     cursor: default;

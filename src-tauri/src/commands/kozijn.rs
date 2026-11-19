@@ -1,8 +1,8 @@
 use crate::state::AppState;
-use ofs_core::geometry::{compute_2d_geometry, normalize_grid_single_cell, KozijnGeometry2D};
+use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
 use ofs_core::hardware::{self, HardwareSet, SecurityClass};
 use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, PanelType, OpeningDirection, ShapeType};
-use ofs_core::profile::{ProfileRef, ProfileSnapshot};
+use ofs_core::profile::ProfileRef;
 use ofs_core::thermal;
 use ofs_core::template::{self, KozijnSjabloon};
 use ofs_core::edge::EdgeConfig;
@@ -19,7 +19,7 @@ pub fn create_kozijn(
 ) -> Result<Kozijn, String> {
     let kozijn = Kozijn::new(&name, &mark, width, height);
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
-    project.kozijnen.push(kozijn.clone());
+    project.add_kozijn(kozijn.clone());
     Ok(kozijn)
 }
 
@@ -47,7 +47,7 @@ pub fn create_kozijn_from_template(
         _ => Kozijn::new_with_sjabloon("Kozijn", "K01", width, height, &sj),
     };
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
-    project.kozijnen.push(kozijn.clone());
+    project.add_kozijn(kozijn.clone());
     Ok(kozijn)
 }
 
@@ -159,6 +159,7 @@ pub fn update_cell_sash_profile(
     profile_name: String,
     sash_width: f64,
     sash_depth: f64,
+    profile_snapshot_json: Option<String>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -167,6 +168,9 @@ pub fn update_cell_sash_profile(
     let cell = kozijn.cells.get_mut(cell_index)
         .ok_or("Cel niet gevonden")?;
 
+    cell.sash_profile_snapshot = profile_snapshot_json.as_deref()
+        .map(serde_json::from_str).transpose().map_err(|e| format!("Ongeldig profiel: {e}"))?
+        .flatten();
     cell.sash_profile = Some(ProfileRef { id: profile_id, name: profile_name });
     cell.sash_width = Some(sash_width);
     cell.sash_depth = Some(sash_depth);
@@ -242,6 +246,7 @@ pub fn update_grid_sizes(
     id: String,
     column_sizes: Vec<f64>,
     row_sizes: Vec<f64>,
+    rows_from_day: Option<bool>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -253,6 +258,7 @@ pub fn update_grid_sizes(
 
     // Typed sizes stay exact; untouched vakken absorb the difference so the
     // dimension chain keeps closing on the binnenmaat.
+    if rows_from_day == Some(true) { kozijn.grid.rows_from_day = true; }
     kozijn.set_grid_sizes_fitted(&column_sizes, &row_sizes);
 
     Ok(kozijn.clone())
@@ -267,35 +273,16 @@ pub fn update_frame_profile(
     profile_width: Option<f64>,
     profile_depth: Option<f64>,
     profile_snapshot_json: Option<String>,
+    profile_material_json: Option<String>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
     let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    kozijn.frame.profile = ProfileRef { id: profile_id, name: profile_name };
-    if let Some(w) = profile_width {
-        kozijn.frame.frame_width = w;
-        // Re-fit the grid: the frame width is also the tussenstijl width.
-        kozijn.fit_grid_to_frame();
-    }
-    if let Some(d) = profile_depth {
-        kozijn.frame.frame_depth = d;
-    }
-    // Resolved profile snapshot (sponning/glaslat/aanzicht) — sent by the
-    // frontend from the full ProfileDefinition at selection time. An explicit
-    // "null"/empty string clears it; an omitted argument leaves the stored
-    // snapshot untouched so old frontends keep working.
-    if let Some(json) = profile_snapshot_json {
-        let trimmed = json.trim();
-        kozijn.frame.profile_snapshot = if trimmed.is_empty() || trimmed == "null" {
-            None
-        } else {
-            Some(
-                serde_json::from_str::<ProfileSnapshot>(trimmed)
-                    .map_err(|e| format!("Ongeldig profielsnapshot JSON: {}", e))?,
-            )
-        };
-    }
+    kozijn.apply_frame_profile(
+        ProfileRef { id: profile_id, name: profile_name }, profile_width, profile_depth,
+        profile_snapshot_json.as_deref(), profile_material_json.as_deref(),
+    )?;
     Ok(kozijn.clone())
 }
 
@@ -386,7 +373,7 @@ pub fn update_cell_type(
         .cells
         .get_mut(cell_index)
         .ok_or("Cel niet gevonden")?;
-    cell.panel_type = panel_type;
+    cell.change_panel_type(panel_type, &kozijn.frame);
     cell.opening_direction = opening_direction;
 
     // Auto-generate hardware set when changing to an operable type
@@ -404,37 +391,6 @@ pub fn update_cell_type(
         SecurityClass::None,
     );
 
-    // Auto-assign sash profile based on panel type (professional workflow)
-    match panel_type {
-        PanelType::TurnTilt | PanelType::Turn | PanelType::Tilt | PanelType::Sliding => {
-            if cell.sash_profile.is_none() {
-                // KVT-draaikiep 69x90 (zichtdeel 55). "54x67" bestaat niet als
-                // raamhout — de kleinste KVT-reeksmaat is 54x78 (docs/profielmaten-onderzoek.md §2.2).
-                cell.sash_profile = Some(ProfileRef {
-                    id: "raamhout-69x90".into(),
-                    name: "Raamhout 69x90mm (draaikiep)".into(),
-                });
-                cell.sash_width = Some(69.0);
-                cell.sash_depth = Some(90.0);
-            }
-        }
-        PanelType::Door => {
-            if cell.sash_profile.is_none() {
-                cell.sash_profile = Some(ProfileRef {
-                    id: "deur-meranti-67x114".into(),
-                    name: "Deurhout 67x114mm".into(),
-                });
-                cell.sash_width = Some(67.0);
-                cell.sash_depth = Some(114.0);
-            }
-        }
-        _ => {
-            cell.sash_profile = None;
-            cell.sash_width = None;
-            cell.sash_depth = None;
-        }
-    }
-
     Ok(kozijn.clone())
 }
 
@@ -443,6 +399,7 @@ pub fn add_column(
     state: State<'_, AppState>,
     id: String,
     position: f64,
+    elevation: Option<bool>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -451,7 +408,8 @@ pub fn add_column(
         .iter_mut()
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    kozijn.add_column(position);
+    if elevation == Some(true) { kozijn.add_divider_in_elevation(false, position); }
+    else { kozijn.add_column(position); }
     Ok(kozijn.clone())
 }
 
@@ -460,6 +418,7 @@ pub fn add_row(
     state: State<'_, AppState>,
     id: String,
     position: f64,
+    elevation: Option<bool>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -468,7 +427,8 @@ pub fn add_row(
         .iter_mut()
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    kozijn.add_row(position);
+    if elevation == Some(true) { kozijn.add_divider_in_elevation(true, position); }
+    else { kozijn.add_row(position); }
     Ok(kozijn.clone())
 }
 
@@ -528,13 +488,6 @@ pub fn update_frame_shape(
         apex_offset: apex_offset.or(prev.apex_offset),
     };
 
-    // Round frames have no grid dividers: normalize to a single 1×1 cell.
-    // ow == oh is NOT enforced — the model accepts it and the 2D view draws
-    // the shape as-is.
-    if shape_type == ShapeType::Round {
-        normalize_grid_single_cell(kozijn);
-    }
-
     Ok(kozijn.clone())
 }
 
@@ -543,6 +496,7 @@ pub fn update_corner_joints(
     state: State<'_, AppState>,
     id: String,
     joints_json: String,
+    configured: Option<bool>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
@@ -553,9 +507,8 @@ pub fn update_corner_joints(
         .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
 
     kozijn.frame.corner_joints = joints;
-    // Explicitly saved joints always win from now on, even when they equal
-    // the auto-populated default set (see Frame::joints_configured).
-    kozijn.frame.joints_configured = true;
+    // Undo can restore a frame that still follows its material defaults.
+    kozijn.frame.joints_configured = configured.unwrap_or(true);
     Ok(kozijn.clone())
 }
 
@@ -567,7 +520,7 @@ pub fn add_custom_profile(
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let profile: ofs_core::profile::ProfileDefinition =
         serde_json::from_str(&profile_json).map_err(|e| format!("Ongeldig profiel: {}", e))?;
-    project.custom_profiles.push(profile);
+    project.set_custom_profile(profile);
     Ok(())
 }
 

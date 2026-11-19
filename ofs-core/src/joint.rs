@@ -85,7 +85,7 @@ use crate::kozijn::Material;
 /// stijl through, 90°, pen 20 mm) regardless of material. An untouched default
 /// set therefore carries no user intent: treat it as "not configured" so
 /// aluminium/PVC frames keep their verstek default and wood frames keep the
-/// historic stijl-through corner.
+/// material's dorpel-through corner.
 pub fn is_untouched_default_joint(j: &Joint) -> bool {
     j.joint_type == JointType::PenSlis
         && j.through_member == ThroughMember::Stijl
@@ -129,6 +129,21 @@ pub struct CornerModel {
     pub angle: f64,
 }
 
+/// Values shown in the corner editor and used for machining. Editing one
+/// corner must preserve the effective settings of the other three.
+pub fn resolved_frame_joints(material: &Material, corner_joints: &[Joint], configured: bool) -> [Joint; 4] {
+    if let Some(joints) = effective_corner_joints(corner_joints, configured) {
+        return joints.map(Clone::clone);
+    }
+    let miter = matches!(material, Material::Aluminum | Material::Pvc);
+    std::array::from_fn(|_| Joint {
+        joint_type: if miter { JointType::Verstek } else { JointType::PenSlis },
+        through_member: ThroughMember::Dorpel,
+        angle: if miter { 45.0 } else { 90.0 },
+        pen_length: if miter { 0.0 } else { default_pen_length() },
+    })
+}
+
 /// Resolve the four corners [TL, TR, BL, BR] from material + stored joints.
 /// Falls back to the material default when the joints are untouched/absent:
 /// wood & wood-aluminium → dorpel-through square (butt); aluminium & PVC →
@@ -140,41 +155,13 @@ pub fn frame_corner_model(
     corner_joints: &[Joint],
     configured: bool,
 ) -> [CornerModel; 4] {
-    match effective_corner_joints(corner_joints, configured) {
-        Some(js) => {
-            let model = |j: &Joint| {
-                let verstek = j.joint_type == JointType::Verstek;
-                CornerModel {
-                    verstek,
-                    through: j.through_member,
-                    angle: if verstek {
-                        if j.angle > 0.0 && j.angle < 90.0 {
-                            j.angle
-                        } else {
-                            45.0
-                        }
-                    } else {
-                        90.0
-                    },
-                }
-            };
-            [model(js[0]), model(js[1]), model(js[2]), model(js[3])]
-        }
-        None => {
-            let verstek = matches!(material, Material::Aluminum | Material::Pvc);
-            // NL-timmerpraktijk (KVT katern 15): bij houten KOZIJNEN lopen de
-            // dorpels door en worden de stijlen ertussen gepend (pen-en-gat);
-            // bij vleugels (raam-/deurhout) is het omgekeerd — de doorlopende
-            // vleugelstijlen blijven in production.rs' sash-systematiek staan.
-            // Voor alu/PVC geldt verstek, waar de through-member niet meetelt.
-            let c = CornerModel {
-                verstek,
-                through: ThroughMember::Dorpel,
-                angle: if verstek { 45.0 } else { 90.0 },
-            };
-            [c, c, c, c]
-        }
-    }
+    resolved_frame_joints(material, corner_joints, configured).map(|joint| {
+        let verstek = joint.joint_type == JointType::Verstek;
+        let angle = if !verstek { 90.0 } else if joint.angle > 0.0 && joint.angle < 90.0 {
+            joint.angle
+        } else { 45.0 };
+        CornerModel { verstek, through: joint.through_member, angle }
+    })
 }
 
 #[cfg(test)]

@@ -186,6 +186,7 @@ impl Kozijn {
             name: name.to_string(),
             mark: mark.to_string(),
             frame: Frame {
+                member_profiles: Default::default(),
                 outer_width: width,
                 outer_height: height,
                 material: Material::Wood(WoodType::Meranti),
@@ -216,6 +217,7 @@ impl Kozijn {
                 edges: vec![],
             },
             grid: Grid {
+                rows_from_day: false,
                 columns: vec![GridDivision {
                     size: width - 2.0 * 67.0,
                     divider_profile: None,
@@ -244,6 +246,7 @@ impl Kozijn {
             name: name.to_string(),
             mark: mark.to_string(),
             frame: Frame {
+                member_profiles: Default::default(),
                 outer_width: width,
                 outer_height: height,
                 material: sj.material.clone(),
@@ -274,6 +277,7 @@ impl Kozijn {
                 edges: vec![],
             },
             grid: Grid {
+                rows_from_day: false,
                 columns: vec![GridDivision {
                     size: width - 2.0 * fw,
                     divider_profile: None,
@@ -320,6 +324,35 @@ impl Kozijn {
     /// Inner height (excluding frame members)
     pub fn inner_height(&self) -> f64 {
         self.frame.outer_height - 2.0 * self.frame.frame_width
+    }
+
+    /// Apply one profile selection from the native or browser command.
+    /// Decode both optional payloads before changing any part of the model.
+    pub fn apply_frame_profile(
+        &mut self,
+        profile: ProfileRef,
+        width: Option<f64>,
+        depth: Option<f64>,
+        snapshot_json: Option<&str>,
+        material_json: Option<&str>,
+    ) -> Result<(), String> {
+        // Older clients omit the snapshot; an explicit null/empty clears it.
+        let snapshot = snapshot_json.map(|s| {
+            if s.trim().is_empty() { Ok(None) } else { serde_json::from_str(s) }
+        }).transpose().map_err(|e| format!("Ongeldig profielsnapshot JSON: {e}"))?;
+        let material = material_json.filter(|s| !s.trim().is_empty())
+            .map(serde_json::from_str::<Option<Material>>).transpose()
+            .map_err(|e| format!("Ongeldig profielmateriaal: {e}"))?.flatten();
+
+        self.frame.profile = profile;
+        if let Some(value) = material { self.frame.material = value; }
+        if let Some(value) = snapshot { self.frame.profile_snapshot = value; }
+        if let Some(value) = depth { self.frame.frame_depth = value; }
+        if let Some(value) = width {
+            self.frame.frame_width = value;
+            self.fit_grid_to_frame();
+        }
+        Ok(())
     }
 
     /// Re-fit the grid to the current frame (outer size + frame width) while
@@ -374,6 +407,52 @@ impl Kozijn {
         for (r, s) in self.grid.rows.iter_mut().zip(rows) {
             r.size = s;
         }
+    }
+
+    /// Place a full-width divider with its centre on an elevation coordinate.
+    /// Retain the displayed edges of every existing bay, including old grids
+    /// whose row weights were distributed below the spring line.
+    pub fn add_divider_in_elevation(&mut self, horizontal: bool, position: f64) {
+        if !position.is_finite() || self.layout.is_some() { return; }
+        let geometry = crate::geometry::compute_2d_geometry(self);
+        let width = self.frame.frame_width;
+        let (bars, sizes, end) = if horizontal {
+            (&geometry.h_dividers, &self.grid.rows, self.frame.outer_height - width)
+        } else {
+            (&geometry.v_dividers, &self.grid.columns, self.frame.outer_width - width)
+        };
+        if sizes.len() != bars.len() + 1 || sizes.iter().any(|s| !s.size.is_finite() || s.size <= 0.0) {
+            return;
+        }
+        let mut cursor = width;
+        let mut split = None;
+        let mut spans = Vec::with_capacity(sizes.len() + 1);
+        for i in 0..=bars.len() {
+            let (next, thickness) = bars.get(i).map_or((end, 0.0), |r| {
+                if horizontal { (r.y, r.height) } else { (r.x, r.width) }
+            });
+            let before = position - width / 2.0 - cursor;
+            let after = next - position - width / 2.0;
+            if before > 0.0 && after > 0.0 {
+                split = Some(i);
+                spans.extend([before, after]);
+            } else {
+                spans.push(next - cursor);
+            }
+            cursor = next + thickness;
+        }
+        let Some(i) = split else { return; };
+        // Let the existing split preserve cell data, part IDs and profile references.
+        let split_at = sizes[..i].iter().map(|s| s.size).sum::<f64>() + sizes[i].size / 2.0;
+        let divisions = if horizontal {
+            self.add_row(split_at);
+            self.grid.rows_from_day = true;
+            &mut self.grid.rows
+        } else {
+            self.add_column(split_at);
+            &mut self.grid.columns
+        };
+        for (division, span) in divisions.iter_mut().zip(spans) { division.size = span; }
     }
 
     /// Add a vertical divider (creates a new column). The new tussenstijl
@@ -522,6 +601,10 @@ fn fit_sizes(sizes: &mut [f64], target: f64, pinned: &[bool]) {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Frame {
+    /// Project-defined sections, shared by all frames and rebuilt on load.
+    /// Their single persisted source is Project::custom_profiles.
+    #[serde(skip)]
+    pub member_profiles: std::sync::Arc<std::collections::BTreeMap<String, crate::profile::ProfileDefinition>>,
     /// Overall outer width in mm
     pub outer_width: f64,
     /// Overall outer height in mm
@@ -633,6 +716,10 @@ pub enum ShapeType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Grid {
+    /// Absolute row sizes from the top of the day. Older arched grids use
+    /// relative sizes below the spring until a divider is placed or dragged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub rows_from_day: bool,
     pub columns: Vec<GridDivision>,
     pub rows: Vec<GridDivision>,
 }
@@ -662,6 +749,8 @@ pub struct Cell {
     /// Sash/door profile for operable cells (raamhout/deurhout)
     #[serde(default)]
     pub sash_profile: Option<ProfileRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_profile_snapshot: Option<crate::profile::ProfileSnapshot>,
     /// Sash wood width in mm (54/67mm typical)
     #[serde(default)]
     pub sash_width: Option<f64>,
@@ -688,6 +777,7 @@ impl Default for Cell {
             hardware: vec![],
             hardware_set: None,
             sash_profile: None,
+            sash_profile_snapshot: None,
             sash_width: None,
             sash_depth: None,
             panel_filling: None,
@@ -712,8 +802,29 @@ impl Cell {
         }
     }
 
+    /// Resolve the same sash stock when changing a cell in the desktop or web editor.
+    pub fn change_panel_type(&mut self, panel_type: PanelType, frame: &Frame) {
+        let change_stock = (self.panel_type == PanelType::Door) != (panel_type == PanelType::Door);
+        let has_stock = self.sash_profile.is_some() || self.sash_profile_snapshot.is_some()
+            || self.sash_width.is_some() || self.sash_depth.is_some();
+        self.panel_type = panel_type;
+        if !panel_type.is_operable() {
+            self.sash_profile = None;
+            self.sash_profile_snapshot = None;
+            self.sash_width = None;
+            self.sash_depth = None;
+        } else if change_stock || !has_stock {
+            let templates = crate::template::builtin_sjablonen();
+            let stock = templates.iter().find(|s| s.stijl_profile.id == frame.profile.id && s.material == frame.material)
+                .or_else(|| templates.iter().find(|s| s.material == frame.material))
+                .cloned().unwrap_or_else(crate::template::default_sjabloon);
+            self.assign_sash_from_sjabloon(&stock);
+        }
+    }
+
     /// Assign sash profile for operable cells (raamhout/deurhout)
     pub fn assign_sash_from_sjabloon(&mut self, sj: &crate::template::KozijnSjabloon) {
+        self.sash_profile_snapshot = None;
         match self.panel_type {
             PanelType::TurnTilt | PanelType::Turn | PanelType::Tilt | PanelType::Sliding
             | PanelType::TopHung | PanelType::BottomHung | PanelType::LiftSlide | PanelType::Pivot => {
@@ -883,7 +994,7 @@ pub struct Placement {
 
 /// A complete project file
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(remote = "Self", rename_all = "camelCase")]
 pub struct Project {
     /// Persistent identity for project-level IFC GlobalIds. Older .ofs files
     /// receive one on load and retain it after the next save.
@@ -914,7 +1025,44 @@ pub struct Project {
     pub combinations: Vec<crate::combination::CombinationKozijn>,
 }
 
+impl Serialize for Project {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Project::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Project {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut project = Project::deserialize(deserializer)?;
+        project.refresh_member_profiles();
+        Ok(project)
+    }
+}
+
 impl Project {
+    fn refresh_member_profiles(&mut self) {
+        if self.kozijnen.is_empty() { return; }
+        let library = std::sync::Arc::new(self.custom_profiles.iter()
+            .map(|p| (p.id.clone(), p.clone())).collect());
+        for k in &mut self.kozijnen { k.frame.member_profiles = std::sync::Arc::clone(&library); }
+    }
+
+    pub fn set_custom_profile(&mut self, profile: crate::profile::ProfileDefinition) {
+        self.custom_profiles.retain(|old| old.id != profile.id);
+        self.custom_profiles.push(profile);
+        self.refresh_member_profiles();
+    }
+
+    pub fn add_kozijn(&mut self, mut kozijn: Kozijn) {
+        if let Some(existing) = self.kozijnen.first() {
+            kozijn.frame.member_profiles = existing.frame.member_profiles.clone();
+            self.kozijnen.push(kozijn);
+        } else {
+            self.kozijnen.push(kozijn);
+            self.refresh_member_profiles();
+        }
+    }
+
     pub fn new(name: &str, number: &str) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -966,6 +1114,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn selecting_a_pvc_frame_changes_material_and_rejects_partial_updates() {
+        let mut k = Kozijn::new("Selectie", "K1", 1000.0, 1200.0);
+        let profile = ProfileRef { id: "veka-softline82".into(), name: "VEKA".into() };
+        let before = serde_json::to_value(&k).unwrap();
+        for (snapshot, material) in [("{}", "unknown"), ("broken", r#""pvc""#)] {
+            assert!(k.apply_frame_profile(
+                profile.clone(), Some(73.0), Some(82.0), Some(snapshot), Some(material),
+            ).is_err());
+            assert_eq!(serde_json::to_value(&k).unwrap(), before);
+        }
+        k.apply_frame_profile(
+            profile, Some(73.0), Some(82.0), Some("null"), Some(r#""pvc""#),
+        ).unwrap();
+        assert_eq!(k.frame.material, Material::Pvc);
+        assert_eq!(k.grid.columns[0].size, 854.0);
+        let fit = crate::geometry::compute_2d_geometry(&k).cell_rects.remove(0).fit.unwrap();
+        assert_eq!(fit.day.x - fit.glass.x, 20.0);
+    }
+
+    #[test]
     fn older_project_gets_persistent_id_on_next_save() {
         let project = Project::new("Bestaand", "P-1");
         let mut value = serde_json::to_value(&project).unwrap();
@@ -975,6 +1143,65 @@ mod tests {
         let saved = serde_json::to_string(&migrated).unwrap();
         let reopened: Project = serde_json::from_str(&saved).unwrap();
         assert_eq!(reopened.id, migrated.id);
+    }
+
+    #[test]
+    fn custom_member_sections_survive_project_loading_and_profile_edits() {
+        let profiles: Vec<crate::profile::ProfileDefinition> =
+            serde_json::from_str(include_str!("../../profiles/wood/meranti.json")).unwrap();
+        let mut profile = profiles[0].clone();
+        profile.id = "eigen-tussenhout".into();
+        let mut project = Project::new("Pen en gat", "P1");
+        project.set_custom_profile(profile.clone());
+        project.add_kozijn(Kozijn::new("Rond", "R1", 1200., 1200.));
+        project.add_kozijn(Kozijn::new("Getoogd", "B1", 1200., 1400.));
+        profile.depth = 86.;
+        project.set_custom_profile(profile);
+        let json = serde_json::to_string(&project).unwrap();
+        assert!(!json.contains("memberProfiles"));
+        let opened: Project = serde_json::from_str(&json).unwrap();
+        assert_eq!(opened.kozijnen[0].frame.member_profiles["eigen-tussenhout"].depth, 86.);
+        assert!(std::sync::Arc::ptr_eq(&opened.kozijnen[0].frame.member_profiles, &opened.kozijnen[1].frame.member_profiles));
+    }
+
+    #[test]
+    fn placing_a_transom_in_the_arch_preserves_existing_heights_on_reopen() {
+        use crate::geometry::compute_2d_geometry;
+        let mut k = Kozijn::new("Getoogd", "G1", 1200.0, 1500.0);
+        k.frame.shape.shape_type = ShapeType::Arched;
+        k.frame.shape.arch_height = Some(300.0);
+        k.add_row(700.0);
+        let original_y = compute_2d_geometry(&k).h_dividers[0].y;
+        assert!(!k.grid.rows_from_day);
+        k.add_divider_in_elevation(true, 185.0);
+        k.add_divider_in_elevation(false, 373.5);
+        assert!(k.grid.rows_from_day);
+        let saved = serde_json::to_string(&k).unwrap();
+        let reopened: Kozijn = serde_json::from_str(&saved).unwrap();
+        let g = compute_2d_geometry(&reopened);
+        assert_eq!(g.h_dividers.len(), 2);
+        assert!((g.h_dividers[0].y + 33.5 - 185.0).abs() < 1e-6);
+        assert!((g.h_dividers[1].y - original_y).abs() < 1e-6);
+        assert!((g.v_dividers[0].x - 340.0).abs() < 1e-6);
+        let head = g.curved_divider_timber.iter().find(|p| !p.vertical && p.source_index == 0).unwrap();
+        assert_eq!((head.start.radius_mm, head.end.radius_mm), (Some(683.0), Some(683.0)));
+        k.add_divider_in_elevation(true, 187.0); // Already inside the transom
+        assert_eq!(k.grid.rows.len(), 3);
+    }
+
+    #[test]
+    fn changing_opening_type_keeps_window_stock_until_its_function_changes() {
+        let mut k = Kozijn::new("Getoogd", "R1", 1200.0, 1500.0);
+        let cell = &mut k.cells[0];
+        cell.change_panel_type(PanelType::TopHung, &k.frame);
+        assert_eq!(cell.sash_profile.as_ref().unwrap().id, "raamhout-69x90");
+        cell.sash_width = Some(78.0);
+        cell.change_panel_type(PanelType::Turn, &k.frame);
+        assert_eq!(cell.sash_width, Some(78.0));
+        cell.change_panel_type(PanelType::Door, &k.frame);
+        assert_eq!(cell.sash_profile.as_ref().unwrap().id, "deur-meranti-67x114");
+        cell.change_panel_type(PanelType::FixedGlass, &k.frame);
+        assert!(cell.sash_profile.is_none() && cell.sash_width.is_none());
     }
 
     #[test]

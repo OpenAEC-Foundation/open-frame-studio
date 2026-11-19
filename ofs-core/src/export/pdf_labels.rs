@@ -54,7 +54,8 @@ struct LabelData {
     piece_id: String,
     profile_desc: String,
     net_length_mm: f64,
-    gross_length_mm: f64,
+    gross_length_mm: Option<f64>,
+    precision: usize,
     date: String,
 }
 
@@ -76,13 +77,15 @@ pub fn generate_labels_pdf(project: &Project, config: &LabelConfig) -> Result<Ve
     for kozijn in &project.kozijnen {
         let prod = compute_production_data(kozijn);
         for (i, item) in prod.cut_list.iter().enumerate() {
+            let has_arch_feet = !prod.arch_joints.is_empty();
             labels.push(LabelData {
                 project_name: project.project_info.name.clone(),
                 kozijn_mark: prod.kozijn_mark.clone(),
-                piece_id: format!("{}-{}", prod.kozijn_mark, i + 1),
-                profile_desc: format!("{} {}", item.member_type.label_nl(), item.profile_name),
+                piece_id: if has_arch_feet { item.piece_id.clone() } else { format!("{}-{}", prod.kozijn_mark, i + 1) },
+                profile_desc: format!("{} {}", item.member_label_nl(), item.profile_name),
                 net_length_mm: item.net_length_mm,
-                gross_length_mm: item.gross_length_mm,
+                gross_length_mm: prod.blank_length_mm(item),
+                precision: usize::from(has_arch_feet),
                 date: date.clone(),
             });
         }
@@ -145,10 +148,9 @@ pub fn generate_labels_pdf(project: &Project, config: &LabelConfig) -> Result<Ve
 
             // Net / Gross lengths
             cy -= line_h + 1.5;
-            let lengths = format!(
-                "Netto: {:.0} mm  |  Bruto: {:.0} mm",
-                label.net_length_mm, label.gross_length_mm
-            );
+            let precision = label.precision;
+            let gross = label.gross_length_mm.map(|v| format!("{v:.precision$} mm")).unwrap_or_else(|| "onbepaald".into());
+            let lengths = format!("Netto: {:.*} mm  |  Bruto: {gross}", precision, label.net_length_mm);
             ops.extend(text_ops(&lengths, 5.5, lx, cy, font(), BLACK));
 
             // Date (bottom right)

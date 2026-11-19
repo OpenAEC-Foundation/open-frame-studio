@@ -17,10 +17,14 @@ const customProfiles = writable([]);
 // Alle profielen, gegroepeerd per categorie — bibliotheek + eigen profielen
 export const profileCategories = derived(
   [libraryCategories, customProfiles],
-  ([$library, $custom]) =>
-    $custom.length
-      ? [...$library, { id: "custom", label: "Eigen / geïmporteerd", profiles: $custom }]
-      : $library
+  ([$library, $custom]) => {
+    if (!$custom.length) return $library;
+    const customIds = new Set($custom.map(p => p.id));
+    const categories = $library.map(category => ({
+      ...category, profiles: category.profiles.filter(p => !customIds.has(p.id)),
+    })).filter(category => category.profiles.length);
+    return [...categories, { id: "custom", label: "Eigen / geïmporteerd", profiles: $custom }];
+  }
 );
 
 // Platte lijst van alle profielen
@@ -53,7 +57,7 @@ export const filteredProfiles = derived(
  * Laad de profielbibliotheek.
  * In de browser mock laden we inline data; in Tauri lezen we JSON bestanden.
  */
-export async function loadProfiles() {
+export async function loadProfiles(rebuildGeometry = false) {
   try {
     // Embedded profile data for browser preview
     const categories = await fetchProfileData();
@@ -61,20 +65,24 @@ export async function loadProfiles() {
   } catch (e) {
     console.error("Profielen laden mislukt:", e);
   }
-  await refreshCustomProfiles();
+  await refreshCustomProfiles(rebuildGeometry);
 }
 
 /**
  * Ververs de eigen/geïmporteerde profielen uit project.custom_profiles.
  * Aanroepen na add_custom_profile-flows en bij project openen/nieuw.
  */
-export async function refreshCustomProfiles() {
+export async function refreshCustomProfiles(rebuildGeometry = false) {
   try {
     const result = await invoke("get_custom_profiles");
     const list = typeof result === "string" ? JSON.parse(result) : result;
-    // Laatste definitie per id wint — add_custom_profile dedupliceert niet.
+    // Oudere projectbestanden kunnen meerdere versies van hetzelfde profiel bevatten.
     const byId = new Map((Array.isArray(list) ? list : []).map((p) => [p.id, p]));
     customProfiles.set([...byId.values()]);
+    if (rebuildGeometry) {
+      const { refreshGeometry } = await import("./kozijn.js");
+      await refreshGeometry();
+    }
   } catch (e) {
     console.error("Eigen profielen laden mislukt:", e);
   }

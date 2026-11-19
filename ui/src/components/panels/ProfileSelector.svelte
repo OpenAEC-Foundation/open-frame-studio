@@ -30,11 +30,19 @@
    * correction) and must never be drawn as the 17 mm face rebate.
    */
   function resolveSnapshot(p) {
+    const timber = p.material === "wood" || p.material === "wood_aluminum";
+    const side = p.sponning?.position || ({ binnensponning: "binnen", buitensponning: "buiten" })[p.sponning?.type ?? p.sponning?.sponningType];
     return {
-      sponningDiepte: mm(p.glazingRebate),
+      // System profiles often store their face-plane Falzhöhe in glazingRebate.
+      sponningDiepte: timber ? mm(p.sponning?.width) ?? mm(p.glazingRebate) : null,
       sponningHoogte: mm(p.sponning?.depth),
+      beadPosition: ["binnen", "buiten"].includes(side) ? side : null,
+      sashOverlap: mm(p.sponning?.opdekWidth ?? p.sponning?.opdek_width ?? p.overslagHoogte ?? p.ventOverlap),
+      sashClearance: mm(p.aanslagSponning?.clearance),
+      sashSeatDepth: mm(p.aanslagSponning?.depth),
       glasinval: mm(p.glasinval),
       glaslatBreedte: mm(p.glaslatWidth),
+      beadWidthBase: mm(p.glazingBead?.widthBase),
       glaslatHoogte: mm(p.glaslatHeight),
       aanzichtbreedte: mm(p.sightline),
     };
@@ -49,6 +57,8 @@
         name: profile.name,
         width: profile.width,
         depth: profile.depth,
+        material: profile.material,
+        materialSubtype: profile.materialSubtype,
         // Resolved profile values: consumers that apply the profile to the
         // frame store these as profile_snapshot so the drawing follows the
         // real profile instead of hard-coded defaults.
@@ -69,7 +79,7 @@
     {/each}
   </select>
   {#if value}
-    <span class="current">{value.name}</span>
+    <span class="current">{filteredProfiles.find(p => p.id === value.id)?.name ?? value.name}</span>
   {/if}
 </div>
 

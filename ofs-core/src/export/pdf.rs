@@ -287,42 +287,216 @@ pub fn generate_production_pdf(
         let mut y = A4_H - margin;
 
         ops.extend(text_ops(
-            &format!("Productiestaten \u{2014} {} {}", prod.kozijn_mark, prod.kozijn_name),
+            &format!("Productiestaten - {} {}", prod.kozijn_mark, prod.kozijn_name),
             16.0, margin, y, font_bold(), DEEP_FORGE,
         ));
         y -= 10.0;
 
         if !prod.cut_list.is_empty() {
+            let arcs: Vec<_> = prod.cut_list.iter().filter_map(|i| i.arc.as_ref().map(|a| (i, a))).collect();
             ops.extend(text_ops("Kortlijst", 12.0, margin, y, font_bold(), AMBER));
             y -= 6.0;
-            let h = ["Pos.","Part","Profile","Mat.","Net","Gross","L\u{00b0}","R\u{00b0}","Qty"];
-            let w = [18.0,28.0,28.0,22.0,16.0,16.0,12.0,12.0,12.0_f32];
+            if !arcs.is_empty() {
+                ops.extend(text_ops("Netto booglengte langs de buitenrand. Bruto ontwikkelde lengte inclusief toeslagen (mm).",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 5.0;
+                ops.extend(text_ops("Zaaghoeken t.o.v. de lengterichting, bij bogen t.o.v. de raaklijn aan de buitenrand. 90 graden = haaks.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 4.0;
+                let h = ["Pos.", "R buiten (mm)", "Boog buiten (mm)", "R hart (mm)", "Boog hart (mm)", "Booghoek buiten (graden)"];
+                let w = [25.0, 44.0, 52.0, 44.0, 52.0, 51.0];
+                let rows: Vec<_> = arcs.iter().map(|(i, a)| vec![
+                    i.piece_id.clone(), format!("{:.1}", a.outer_radius_mm), format!("{:.1}", a.outer_length_mm),
+                    format!("{:.1}", a.centerline_radius_mm), format!("{:.1}", a.centerline_length_mm),
+                    format!("{:.2}", a.sweep_deg),
+                ]).collect();
+                y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows) - 3.0;
+            }
+            let h = ["Pos.","Onderdeel","Profiel","Materiaal","Netto (mm)","Bruto (mm)","Begin (graden)","Eind (graden)","Aantal"];
+            let w = [25.0,36.0,64.0,29.0,21.0,21.0,28.0,28.0,16.0_f32];
+            let with_curved_cuts = prod.cut_list.iter().any(|i| i.has_curved_cut());
+            if prod.cut_list.iter().any(|i| i.divider_start.is_some()) {
+                y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 17.0);
+                ops.extend(text_ops("Tussenhout: netto van lang punt tot lang punt. Bij een ronde of samengestelde kop is de hoek gemeten tussen de koorde en de lengterichting.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 5.0;
+            }
+            let mm = if with_curved_cuts { 1 } else { 0 };
+            let deg = if with_curved_cuts { 2 } else { 0 };
             let rows: Vec<Vec<String>> = prod.cut_list.iter().map(|i| vec![
-                i.piece_id.clone(), i.member_type.label_nl().into(), i.profile_name.clone(),
-                i.material.clone(), format!("{:.0}", i.net_length_mm), format!("{:.0}", i.gross_length_mm),
-                format!("{:.0}\u{00b0}", i.miter_left_deg), format!("{:.0}\u{00b0}", i.miter_right_deg),
+                i.piece_id.clone(), i.member_label_nl().into(), i.profile_name.clone(),
+                i.material.clone(), format!("{:.*}", mm, i.net_length_mm),
+                prod.blank_length_mm(i).map(|v| format!("{:.*}", mm, v)).unwrap_or_else(|| "Onbepaald".into()),
+                crate::production::CutListItem::end_text(i.miter_left_deg, i.start_cope_radius_mm, deg),
+                crate::production::CutListItem::end_text(i.miter_right_deg, i.end_cope_radius_mm, deg),
                 format!("{}", i.quantity),
             ]).collect();
-            y = pdf_table(&mut ops, margin, y, &h, &w, &rows);
+            y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows);
             y -= 4.0;
+            for kind in super::arch_joints::KINDS {
+                let joints: Vec<_> = prod.arch_joints.iter().filter(|j| j.joint.kind == kind).collect();
+                if joints.is_empty() { continue; }
+                let ring = kind == crate::curved_timber::ArchJointKind::RingSeam;
+                let side = if ring { "Naad" } else { "Voet" };
+                y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, if ring { 67.0 } else { 62.0 });
+                let title = format!("{} - pen en gat", super::arch_joints::table_name(kind));
+                ops.extend(text_ops(&title, 12.0, margin, y, font_bold(), AMBER));
+                y -= 5.0;
+                if ring {
+                    ops.extend(text_ops("De bovenboog loopt van links naar rechts, de onderboog van rechts naar links. Begin en eind volgen de eigen boog.",
+                        8.0, margin, y, font(), DEEP_FORGE));
+                    y -= 4.5;
+                }
+                ops.extend(text_ops("Schouderhoek in graden vanaf de lengteas of buitenraaklijn. Penlengte en gatdiepte in mm langs de insteekas vanaf het hart van de gatmond.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 4.5;
+                ops.extend(text_ops("Overmaat telt eenmaal mee in de bruto lengte voorbij het langpunt, bij de boog in de ontwikkelde buitenlengte. Z-banden in mm vanaf het binnenvlak.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 3.5;
+                let h = [side, "Penstuk / kop", "Gatstuk / kop", "Hoek pen", "Hoek gat", "Aantal", "Penlengte", "Gatdiepte", "Bodemvrij", "Overmaat", "Breedte", "Z-banden"];
+                let w = [14., 40., 40., 20., 20., 12., 18., 18., 18., 17., 16., 39.];
+                let mut sizes = Vec::new();
+                let mut locations = Vec::new();
+                let xy = |[x, y]: [f64; 2]| format!("{x:.1}, {y:.1}");
+                for row in &joints {
+                    let j = &row.joint;
+                    let mut dims = vec![row.side_nl().into(), format!("{} / {}", row.piece_id, row.end.label_nl()),
+                        format!("{} / {}", row.receiver_piece_id, row.receiver_end.label_nl()),
+                        format!("{:.2}", j.source_angle_deg), format!("{:.2}", j.receiver_angle_deg)];
+                    let mut loc = vec![row.side_nl().into(), xy(j.shoulder_face[0]), xy(j.shoulder_face[1])];
+                    if let Some(t) = &j.tenon {
+                        let [a, b] = t.tip;
+                        dims.push(t.z_from_inside_mm.len().to_string());
+                        dims.extend([t.tenon_length_mm, t.mortise_depth_mm, t.bottom_clearance_mm,
+                            t.blank_extension_mm, (a[0] - b[0]).hypot(a[1] - b[1])].map(|n| format!("{n:.1}")));
+                        dims.push(crate::production::z_band_text(&t.z_from_inside_mm));
+                        let [x, y] = t.shoulder_center;
+                        let [ox, oy] = j.shoulder_face[0];
+                        let [a, b] = t.bottom;
+                        loc.extend([xy(t.shoulder_center), format!("{:.1}", (x - ox).hypot(y - oy)),
+                            format!("{:.2}", t.direction[1].atan2(t.direction[0]).to_degrees().rem_euclid(360.)),
+                            xy([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5])]);
+                    }
+                    sizes.push(dims);
+                    locations.push(loc);
+                }
+                y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &sizes) - 5.0;
+                ops.extend(text_ops("Afstellen gatstuk. X rechts en Y omlaag vanaf kozijn linksboven. Afstand tot het hart langs de schouder vanaf buitenpunt. Insteekhoek rechtsom vanaf X+.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 3.5;
+                let h = [side, "Buitenpunt X, Y", "Dagpunt X, Y", "Hart gatmond X, Y", "Afstand tot hart (mm)", "Insteekhoek (graden)", "Hart gatbodem X, Y"];
+                let w = [14., 37., 37., 41., 47., 44., 42.];
+                y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &locations) - 5.0;
+                for row in joints {
+                    if let Some(issue) = row.joint.issue {
+                        y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 9.0);
+                        let note = format!("{}   {} / {}   {}   (opgegeven pen {:.1} mm)",
+                            row.side_nl(), row.piece_id, row.receiver_piece_id, issue, row.joint.requested_length_mm);
+                        ops.extend(text_ops(&note, 8.0, margin, y, font_bold(), DEEP_FORGE));
+                        y -= 5.0;
+                    }
+                }
+            }
+            let mut heads = Vec::new();
+            for item in &prod.cut_list {
+                for (name, end) in [("Begin", &item.divider_start), ("Eind", &item.divider_end)] {
+                    let Some(end) = end else { continue };
+                    if end.radius_mm.is_none() && end.segments.len() == 1 && (end.angle_deg - 90.0).abs() < 1e-7 { continue; }
+                    for edge in &end.segments {
+                        use crate::curved_contour::Segment;
+                        let xy = |[x, y]: [f64; 2]| format!("{x:.1}, {y:.1}");
+                        let (kind, center, radius, sweep) = match edge {
+                            Segment::Line { .. } => ("Recht", String::new(), String::new(), String::new()),
+                            Segment::Arc { center, radius, sweep_angle, .. } =>
+                                ("Ronding", xy(*center), format!("{radius:.1}"), format!("{:.2}", sweep_angle.to_degrees())),
+                        };
+                        heads.push(vec![item.piece_id.clone(), name.into(), kind.into(), format!("{:.1}", end.edge_offsets_mm[0]),
+                            format!("{:.1}", end.edge_offsets_mm[1]), xy(edge.from()), xy(edge.to()), center, radius, sweep]);
+                    }
+                }
+            }
+            if !heads.is_empty() {
+                y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 32.0);
+                ops.extend(text_ops("Kopprofielen tussenhout", 12.0, margin, y, font_bold(), AMBER));
+                y -= 5.0;
+                ops.extend(text_ops("Insprong in mm vanaf het langste punt van de kop. Bij een stijl is rand 1 links en rand 2 rechts. Bij een dorpel is rand 1 boven en rand 2 onder.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 4.5;
+                ops.extend(text_ops("Begin is boven bij een stijl en links bij een dorpel. X en Y in mm vanaf kozijn linksboven, naar rechts en omlaag. De booghoek is positief met de klok mee.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 3.5;
+                let h = ["Pos.", "Kop", "Vorm", "Insprong rand 1", "Insprong rand 2", "Van X, Y", "Naar X, Y", "Middelpunt X, Y", "Radius (mm)", "Boog (graden)"];
+                let w = [26.0, 15.0, 19.0, 26.0, 26.0, 34.0, 34.0, 40.0, 24.0, 24.0];
+                y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &heads) - 6.0;
+            }
+            if !prod.divider_joints.is_empty() {
+                y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 34.0);
+                ops.extend(text_ops("Pen-en-gatverbindingen tussenhout", 12.0, margin, y, font_bold(), AMBER));
+                y -= 5.0;
+                ops.extend(text_ops("Penlengte en gatdiepte langs de houtas vanaf het schouderhart. Overmaat is de extra blanklengte voorbij het langste punt van de kop.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 4.5;
+                ops.extend(text_ops("Alle maten in mm. Hart X, Y vanaf linksboven in het kozijn. De Z-banden geven per pen en gat de beide wangen vanaf het binnenvlak van het kozijn.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 3.5;
+                let h = ["Penstuk", "Kop", "Gatstuk", "Aantal", "Penlengte", "Gatdiepte", "Bodemvrij", "Overmaat", "Penbreedte", "Hart X, Y", "Z-banden"];
+                let w = [28.0, 13.0, 28.0, 13.0, 19.0, 19.0, 20.0, 19.0, 20.0, 32.0, 39.0];
+                let rows: Vec<_> = prod.divider_joints.iter().filter_map(|j| {
+                    let t = j.tenon.as_ref()?;
+                    Some(vec![j.piece_id.clone(), j.end.label_nl().into(), j.receiver_piece_id.clone().unwrap_or_default(),
+                        t.z_from_inside_mm.len().to_string(), format!("{:.1}", t.tenon_length_mm),
+                        format!("{:.1}", t.mortise_depth_mm), format!("{:.1}", t.bottom_clearance_mm),
+                        format!("{:.1}", t.blank_extension_mm), format!("{:.1}", t.cross_range_mm[1] - t.cross_range_mm[0]),
+                        format!("{:.1}, {:.1}", t.shoulder_center[0], t.shoulder_center[1]), j.z_bands()])
+                }).collect();
+                if !rows.is_empty() {
+                    y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows) - 7.0;
+                }
+                for j in prod.divider_joints.iter().filter(|j| j.issue.is_some()) {
+                    y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 9.0);
+                    let note = format!("{}   {}   {}", j.piece_id, j.end.label_nl(), j.issue_text());
+                    ops.extend(text_ops(&note, 8.0, margin, y, font_bold(), DEEP_FORGE));
+                    y -= 5.0;
+                }
+            }
+            for cut in &prod.cut_list {
+                for rect in &cut.masonry_notches {
+                    if y < 28.0 {
+                        doc.pages.push(PdfPage::new(Mm(A4_W), Mm(A4_H), std::mem::take(&mut ops)));
+                        y = A4_H - margin;
+                    }
+                    let note = format!("{}   Uitsparing vanaf linksboven kozijn (mm)   {}",
+                        cut.piece_id, crate::production::CutListItem::notch_text(rect));
+                    ops.extend(text_ops(&note, 8.0, margin, y, font(), DEEP_FORGE));
+                    y -= 6.0;
+                }
+            }
         }
 
         if !prod.glass_list.is_empty() {
+            let first_rows = prod.glass_list.len().min(2) as f32;
+            y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 11.0 + 5.0 * first_rows);
             ops.extend(text_ops("Glaslijst", 12.0, margin, y, font_bold(), AMBER));
             y -= 6.0;
-            let h = ["Pos.","Type","W","H","D","Ug","m\u{00b2}","Qty"];
-            let w = [18.0,30.0,18.0,18.0,18.0,14.0,16.0,12.0_f32];
+            let mut h = vec!["Pos.","Type","W","H","D","Ug","m2","Qty"];
+            let mut w = vec![18.0,30.0,18.0,18.0,18.0,14.0,16.0,12.0_f32];
+            if prod.glass_list.iter().any(|g| g.cut_contour.is_some()) {
+                h.push("Snijvorm (mm)");
+                w.push(36.0);
+            }
             let rows: Vec<Vec<String>> = prod.glass_list.iter().map(|i| vec![
                 i.piece_id.clone(), i.glass_type.clone(),
-                format!("{:.0}", i.width_mm), format!("{:.0}", i.height_mm),
+                i.dimension_text(i.width_mm), i.dimension_text(i.height_mm),
                 format!("{:.0}", i.thickness_mm), format!("{:.1}", i.ug_value),
                 format!("{:.2}", i.area_m2), format!("{}", i.quantity),
+                i.shape_label_nl().replace('Ø', "diam. "),
             ]).collect();
-            y = pdf_table(&mut ops, margin, y, &h, &w, &rows);
+            y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows);
             y -= 4.0;
         }
 
         if !prod.bom.is_empty() {
+            y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 16.0);
             ops.extend(text_ops("Stuklijst (BOM)", 12.0, margin, y, font_bold(), AMBER));
             y -= 6.0;
             let h = ["Category","Description","Unit","Qty"];
@@ -330,10 +504,29 @@ pub fn generate_production_pdf(
             let rows: Vec<Vec<String>> = prod.bom.iter().map(|i| vec![
                 i.category.clone(), i.description.clone(), i.unit.clone(), format!("{:.2}", i.quantity),
             ]).collect();
-            pdf_table(&mut ops, margin, y, &h, &w, &rows);
+            pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows);
         }
 
         doc.pages.push(PdfPage::new(Mm(A4_W), Mm(A4_H), ops));
+        // Circular segments of opposite handedness can share W, H and radius.
+        // Give the workshop the ordered cut edges on a separate sheet.
+        let edges: Vec<_> = prod.glass_list.iter()
+            .filter(|i| i.cut_contour.as_ref().is_some_and(|c| c.segments.iter()
+                .any(|s| matches!(s, crate::curved_contour::Segment::Line { .. }))))
+            .flat_map(|i| i.cut_steps().into_iter().map(move |step| (&i.piece_id, step)))
+            .collect();
+        for page in edges.chunks(28) {
+            let mut ops = text_ops(&format!("Snijcontouren glas - {}", prod.kozijn_mark),
+                14.0, margin, A4_H - 20.0, font_bold(), DEEP_FORGE);
+            ops.extend(text_ops("mm vanaf linksboven, x naar rechts en y omlaag. M = middelpunt, R = straal.",
+                9.0, margin, A4_H - 28.0, font(), DEEP_FORGE));
+            for (row, (piece, step)) in page.iter().enumerate() {
+                let y = A4_H - 40.0 - row as f32 * 5.5;
+                ops.extend(text_ops(piece, 8.0, margin, y, font_bold(), DEEP_FORGE));
+                ops.extend(text_ops(&step.replace('°', " graden"), 8.0, margin + 30.0, y, font(), DEEP_FORGE));
+            }
+            doc.pages.push(PdfPage::new(Mm(A4_W), Mm(A4_H), ops));
+        }
     }
 
     if doc.pages.is_empty() {
@@ -343,20 +536,32 @@ pub fn generate_production_pdf(
     save_doc(&doc, output_path)
 }
 
-fn pdf_table(ops: &mut Vec<Op>, x0: f32, y0: f32, headers: &[&str], widths: &[f32], rows: &[Vec<String>]) -> f32 {
+fn ensure_table_space(doc: &mut PdfDocument, ops: &mut Vec<Op>, mark: &str, y: f32, needed: f32) -> f32 {
+    if y - needed >= 12.0 { return y; }
+    doc.pages.push(PdfPage::new(Mm(A4_W), Mm(A4_H), std::mem::take(ops)));
+    ops.extend(text_ops(&format!("Productiestaten - {mark} (vervolg)"), 14.0, 12.0, A4_H - 12.0, font_bold(), DEEP_FORGE));
+    A4_H - 22.0
+}
+
+fn pdf_table(doc: &mut PdfDocument, ops: &mut Vec<Op>, mark: &str, x0: f32, y0: f32, headers: &[&str], widths: &[f32], rows: &[Vec<String>]) -> f32 {
     let rh: f32 = 5.0;
     let tw: f32 = widths.iter().sum();
 
-    ops.extend(fill_rect_ops(x0, y0 - rh, tw, rh, DEEP_FORGE));
-    let mut x = x0;
-    for (i, h) in headers.iter().enumerate() {
-        ops.extend(text_ops(h, 7.0, x + 1.0, y0 - rh + 1.5, font_bold(), WHITE_C));
-        x += widths[i];
-    }
+    let header = |ops: &mut Vec<Op>, y: f32| {
+        ops.extend(fill_rect_ops(x0, y - rh, tw, rh, DEEP_FORGE));
+        let mut x = x0;
+        for (i, h) in headers.iter().enumerate() {
+            ops.extend(text_ops(h, 7.0, x + 1.0, y - rh + 1.5, font_bold(), WHITE_C));
+            x += widths[i];
+        }
+        y - rh
+    };
 
-    let mut y = y0 - rh;
+    let top = ensure_table_space(doc, ops, mark, y0, 2.0 * rh);
+    let mut y = header(ops, top);
     for (ri, row) in rows.iter().enumerate() {
-        if y < 15.0 { break; }
+        let next = ensure_table_space(doc, ops, mark, y, rh);
+        if next != y { y = header(ops, next); }
         if ri % 2 == 0 {
             ops.extend(fill_rect_ops(x0, y - rh, tw, rh, ALT_ROW));
         }
@@ -364,8 +569,8 @@ fn pdf_table(ops: &mut Vec<Op>, x0: f32, y0: f32, headers: &[&str], widths: &[f3
         let mut x = x0;
         for (i, v) in row.iter().enumerate() {
             if i < widths.len() {
-                let s = if v.len() > 30 { &v[..27] } else { v.as_str() };
-                ops.extend(text_ops(s, 7.0, x + 1.0, y - rh + 1.5, font(), DEEP_FORGE));
+                let end = v.char_indices().nth(30).map_or(v.len(), |(at, _)| at);
+                ops.extend(text_ops(&v[..end], 7.0, x + 1.0, y - rh + 1.5, font(), DEEP_FORGE));
                 x += widths[i];
             }
         }

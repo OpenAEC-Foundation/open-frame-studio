@@ -20,7 +20,7 @@ impl ProfileRef {
     pub fn default_sill() -> Self {
         Self {
             id: "wood-meranti-67x150".into(),
-            name: "Meranti 67x150mm (dorpel)".into(),
+            name: "Meranti 67x114mm (onderdorpel)".into(),
         }
     }
 
@@ -42,6 +42,21 @@ impl ProfileRef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileSnapshot {
+    /// Width of the bead and glazing together in systems with selectable beads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bead_width_base: Option<f64>,
+    /// Sash overlap in the elevation plane when specified by the system.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_overlap: Option<f64>,
+    /// Working clearance around the movable sash, in the elevation plane.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_clearance: Option<f64>,
+    /// Depth from the opening face of the frame to its seating shoulder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sash_seat_depth: Option<f64>,
+    /// Side accessible for installing the glazing bead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bead_position: Option<crate::glaslat::GlaslatPosition>,
     /// Sponningdiepte in mm — depth of the glass/panel pocket in the
     /// bouwdiepte direction (source: `ProfileDefinition.glazing_rebate`).
     #[serde(default)]
@@ -164,6 +179,10 @@ pub struct ProfileDefinition {
     pub glazing_rebate: f64,
     /// 2D cross-section polygon points
     pub cross_section: Vec<[f64; 2]>,
+    /// Supplier and editor detail such as chamber outlines, lip grooves and finishes.
+    /// Keep it with the profile when a project is saved and reopened.
+    #[serde(flatten, default)]
+    pub details: serde_json::Map<String, serde_json::Value>,
     /// Thermal transmittance of the frame (W/m²K)
     pub uf_value: f64,
     /// Where this profile can be used
@@ -250,25 +269,26 @@ pub enum KvtProfileType {
 #[serde(rename_all = "camelCase")]
 pub struct SponningInfo {
     /// Sponning type
-    #[serde(default)]
+    #[serde(default, alias = "type")]
     pub sponning_type: SponningType,
     /// Sponning width in mm (sponningbreedte)
     pub width: f64,
     /// Sponning depth/height in mm (sponninghoogte, min 17mm)
     pub depth: f64,
     /// Position: "binnen", "buiten", or "midden"
+    #[serde(default)]
     pub position: String,
     /// Draaikiep: opdekbreedte (raam overlap, typically 13mm)
-    #[serde(default)]
+    #[serde(default, alias = "opdek_width")]
     pub opdek_width: Option<f64>,
     /// Draaikiep: number of rubber gasket grooves (2-3)
-    #[serde(default)]
+    #[serde(default, alias = "rubber_count")]
     pub rubber_count: Option<u8>,
     /// Dubbele sponning: second sponning width
-    #[serde(default)]
+    #[serde(default, alias = "second_width")]
     pub second_width: Option<f64>,
     /// Dubbele sponning: second sponning depth
-    #[serde(default)]
+    #[serde(default, alias = "second_depth")]
     pub second_depth: Option<f64>,
     /// Dubbele sponning: kernhout (core wood remaining, min 20mm)
     #[serde(default)]
@@ -317,6 +337,10 @@ pub enum ProfileApplication {
     Sash,
     Divider,
     Sill,
+    DividerHorizontal,
+    SashSill,
+    DoorPanel,
+    SlidingSash,
     // New detailed classifications
     /// A: Kozijnstijl (frame stile, vertical)
     KozijnStijl,

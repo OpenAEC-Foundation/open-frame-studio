@@ -10,8 +10,11 @@ pub fn load_profile_library(app_handle: tauri::AppHandle) -> Result<String, Stri
         .path()
         .resource_dir()
         .ok()
-        .map(|p| p.join("profiles"))
-        .filter(|p| p.exists())
+        .and_then(|root| {
+            // Tauri bundles ../profiles under _up_/profiles on Windows.
+            [root.join("_up_").join("profiles"), root.join("profiles")]
+                .into_iter().find(|dir| dir.join("index.json").is_file())
+        })
         .or_else(|| {
             let dev_path = PathBuf::from("../profiles");
             if dev_path.exists() { Some(dev_path) } else { None }

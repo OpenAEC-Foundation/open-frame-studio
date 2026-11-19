@@ -1,16 +1,26 @@
 <script>
-  import { selectedCellIndex, selectedMember, selectedLayoutLeafId, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
+  import { selectedCellIndex, selectedMember, selectedLayoutLeafId, selectedTimberJoints, selectDividerPiece, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
   import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
   import { ralToHex } from "../../lib/ral-colors.js";
+  import { cellFits, insetOpening, moveFit } from "../../lib/glazingFit.js";
+  import { circleDiameter, contourPath, openingPath } from "../../lib/contour2d.js";
+  import { timberMemberType, memberLabel, dividerPieceLabel } from "../../lib/labels.js";
+  import { jointPaths } from "../../lib/dividerJoinery.js";
+  import { _ } from "svelte-i18n";
 
-  let { geometry, kozijn, zoom = 0.35, oncellcontextmenu } = $props();
+  let { geometry, kozijn, zoom = 0.35, oncellcontextmenu, dividerClipId } = $props();
 
   // #8: reflect the chosen RAL frame colour in the drawing instead of a fixed
   // token. The front elevation shows the inside face colour (colorInside); the
   // selection highlight stays a separate stroke overlay (see below) so colour
   // and selection coexist. Falls back to the editor token when no RAL is set.
   let frameColor = $derived(kozijn?.frame?.colorInside ? ralToHex(kozijn.frame.colorInside) : "var(--editor-frame)");
+  let seamColor = $derived.by(() => {
+    if (!frameColor.startsWith("#")) return "var(--bg-surface)";
+    const [r, g, b] = frameColor.slice(1).match(/../g).map(v => parseInt(v, 16));
+    return 0.213 * r + 0.715 * g + 0.072 * b > 135 ? "#645f59" : "#c4c1bc";
+  });
 
   // ── Free-subdivision layout: editable render of the split tree ──────────────
   // While a divider is being dragged we render a local working copy so the drag
@@ -32,24 +42,57 @@
     if (!activeTree || !k?.frame) return null;
     const fw = k.frame.frameWidth || 67;
     const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
-    return layoutToRects(activeTree, inner, fw);
+    return layoutToRects(activeTree, inner, fw, undefined, !geometry?.curvedDividerTimber);
   });
-  let selectedLeafRect = $derived(layoutGeom?.leaves.find((l) => l.node.id === selectedLeafId)?.rect || null);
+  let selectedLeafRect = $derived.by(() => {
+    const index = layoutGeom?.leaves.findIndex(l => l.node.id === selectedLeafId) ?? -1;
+    if (index < 0) return null;
+    return geometry?.curvedFrame ? fittedCells.get(index)?.openingBounds : layoutGeom.leaves[index].rect;
+  });
 
   function vullingFill(t) {
     return t === "deur" ? "#b98b5e" : t === "paneel" ? "#c9c2b2" : t === "rooster" ? "#9aa0a8" : "var(--editor-glass)";
   }
 
-  // R3 (KVT 12.3.2, docs/profielmaten-onderzoek.md §5): de glaslatlijn ligt
-  // glaslathoogte − sponninghoogte binnen de sponninglijn — 0 bij een
-  // 17×17-lat op een 17 mm sponning (lijnen vallen samen), 11 bij een
-  // 28 mm handelslat. Dus géén vaste 5/6 mm en niet de voetbreedte
-  // (glaslatBreedte) als offset. De klassieke vaste inset blijft alleen als
-  // fallback voor payloads zonder de snapshotvelden (oude wasm/backend).
-  function glaslatOffset(fallback) {
-    return geometry?.glaslatHoogte != null
-      ? Math.max(0, geometry.glaslatHoogte - (geometry.sponningHoogte ?? 17))
-      : fallback;
+  function openingLabel(rect, contour) {
+    const diameter = circleDiameter(contour);
+    return diameter == null ? `${Math.round(rect.width)}×${Math.round(rect.height)}` : `Ø ${Math.round(diameter)}`;
+  }
+
+  function beadSeams(rim, inner, mitered) {
+    const { x, y, width, height } = inner;
+    const right = rim.x + rim.width, bottom = rim.y + rim.height;
+    const startY = mitered ? rim.y : y;
+    const endY = mitered ? bottom : y + height;
+    return `M${rim.x} ${startY}L${x} ${y}M${right} ${startY}L${x + width} ${y}
+            M${rim.x} ${endY}L${x} ${y + height}M${right} ${endY}L${x + width} ${y + height}`;
+  }
+
+  let fittedCells = $derived(new Map((geometry?.cellRects ?? []).map(c => [c.cellIndex, c])));
+  function layoutFits(leaf, index) {
+    const cell = layoutGeom.leaves.length === kozijn.cells?.length ? kozijn.cells[index] : null;
+    const source = fittedCells.get(index);
+    const target = leaf.rect;
+    if (geometry?.curvedFrame) return source ? cellFits(source, cell, kozijn.frame, geometry) : [];
+    if (!source || source.vulling?.type !== leaf.node.vulling.type) {
+      return cellFits({ rect: target, vulling: leaf.node.vulling }, cell, kozijn.frame, geometry);
+    }
+    const fits = cellFits(source, cell, kozijn.frame, geometry);
+    const base = source.rect;
+    if (target.x === base.x && target.y === base.y && target.width === base.width && target.height === base.height) return fits;
+    return fits.map((fit, i) => {
+      if (fits.length === 1) return moveFit(fit, base, target);
+      const half = (r) => ({ ...r, x: r.x + i * r.width / 2, width: r.width / 2 });
+      return moveFit(fit, half(base), half(target));
+    });
+  }
+
+  function cellHitPath(shape, rect, fits) {
+    // The lip of an inward-opening leaf is in front of the fixed frame.
+    if (shape && fits.length && fits.every(f => f.contours?.sashOuter && !f.contours.sashOpensOutward)) {
+      return fits.map(f => contourPath(f.contours.sashOuter)).join(" ");
+    }
+    return openingPath(shape, rect);
   }
 
   // ── Draaisymbolen op het layout-pad (NL-conventie, VKG 1.8) ─────────────────
@@ -117,14 +160,6 @@
     return syms;
   }
 
-  // Vleugel-aanzichtbreedte in het layout-pad: raamhout 69 mm (embedded default
-  // raamhout-69x90), deurhout = kozijnhoutbreedte — beide consistent met de
-  // productie-defaults zodat 2D, 3D en zaaglijst dezelfde vleugel tonen.
-  function sashWidthFor(v) {
-    if (v?.type === "deur") return kozijn?.frame?.frameWidth || 67;
-    return 69;
-  }
-
   // Borstwering (`buiten`-vak): strek het metselwerk door tot de buitenrand aan
   // zijden waar geen kozijnhout meer zit (de getrapte omtrek slaat die kant
   // over), anders blijft daar een kale strook editor-achtergrond als "gat".
@@ -143,14 +178,15 @@
   // Mirrors GridHandles' screen→mm mapping (deltaMm = deltaPx / zoom); the vak
   // sizes are relative within their split, so a mm delta maps to a size delta
   // via the divider's avail/sizeSum (carried by layoutToRects).
-  function startLayoutDrag(d, e) {
+  function startLayoutDrag(d, e, piece = null) {
+    if (!d || e.ctrlKey) return;
     e.stopPropagation();
     e.preventDefault();
     const base = ensureIds(kozijn?.layout ?? null);
     const split = findNode(base, d.splitId);
     if (!split || split.kind !== "split") return;
     layoutDrag = {
-      base, moved: false,
+      base, moved: false, piece,
       splitId: d.splitId, childIndex: d.childIndex, axis: d.direction,
       avail: d.avail, sizeSum: d.sizeSum,
       startX: e.clientX, startY: e.clientY,
@@ -164,7 +200,8 @@
   function onLayoutDragMove(e) {
     if (!layoutDrag) return;
     const deltaPx = layoutDrag.axis === "v" ? e.clientX - layoutDrag.startX : e.clientY - layoutDrag.startY;
-    if (deltaPx !== 0) layoutDrag.moved = true;
+    if (!layoutDrag.moved && Math.abs(deltaPx) < 2) return;
+    layoutDrag.moved = true;
     const deltaMm = deltaPx / (zoom || 1);
     let deltaSize = deltaMm * layoutDrag.sizeSum / Math.max(1, layoutDrag.avail);
     const min = 0.05 * layoutDrag.sizeSum;
@@ -180,6 +217,7 @@
     // Only commit when the divider actually moved — a bare mousedown/mouseup
     // would otherwise push a no-op history entry and a redundant IPC roundtrip.
     if (workingTree && layoutDrag?.moved) setKozijnLayout(workingTree);
+    else if (layoutDrag?.piece) selectDividerPiece(layoutDrag.piece);
     workingTree = null;
     layoutDrag = null;
   }
@@ -231,7 +269,7 @@
   const brickPatternId = `ofs-brick-${Math.random().toString(36).slice(2, 9)}`;
   let roundClip = $derived.by(() => {
     const f = kozijn?.frame;
-    if (!f?.shape) return null;
+    if (geometry?.curvedFrame || !f?.shape) return null;
     if (f.shape.shapeType === "round") {
       const rOuter = Math.min(f.outerWidth, f.outerHeight) / 2;
       const rInner = rOuter - f.frameWidth;
@@ -285,6 +323,15 @@
     const laneOffset = labelH / 2 + tickSz + 2 / z;
     const shape = k.frame.shape?.shapeType;
     const roundish = shape === "round" || shape === "elliptical";
+    const diameter = shape === "round" ? circleDiameter(geometry?.curvedFrame?.outer) : null;
+    if (diameter != null) {
+      const [cx, cy] = geometry.curvedFrame.outer.segments[0].center;
+      const y = cy + diameter / 2 + minStart;
+      const text = `Ø ${Math.round(diameter * 10) / 10}`;
+      return [{ key: "outer-diameter", kind: "diameter", editable: true, isH: true,
+        value: diameter, text, x1: cx - diameter / 2, x2: cx + diameter / 2, y1: y, y2: y,
+        midX: cx, midY: y, labelW: text.length * fontSize * 0.6 + bgPad * 2, labelH, laneOff: 0 }];
+    }
     const hasLayout = !!(k.layout && layoutGeom);
 
     // Grid member start positions, mirroring ofs-core's column/row walk
@@ -547,7 +594,9 @@
     const oh = k.frame.outerHeight;
     const fw = k.frame.frameWidth;
 
-    if (entry.kind === "outer") {
+    if (entry.kind === "diameter") {
+      updateDimensions(newVal, newVal);
+    } else if (entry.kind === "outer") {
       // Buitenwerkse maat
       if (entry.isH) updateDimensions(newVal, oh);
       else updateDimensions(ow, newVal);
@@ -600,6 +649,7 @@
   function handleMemberClick(memberType, index, e) {
     e.stopPropagation();
     selectedCellIndex.set(null);
+    selectedLayoutLeafId.set(null);
     selectedMember.set({ type: memberType, index });
   }
 
@@ -714,14 +764,86 @@
   }
 
   function handleCellClick(cellIndex, e) {
+    if (e.ctrlKey) return;
     e.stopPropagation();
     selectedMember.set(null);
     selectedCellIndex.set(cellIndex);
   }
 </script>
 
+{#snippet sashSeat(fit, opening)}
+  {#if fit?.contours?.sashSeat && !fit.contours.sashOpensOutward && opening}
+    <path class="sash-seat" d={contourPath(fit.contours.sashSeat) + " " + contourPath(opening)}
+      fill-rule="evenodd" fill={seamColor} pointer-events="none" />
+  {/if}
+{/snippet}
+
+{#snippet glazingFace(fit, glassColor, cellIndex)}
+  {#if fit.contours}
+    {@const c = fit.contours}
+    {@const inside = fit.beadPosition !== "buiten"}
+    <g class="glazing-face curved" stroke={seamColor} pointer-events="none"
+       clip-path={c.sashOpensOutward && c.sashOuter ? `url(#${clipId}-cell-${cellIndex})` : null}>
+      {#if c.sashTimber?.length}
+        {#each c.sashTimber as piece}
+          <path class="sash-piece" d={contourPath(piece.outline)} fill={frameColor} />
+        {/each}
+      {:else if c.sashOuter}
+        <path d={contourPath(c.sashOuter)} fill={frameColor} class="sash-outline" />
+      {/if}
+      <path d={contourPath(inside ? c.rebate : c.day)} fill={frameColor} />
+      {#if inside && fit.beadHeight < c.rebateHeight}
+        <path d={contourPath(c.beadInner)} fill={frameColor} />
+      {/if}
+      <path d={contourPath(fit.beadHeight >= c.rebateHeight ? c.beadInner : c.day)} fill={glassColor} />
+    </g>
+  {:else}
+  {@const beadInner = insetOpening(fit.rebate, fit.beadHeight)}
+  {@const inside = fit.beadPosition !== "buiten"}
+  {@const rim = inside ? fit.rebate : fit.day}
+  <g class="glazing-face" stroke={seamColor} pointer-events="none">
+    {#if fit.sashOuter}
+      <rect {...fit.sashOuter} fill={frameColor} class="sash-outline" />
+    {/if}
+    <!-- Inside elevation. The bead shoulder is visible on its installation
+         side. An exterior bead is visible only where it projects past the stop. -->
+    <rect {...rim} fill={frameColor} />
+    {#if inside || beadInner.width < rim.width}
+      <rect {...beadInner} fill={beadInner.width > fit.day.width ? frameColor : glassColor} />
+      {#if beadInner.width > fit.day.width}
+        <rect {...fit.day} fill={glassColor} />
+      {/if}
+      {#if inside}
+        <path fill="none" d={beadSeams(rim, beadInner, fit.beadMitered)} />
+      {/if}
+    {:else}
+      <rect {...fit.day} fill={glassColor} />
+    {/if}
+  </g>
+  {/if}
+{/snippet}
+
 <g>
   <defs>
+    {#if geometry.curvedFrame}
+      <clipPath id={clipId}><path d={contourPath(geometry.curvedFrame.outer)} /></clipPath>
+      <clipPath id={clipId + "-day"}><path d={contourPath(geometry.curvedFrame.day)} /></clipPath>
+      {#if geometry.curvedDividerTimber && dividerClipId}
+        {@const leaves = geometry.cellRects.flatMap(cr => [cr.fit, cr.secondFit]).filter(f => f?.contours?.sashOuter && !f.contours.sashOpensOutward)}
+        <clipPath id={dividerClipId}><path clip-rule="evenodd"
+          d={[contourPath(geometry.curvedFrame.day), ...leaves.map(f => contourPath(f.contours.sashOuter))].join(" ")} /></clipPath>
+      {/if}
+      {#each geometry.cellRects as cr}
+        <clipPath id={clipId + "-cell-" + cr.cellIndex}><path d={contourPath(cr.openingContour)} /></clipPath>
+        {#if cr.fit?.contours?.sashOuter}
+          <clipPath id={clipId + "-glass-" + cr.cellIndex}>
+            {#each [cr.fit, cr.secondFit].filter(Boolean) as fit}
+              <path d={contourPath(fit.beadHeight >= fit.contours.rebateHeight ? fit.contours.beadInner : fit.contours.day)} />
+            {/each}
+          </clipPath>
+        {/if}
+      {/each}
+    {/if}
     <!-- Metselwerk (borstwering) — running bond, in mm user-space so it scales. -->
     <pattern id={brickPatternId} width="120" height="60" patternUnits="userSpaceOnUse">
       <rect width="120" height="60" fill="#9c876d" />
@@ -737,7 +859,25 @@
        and stepped (melkmeisje) frames arrive as closed polygons in
        geometry.framePolygons; fall back to the plain rects otherwise (older
        wasm bundle / plain butt frame) so the canvas renders either shape. -->
-  {#if geometry.framePolygons?.length}
+  {#if geometry.curvedTimber?.length}
+    <g class="curved-frame">
+      {#each geometry.curvedTimber as piece}
+        {@const type = timberMemberType(piece)}
+        {@const selected = $selectedMember?.type === type && $selectedMember.index === piece.index}
+        {@const label = memberLabel($_, piece.arc ? "frame_arc" : type, piece.profileSide)}
+        <path class="member timber-piece" d={contourPath(piece.outline)} fill={frameColor}
+          stroke={selected ? "var(--editor-selected)" : seamColor} stroke-width={selected ? 2 : 0.8}
+          vector-effect="non-scaling-stroke" role="button" tabindex="0" aria-label={label}
+          onclick={(e) => handleMemberClick(type, piece.index, e)}
+          onkeydown={(e) => e.key === "Enter" && handleMemberClick(type, piece.index, e)}>
+          <title>{label}</title>
+        </path>
+      {/each}
+    </g>
+  {:else if geometry.curvedFrame}
+    <path class="curved-frame" d={contourPath(geometry.curvedFrame.outer) + " " + contourPath(geometry.curvedFrame.day)}
+      fill-rule="evenodd" fill={frameColor} stroke={seamColor} stroke-width="1" />
+  {:else if geometry.framePolygons?.length}
     {#each geometry.framePolygons as poly}
       <!-- Stroke maakt de naad tussen de leden zichtbaar: de 45°-lasnaad bij
            PVC/alu-verstek, de haakse stuiknaad bij hout — zonder stroke oogt
@@ -780,51 +920,61 @@
     {/if}
   {/if}
 
-  <g clip-path={roundClip ? `url(#${clipId})` : null}>
+  {#if geometry.curvedDividerTimber}
+    {#each geometry.curvedDividerTimber as piece}
+      {@const selected = $selectedMember?.type === (piece.vertical ? "divider_v" : "divider_h") && $selectedMember.index === piece.sourceIndex && $selectedMember.pieceIndex === piece.pieceIndex}
+      <path class="curved-divider" class:selected d={contourPath(piece.outline)} fill={frameColor}
+        stroke={selected ? "var(--editor-selected)" : seamColor} stroke-width={selected ? 2 : 0.8}
+        vector-effect="non-scaling-stroke" pointer-events="none" />
+    {/each}
+  {:else if geometry.curvedFrame}
+    {#each geometry.curvedDividers as divider}
+      <path class="curved-divider" d={contourPath(divider)} fill={frameColor} pointer-events="none" />
+    {/each}
+  {:else if !kozijn?.layout}
+    {#each [...geometry.vDividers, ...geometry.hDividers] as rect}
+      <rect {...rect} fill={frameColor} pointer-events="none" />
+    {/each}
+  {/if}
+
+  <g clip-path={roundClip || geometry.curvedFrame ? `url(#${clipId})` : null}>
   {#if kozijn?.layout && layoutGeom}
     <!-- Free-subdivision layout (editable: click a vak, drag the dividers) -->
-    {#each layoutGeom.dividers as d}
-      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height} fill={frameColor} pointer-events="none" />
-    {/each}
-    {#each layoutGeom.leaves as l}
+    {#if !geometry.curvedFrame}
+      {#each layoutGeom.dividers as d}
+        <rect {...d.rect} fill={frameColor} pointer-events="none" />
+      {/each}
+    {/if}
+    {#each layoutGeom.leaves as l, leafIndex}
       {#if l.node.vulling.type !== "buiten"}
-        {@const r = l.rect}
+        {@const source = fittedCells.get(leafIndex)}
+        {@const shape = source?.openingContour}
+        {@const r = source?.openingBounds ?? l.rect}
         {@const v = l.node.vulling}
         {@const lcx = r.x + r.width / 2}
         {@const lcy = r.y + r.height / 2}
-        {@const operable = v.type === "raam" || v.type === "deur"}
-        {@const sw = sashWidthFor(v)}
-        <rect x={r.x} y={r.y} width={r.width} height={r.height} fill={vullingFill(v.type)} stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
-        {#if operable}
-          <!-- Vleugel (raamhout/deurhout) op werkelijke aanzichtbreedte, als band
-               binnen de dag — zelfde maat als 3D en productie gebruiken. -->
-          <rect x={r.x + sw / 2} y={r.y + sw / 2} width={Math.max(1, r.width - sw)} height={Math.max(1, r.height - sw)}
-                fill="none" stroke={frameColor} stroke-width={sw} opacity="0.9" pointer-events="none" />
-          <rect x={r.x + sw} y={r.y + sw} width={Math.max(1, r.width - sw * 2)} height={Math.max(1, r.height - sw * 2)}
-                fill="none" stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
-          {#if v.type === "deur" && v.doorKind === "dubbel"}
-            <!-- Stolpnaad: twee vleugels zonder vaste tussenstijl -->
-            <line x1={lcx} y1={r.y + 2} x2={lcx} y2={r.y + r.height - 2} stroke="var(--editor-frame)" stroke-width={1.5} pointer-events="none" />
-          {/if}
-        {/if}
-        {#if v.glaslat || v.type === "glas"}
-          {@const gi = (operable ? sw : 0) + glaslatOffset(6)}
-          {#if gi > 0.5}
-            <rect x={r.x + gi} y={r.y + gi} width={Math.max(1, r.width - gi * 2)} height={Math.max(1, r.height - gi * 2)} fill="none" stroke={v.glaslat === "buiten" ? "#3B82F6" : "var(--amber)"} stroke-width={0.8} opacity="0.6" stroke-dasharray="4 3" pointer-events="none" />
-          {/if}
-        {/if}
+        {@const fits = layoutFits(l, leafIndex)}
+        {@const hitPath = cellHitPath(shape, r, fits)}
+        <path d={openingPath(shape, r)} fill={vullingFill(v.type)} stroke="var(--editor-frame)" stroke-width={1} pointer-events="none" />
+        {@render sashSeat(fits[0], shape)}
+        {#each fits as fit}
+          {@render glazingFace(fit, "var(--editor-glass)", leafIndex)}
+        {/each}
+        <g clip-path={shape ? `url(#${clipId}-cell-${leafIndex})` : null}>
         {#each vullingSymbols(v, r) as sym}
           <path d={sym.d} fill="none" stroke="var(--editor-frame)" stroke-width={1.2}
+                clip-path={fits[0]?.contours?.sashOuter ? `url(#${clipId}-glass-${leafIndex})` : null}
                 stroke-dasharray={sym.solid ? null : "7 5"} opacity="0.8" pointer-events="none" />
         {/each}
         <text x={lcx} y={lcy - 7 / zoom} text-anchor="middle" dominant-baseline="central" fill="var(--text-secondary)" font-size={12 / zoom} font-weight="700" opacity="0.55" pointer-events="none">{vullingLabel(v)}</text>
-        <text x={lcx} y={lcy + 9 / zoom} text-anchor="middle" dominant-baseline="central" fill="#DC2626" font-size={8 / zoom} opacity="0.7" pointer-events="none">{Math.round(r.width)}×{Math.round(r.height)}</text>
+        <text x={lcx} y={lcy + 9 / zoom} text-anchor="middle" dominant-baseline="central" fill="#DC2626" font-size={8 / zoom} opacity="0.7" pointer-events="none">{openingLabel(r, shape)}</text>
+        </g>
         <!-- transparent hit layer for selecting the vak -->
-        <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" class="vak-hit"
+        <path d={hitPath} fill="transparent" class="vak-hit"
               onclick={(e) => selectLeaf(l.node.id, e)} role="button" tabindex="0"
               aria-label="Selecteer vak" onkeydown={(e) => e.key === "Enter" && selectLeaf(l.node.id, e)} />
         {#if l.node.id === selectedLeafId}
-          <rect x={r.x + 2} y={r.y + 2} width={Math.max(1, r.width - 4)} height={Math.max(1, r.height - 4)}
+          <path d={shape ? hitPath : openingPath(null, insetOpening(r, 2))}
                 fill="none" stroke="var(--editor-selected, #D97706)" stroke-width={3 / zoom} pointer-events="none" />
         {/if}
       {:else}
@@ -849,12 +999,30 @@
     {/each}
 
     <!-- divider drag handles (tussenstijl/-dorpel) -->
+    <g clip-path={geometry.curvedFrame ? `url(#${geometry.curvedDividerTimber && dividerClipId ? dividerClipId : clipId + "-day"})` : null}>
+    {#if geometry.curvedDividerTimber}
+      {@const vertical = layoutGeom.dividers.filter(d => d.direction === "v")}
+      {@const horizontal = layoutGeom.dividers.filter(d => d.direction === "h")}
+      {#each geometry.curvedDividerTimber as piece}
+        {@const d = (piece.vertical ? vertical : horizontal)[piece.sourceIndex]}
+        {@const label = dividerPieceLabel($_, piece, geometry.curvedDividerTimber)}
+        <path d={contourPath(piece.outline)} fill="transparent" class="layout-divider divider-piece-hit" class:v={piece.vertical} class:h={!piece.vertical}
+          onmousedown={(e) => startLayoutDrag(d, e, piece)} role="button" aria-label={label} tabindex="0"
+          onkeydown={(e) => e.key === "Enter" && selectDividerPiece(piece)} />
+        {#if layoutDrag?.moved && d && layoutDrag.splitId === d.splitId && layoutDrag.childIndex === d.childIndex}
+          <rect {...d.rect} fill="none" stroke="var(--editor-selected)" pointer-events="none" />
+        {/if}
+      {/each}
+    {:else}
     {#each layoutGeom.dividers as d, i (i)}
-      <rect x={d.rect.x} y={d.rect.y} width={d.rect.width} height={d.rect.height}
+      <rect {...d.rect}
+            stroke={geometry.curvedFrame && layoutDrag?.moved && d.splitId === layoutDrag.splitId && d.childIndex === layoutDrag.childIndex ? "var(--editor-selected)" : "none"}
             fill="transparent" class="layout-divider {d.direction}"
             onmousedown={(e) => startLayoutDrag(d, e)}
             role="separator" aria-label="Versleep deellijn" tabindex="-1" />
     {/each}
+    {/if}
+    </g>
 
     <!-- in-canvas split / merge controls for the selected vak -->
     {#if selectedLeafRect}
@@ -862,7 +1030,7 @@
       {@const gp = 5 / zoom}
       {@const tw = bs * 4 + gp * 3}
       {@const bx = selectedLeafRect.x + selectedLeafRect.width / 2 - tw / 2}
-      {@const by = selectedLeafRect.y + 7 / zoom}
+      {@const by = geometry.curvedFrame ? selectedLeafRect.y + selectedLeafRect.height / 2 - bs / 2 : selectedLeafRect.y + 7 / zoom}
       {#each [{ k: "row", t: "⟷", title: "Splits met tussenstijl" }, { k: "column", t: "↕", title: "Splits met tussendorpel" }, { k: "merge", t: "⤬", title: "Samenvoegen" }, { k: "swap", t: "⇄", title: "Verwissel met ander vak" }] as b, bi}
         {@const x0 = bx + bi * (bs + gp)}
         {@const armed = b.k === "swap" && swapSourceId === selectedLeafId}
@@ -886,13 +1054,19 @@
   {#if !kozijn?.layout}
   <!-- Cell fills (glazing/panel areas) -->
   {#each geometry.cellRects as cellRect}
+    {@const r = cellRect.openingBounds ?? cellRect.rect}
+    {@const cell = kozijn.cells?.[cellRect.cellIndex]}
+    {@const fits = cellFits(cellRect, cell, kozijn.frame, geometry)}
     {@const colors = cellColor(cellRect.cellIndex)}
     {@const isSelected = $selectedCellIndex === cellRect.cellIndex}
-    <rect
-      x={cellRect.rect.x} y={cellRect.rect.y}
-      width={cellRect.rect.width} height={cellRect.rect.height}
-      fill={colors.fill}
-      stroke={isSelected ? "var(--editor-selected)" : colors.stroke}
+    {@render sashSeat(fits[0], cellRect.openingContour)}
+    {#each fits as fit}
+      {@render glazingFace(fit, cell?.panelFilling ? "var(--editor-panel)" : "var(--editor-glass)", cellRect.cellIndex)}
+    {/each}
+    <path
+      d={cellHitPath(cellRect.openingContour, r, fits)}
+      fill={fits.length ? "transparent" : colors.fill}
+      stroke={isSelected ? "var(--editor-selected)" : fits.length ? "none" : colors.stroke}
       stroke-width={isSelected ? 3 : 1}
       class="cell"
       onclick={(e) => handleCellClick(cellRect.cellIndex, e)}
@@ -901,10 +1075,17 @@
       tabindex="0"
     />
 
+    {@const hw = hardwarePositions(cellRect.cellIndex, r)}
+    {@const cellFs = 10 / zoom}
+    {@const smallFs = 8 / zoom}
+    {@const cx = r.x + r.width / 2}
+    {@const cy = r.y + r.height / 2}
+    <g clip-path={cellRect.openingContour ? `url(#${clipId}-cell-${cellRect.cellIndex})` : null}>
     <!-- EN 12519 opening symbols -->
-    {#each openingSymbols(cellRect.cellIndex, cellRect.rect) as sym}
+    {#each openingSymbols(cellRect.cellIndex, fits[0]?.day ?? r) as sym}
       <path
         d={sym.d}
+        clip-path={fits[0]?.contours?.sashOuter ? `url(#${clipId}-glass-${cellRect.cellIndex})` : null}
         fill="none"
         stroke={colors.stroke}
         stroke-width={sym.label === "tilt" ? 0.8 : 1}
@@ -915,7 +1096,6 @@
     {/each}
 
     <!-- Hardware indicators (hinges + handle) -->
-    {@const hw = hardwarePositions(cellRect.cellIndex, cellRect.rect)}
     {#each hw.hinges as hinge}
       <circle
         cx={hinge.cx} cy={hinge.cy}
@@ -937,13 +1117,6 @@
     {/if}
 
     <!-- Cell label (GA Kozijn style: type + vakmaat + glasspec) -->
-    {@const cell = kozijn.cells?.[cellRect.cellIndex]}
-    {@const cellFs = 10 / zoom}
-    {@const smallFs = 8 / zoom}
-    {@const cx = cellRect.rect.x + cellRect.rect.width / 2}
-    {@const cy = cellRect.rect.y + cellRect.rect.height / 2}
-    {@const vakW = Math.round(cellRect.rect.width)}
-    {@const vakH = Math.round(cellRect.rect.height)}
     <!-- Type label (DK, VG, etc) -->
     <text
       x={cx} y={cy - cellFs * 1.5}
@@ -968,7 +1141,7 @@
       opacity="0.7"
       pointer-events="none"
     >
-      {vakW}×{vakH}
+      {openingLabel(r, cellRect.openingContour)}
     </text>
     <!-- Glass spec -->
     {#if cell?.glazing}
@@ -985,16 +1158,13 @@
         {cell.glazing.glassType} {cell.glazing.thicknessMm}mm
       </text>
     {/if}
+    </g>
   {/each}
   {/if}
   </g>
 
-  <!-- Frame members (clickable overlay, drawn ON TOP of cells so onderdorpel is
-       visible). Skipped when the frame is polygon-based (verstek/melkmeisje):
-       the stepped mass polygons include the vak area, so redrawing them on top
-       would cover the glass — they're already drawn as the background layer.
-       Member selection + sponning lines stay on the rect frame path. -->
-  {#if !geometry.framePolygons?.length}
+  <!-- Transparent member hit areas preserve the visible bead and sash overlap. -->
+  {#if !geometry.curvedTimber?.length && !geometry.framePolygons?.length}
   {#each geometry.frameRects as rect, i}
     {@const memberType = FRAME_MEMBER_NAMES[i]}
     {@const isSelected = $selectedMember?.type === memberType}
@@ -1002,7 +1172,7 @@
       <rect
         x={rect.x} y={rect.y}
         width={rect.width} height={rect.height}
-        fill="var(--editor-frame)"
+        fill="transparent"
         stroke={isSelected ? "var(--editor-selected)" : "none"}
         stroke-width={isSelected ? 3 : 0}
         class="member"
@@ -1010,29 +1180,12 @@
         role="button"
         tabindex="0"
       />
-      <!-- Sponning line (inner edge of rebate) — sponninghoogte uit het
-           profielsnapshot via de geometry-payload; klassieke 17mm als
-           fallback voor kozijnen zonder snapshot of een oude wasm-bundle -->
-      {@const sp = geometry.sponningHoogte ?? 17}
-      {#if memberType === "frame_top" && rect.height > sp}
-        <line x1={rect.x} y1={rect.y + rect.height - sp} x2={rect.x + rect.width} y2={rect.y + rect.height - sp}
-          stroke="var(--text-muted)" stroke-width={0.5} opacity="0.3" pointer-events="none" />
-      {:else if memberType === "frame_bottom" && rect.height > sp}
-        <line x1={rect.x} y1={rect.y + sp} x2={rect.x + rect.width} y2={rect.y + sp}
-          stroke="var(--text-muted)" stroke-width={0.5} opacity="0.3" pointer-events="none" />
-      {:else if memberType === "frame_left" && rect.width > sp}
-        <line x1={rect.x + rect.width - sp} y1={rect.y} x2={rect.x + rect.width - sp} y2={rect.y + rect.height}
-          stroke="var(--text-muted)" stroke-width={0.5} opacity="0.3" pointer-events="none" />
-      {:else if memberType === "frame_right" && rect.width > sp}
-        <line x1={rect.x + sp} y1={rect.y} x2={rect.x + sp} y2={rect.y + rect.height}
-          stroke="var(--text-muted)" stroke-width={0.5} opacity="0.3" pointer-events="none" />
-      {/if}
     {/if}
   {/each}
   {/if}
 
   <!-- Corner joint indicators (color-coded by type) -->
-  {#if kozijn.frame?.cornerJoints?.length > 0}
+  {#if !geometry.curvedFrame && kozijn.frame?.cornerJoints?.length > 0}
     {#each kozijn.frame.cornerJoints as joint, ji}
       {#if ji < 4}
         {@const jfw2 = kozijn.frame.frameWidth}
@@ -1064,7 +1217,7 @@
   {/if}
 
   <!-- Trapezoid outline -->
-  {#if geometry.trapezoidOuter && geometry.trapezoidOuter.length >= 3}
+  {#if !geometry.curvedFrame && geometry.trapezoidOuter && geometry.trapezoidOuter.length >= 3}
     <polygon
       points={geometry.trapezoidOuter.map(p => `${p[0]},${p[1]}`).join(' ')}
       fill="none"
@@ -1075,7 +1228,7 @@
   {/if}
 
   <!-- Arcs for arched/round kozijnen -->
-  {#each (geometry.arcs || []) as arc}
+  {#each (geometry.curvedFrame ? [] : geometry.arcs || []) as arc}
     {@const r = arc.radius}
     {@const startRad = arc.startAngle * Math.PI / 180}
     {@const endRad = arc.endAngle * Math.PI / 180}
@@ -1092,14 +1245,13 @@
     />
   {/each}
 
-  {#if !kozijn?.layout}
+  {#if !kozijn?.layout && !geometry.curvedDividerTimber}
   <!-- Vertical dividers -->
   {#each geometry.vDividers as rect, i}
     {@const isSelected = $selectedMember?.type === "divider_v" && $selectedMember?.index === i}
-    <rect
-      x={rect.x} y={rect.y}
-      width={rect.width} height={rect.height}
-      fill="var(--editor-frame)"
+    <path
+      d={openingPath(geometry.curvedDividers?.[i], rect)}
+      fill="transparent"
       stroke={isSelected ? "var(--editor-selected)" : "none"}
       stroke-width={isSelected ? 3 : 0}
       class="member"
@@ -1112,10 +1264,9 @@
   <!-- Horizontal dividers -->
   {#each geometry.hDividers as rect, i}
     {@const isSelected = $selectedMember?.type === "divider_h" && $selectedMember?.index === i}
-    <rect
-      x={rect.x} y={rect.y}
-      width={rect.width} height={rect.height}
-      fill="var(--editor-frame)"
+    <path
+      d={openingPath(geometry.curvedDividers?.[geometry.vDividers.length + i], rect)}
+      fill="transparent"
       stroke={isSelected ? "var(--editor-selected)" : "none"}
       stroke-width={isSelected ? 3 : 0}
       class="member"
@@ -1126,11 +1277,29 @@
   {/each}
   {/if}
 
+  {#if $selectedTimberJoints.length}
+    <g class="divider-joints" pointer-events="none" aria-hidden="true">
+      {#each $selectedTimberJoints as joint}
+        {@const paths = jointPaths(joint)}
+        {#if joint.shoulderFace}
+          <path class="arch-shoulder" d={`M${joint.shoulderFace[0]} L${joint.shoulderFace[1]}`}
+            fill="none" stroke="var(--editor-selected)" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+        {/if}
+        {#if paths}
+          <path class="tenon-footprint" d={paths.tenon} fill="var(--editor-selected, #D97706)" fill-opacity="0.25"
+            stroke={seamColor} stroke-width="1" vector-effect="non-scaling-stroke" />
+          <path class="mortise-bottom" d={paths.socket} fill="none" stroke={seamColor}
+            stroke-width="1.25" stroke-dasharray="3 2" vector-effect="non-scaling-stroke" />
+        {/if}
+      {/each}
+    </g>
+  {/if}
+
   <!-- Profile codes on frame members (GA Kozijn style - green text) —
        skipped for zero-size members (round/elliptical: all four; arched: top),
        and for polygon frames (verstek/melkmeisje) whose members don't map to
        the 4 rect slots. -->
-  {#if !geometry.framePolygons?.length}
+  {#if !geometry.framePolygons?.length && kozijn.frame.shape?.shapeType !== "arched_trapezoid"}
   {#each geometry.frameRects as rect, i}
     {@const memberName = FRAME_MEMBER_NAMES[i]}
     {@const isVertical = memberName === "frame_left" || memberName === "frame_right"}
@@ -1152,57 +1321,6 @@
     >
       {profileLabel}
     </text>
-    {/if}
-  {/each}
-  {/if}
-
-  {#if !kozijn?.layout}
-  <!-- Sash frame (raamhout/deurhout) with sponning detail -->
-  {#each geometry.cellRects as cellRect}
-    {@const cell = kozijn.cells?.[cellRect.cellIndex]}
-    {#if cell && cell.sashWidth && cell.sashWidth > 0 && ["turn_tilt", "turn", "tilt", "sliding", "door", "top_hung", "bottom_hung", "lift_slide", "pivot"].includes(cell.panelType)}
-      {@const sw = cell.sashWidth || 54}
-      {@const sp = geometry.sponningHoogte ?? 17}
-      {@const opdek = 13}
-      {@const gap = 2}
-      {@const r = cellRect.rect}
-      {@const isDoor = cell.panelType === "door"}
-      <!-- Sash sits in frame sponning with small gap (sponningspeling) -->
-      {@const sx = r.x + gap}
-      {@const sy = r.y + gap}
-      {@const sashW = Math.max(1, r.width - gap * 2)}
-      {@const sashH = Math.max(1, r.height - gap * 2)}
-      <!-- Sash outer edge (raamhout buitenkant) -->
-      <rect x={sx} y={sy} width={sashW} height={sashH}
-        fill="none" stroke="var(--amber)" stroke-width={1.2} opacity="0.7" pointer-events="none" />
-      <!-- Sash sponning line (inner rebate where glass sits, ~17mm inset) -->
-      {@const spInset = Math.min(sp, sw * 0.4)}
-      <rect x={sx + spInset} y={sy + spInset}
-        width={Math.max(1, sashW - spInset * 2)} height={Math.max(1, sashH - spInset * 2)}
-        fill="none" stroke="var(--amber)" stroke-width={0.4} opacity="0.4" pointer-events="none" />
-      <!-- Glaslat line (strip holding glass) — offset t.o.v. de sponninglijn
-           = glaslathoogte − sponninghoogte (KVT 12.3.2, R3): 0 bij een
-           17×17-lat op een 17-sponning; klassieke 5mm inset alleen als
-           fallback voor payloads zonder snapshotvelden -->
-      {@const glInset = spInset + glaslatOffset(5)}
-      {@const hasGl = !!cell.glaslat}
-      {@const glColor = cell.glaslat?.position === "buiten" ? "#3B82F6" : "var(--amber)"}
-      <rect x={sx + glInset} y={sy + glInset}
-        width={Math.max(1, sashW - glInset * 2)} height={Math.max(1, sashH - glInset * 2)}
-        fill="none" stroke={hasGl ? glColor : "var(--amber)"}
-        stroke-width={hasGl ? 0.8 : 0.25} opacity={hasGl ? 0.6 : 0.25}
-        stroke-dasharray={hasGl ? "" : "3 2"} pointer-events="none" />
-      {#if isDoor}
-        <!-- Door: thicker bottom rail (onderdorpel ~150mm) -->
-        {@const doorBottomH = Math.min(150, sashH * 0.15)}
-        <rect x={sx} y={sy + sashH - doorBottomH}
-          width={sashW} height={doorBottomH}
-          fill="var(--editor-frame)" fill-opacity="0.3"
-          stroke="var(--amber)" stroke-width={0.8} opacity="0.5" pointer-events="none" />
-        <!-- Threshold slope indicator -->
-        <line x1={sx} y1={sy + sashH} x2={sx + sashW} y2={sy + sashH}
-          stroke="var(--amber)" stroke-width={3} opacity="0.7" pointer-events="none" />
-      {/if}
     {/if}
   {/each}
   {/if}
@@ -1382,6 +1500,19 @@
 </g>
 
 <style>
+  .glazing-face {
+    stroke-linejoin: round;
+  }
+
+  .glazing-face rect, .glazing-face path {
+    vector-effect: non-scaling-stroke;
+    stroke-width: 0.75px;
+  }
+
+  .glazing-face .sash-outline {
+    stroke-width: 1.1px;
+  }
+
   .cell {
     cursor: default;
     transition: stroke 0.15s, stroke-width 0.15s;

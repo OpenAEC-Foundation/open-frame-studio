@@ -7,6 +7,15 @@
   import CellContextMenu from "./CellContextMenu.svelte";
   import { get } from "svelte/store";
   import { layoutToRects, splitLeafAt, ensureIds } from "../../lib/layout.js";
+  import { contourPath } from "../../lib/contour2d.js";
+
+  const dayClipId = $props.id();
+  let dayPath = $state(null);
+  function inDay(mx, my, frame) {
+    if (dayPath) return dayPath.isPointInFill(new DOMPoint(mx, my));
+    const fw = frame.frameWidth;
+    return mx >= fw && mx <= frame.outerWidth - fw && my >= fw && my <= frame.outerHeight - fw;
+  }
 
   // Leaf-hittest op de vrije indeling: welk vak ligt onder (mx,my) in model-mm?
   function layoutLeafAt(k, mx, my) {
@@ -121,7 +130,7 @@
       const ow = k.frame.outerWidth;
       const oh = k.frame.outerHeight;
 
-      if (mx > fw && mx < ow - fw && my > fw && my < oh - fw) {
+      if (inDay(mx, my, k.frame)) {
         // Op een vrije-indeling-kozijn splitst Ctrl+klik alleen het vak onder de
         // cursor — clamp de preview-lijn dan ook op dat vak i.p.v. de hele dag.
         const hit = layoutLeafAt(k, mx, my);
@@ -147,8 +156,8 @@
     isPanning = false;
   }
 
-  async function handleGridResize({ columnSizes, rowSizes }) {
-    await updateGridSizes(columnSizes, rowSizes);
+  async function handleGridResize({ columnSizes, rowSizes, rowsFromDay }) {
+    await updateGridSizes(columnSizes, rowSizes, rowsFromDay);
   }
 
   function handleCellContextMenu(cellIndex, screenX, screenY) {
@@ -179,11 +188,7 @@
     const pan = get(editorPan);
     const mx = (e.clientX - rect.left - pan.x) / z;
     const my = (e.clientY - rect.top - pan.y) / z;
-    const fw = k.frame.frameWidth;
-    const ow = k.frame.outerWidth;
-    const oh = k.frame.outerHeight;
-
-    if (mx < fw || mx > ow - fw || my < fw || my > oh - fw) return;
+    if (!inDay(mx, my, k.frame)) return;
 
     if (k.layout) {
       // Vrije indeling: splits het vak onder de cursor op de klikpositie
@@ -197,9 +202,9 @@
         : (mx - leaf.rect.x) / Math.max(1, leaf.rect.width);
       setKozijnLayout(splitLeafAt(tree, leaf.node.id, horizontal ? "column" : "row", ratio));
     } else if (horizontal) {
-      addRow(my);
+      addRow(my, !!get(currentGeometry)?.curvedFrame);
     } else {
-      addColumn(mx);
+      addColumn(mx, !!get(currentGeometry)?.curvedFrame);
     }
     splitPreview = null;
   }
@@ -230,12 +235,18 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <svg class="canvas" xmlns="http://www.w3.org/2000/svg" ondblclick={handleCanvasDblClick} onclick={handleCanvasClick}>
       <g transform="translate({$editorPan.x}, {$editorPan.y}) scale({$zoom})">
-        <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} oncellcontextmenu={handleCellContextMenu} />
+        <KozijnCanvas geometry={$currentGeometry} kozijn={$currentKozijn} zoom={$zoom} oncellcontextmenu={handleCellContextMenu} dividerClipId={dayClipId + "-dividers"} />
+        {#if $currentGeometry.curvedFrame}
+          <defs><clipPath id={dayClipId}><path bind:this={dayPath} d={contourPath($currentGeometry.curvedFrame.day)} /></clipPath></defs>
+        {/if}
+        <g clip-path={$currentGeometry.curvedFrame ? `url(#${dayClipId})` : null}>
         <!-- GridHandles werkt op kozijn.grid en hoort niet op een vrije-indeling-
              kozijn: zijn hit-rects vangen de divider-drag van het canvas af en
              zijn resize leest het vestigiale 1×1-grid (NaN-gridcorruptie). -->
         {#if !$currentKozijn.layout}
-          <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
+          <g clip-path={$currentGeometry.curvedDividerTimber ? `url(#${dayClipId}-dividers)` : null}>
+            <GridHandles geometry={$currentGeometry} kozijn={$currentKozijn} onresize={handleGridResize} />
+          </g>
         {/if}
 
         <!-- Split preview line (Ctrl+hover) -->
@@ -269,6 +280,7 @@
             </text>
           {/if}
         {/if}
+        </g>
       </g>
     </svg>
     <CellContextMenu

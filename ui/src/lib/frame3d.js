@@ -220,3 +220,146 @@ export function sectionFromPoints(id, pts) {
   }
   return { id, def: null, pts, minU, minV, w: maxU - minU, d: maxV - minV };
 }
+
+/** Free depth intervals at the opening edge, in section coordinates. Sampling
+ * between contour vertices AND intersections with the edge of the glass also
+ * handles sloping sill beds, grooves and closed tracks. */
+export function rebateChannels(section, penetration) {
+  const { pts, w, d, minU, minV } = section;
+  const cut = minU + w - Math.max(0.01, penetration);
+  const edges = pts.map((a, i) => [a, pts[(i + 1) % pts.length]]);
+  const levels = [minV, minV + d, ...pts.map(p => p[1])];
+  for (const [[x, y], [u, v]] of edges) {
+    if ((x < cut) !== (u < cut)) levels.push(y + (v - y) * (cut - x) / (u - x));
+  }
+  const ys = dedupSorted(levels, 1e-6);
+  const channels = [];
+  for (let i = 1; i < ys.length; i++) {
+    const mid = (ys[i - 1] + ys[i]) / 2;
+    const ends = edges.filter(([[, y], [, v]]) => (y < mid) !== (v < mid))
+      .map(([[x, y], [u, v]]) => x + (u - x) * (mid - y) / (v - y));
+    if (Math.max(...ends) > cut + 1e-6) continue;
+    const lo = ys[i - 1] - minV, hi = ys[i] - minV;
+    if (channels.at(-1)?.[1] === lo) channels.at(-1)[1] = hi;
+    else channels.push([lo, hi]);
+  }
+  return channels;
+}
+
+export function preferredChannel(section, penetration, outside) {
+  const channels = rebateChannels(section, penetration);
+  return outside ? channels[0] : channels.at(-1);
+}
+
+function clipRing(ring, axis, bound, keepHigher) {
+  const pts = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const inside = keepHigher ? a[axis] >= bound : a[axis] <= bound;
+    const nextInside = keepHigher ? b[axis] >= bound : b[axis] <= bound;
+    if (inside) pts.push(a);
+    if (inside !== nextInside && a[axis] !== bound && b[axis] !== bound) {
+      const t = (bound - a[axis]) / (b[axis] - a[axis]);
+      pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  return pts;
+}
+
+function clipSection(section, axis, bound, keepHigher) {
+  const clip = r => clipRing(r, axis, bound, keepHigher);
+  return { ...section, id: [section.id, axis, bound, keepHigher].join("|"), pts: clip(section.pts),
+    innerWalls: (section.innerWalls || []).map(clip).filter(r => r.length >= 3) };
+}
+
+/** Retain a strip of stock together with its original depth datum. */
+export function stockStrip(section, start, width) {
+  const minU = section.minU + start;
+  return { ...clipSection(clipSection(section, 0, minU, true), 0, minU + width, false), minU, w: width };
+}
+
+/** Give each neighbouring opening its own half of the divider. */
+export function openingHalf(section) {
+  const mid = section.minU + section.w / 2;
+  return { ...clipSection(section, 0, mid, true), minU: mid, w: section.w / 2 };
+}
+
+/** Keep the common sash datum while machining the frame-facing lip and
+ * glass-facing pocket independently. */
+export function sashSides(glassSide, frameSide) {
+  if (glassSide.id === frameSide.id) return [glassSide];
+  const mid = glassSide.minU + glassSide.w / 2;
+  return [clipSection(glassSide, 0, mid, true), clipSection(frameSide, 0, mid, false)];
+}
+
+/** A stopped rebate leaves full stock at the butt joint. Preserve the back
+ * contour (such as a sash lip or drip groove) through the joint. */
+export function stoppedSection(stock) {
+  const x = stock.minU, y = stock.minV, w = stock.w, d = stock.d;
+  const solid = { ...stock, id: stock.id + "|joint", innerWalls: [],
+    pts: [[x,y], [x+w,y], [x+w,y+d], [x,y+d]] };
+  return sashSides(solid, stock);
+}
+
+/** Split a through member at the ends of the adjoining opening's pocket.
+ * Mitred ends already match across their diagonal and keep their profile. */
+export function machiningSpans(rect, vertical, pocket, miterStart, miterEnd) {
+  if (!pocket) return [{ rect, cut: true }];
+  const axis = vertical ? "y" : "x", span = vertical ? "height" : "width";
+  const a = rect[axis], b = a + rect[span];
+  const start = miterStart ? a : Math.min(b, Math.max(a, pocket[axis]));
+  const end = miterEnd ? b : Math.max(start, Math.min(b, pocket[axis] + pocket[span]));
+  return [[a, start, false], [start, end, true], [end, b, false]]
+    .filter(([lo, hi]) => hi > lo)
+    .map(([lo, hi, cut]) => ({ rect: { ...rect, [axis]: lo, [span]: hi-lo }, cut }));
+}
+
+/** Remove only the closure rebate from the selected timber stock. Both
+ * complementary sections retain the original coordinate system, sill slope,
+ * drip groove and any other machining outside the cut. */
+export function machineRebate(section, height, stop, outside) {
+  const edge = section.minU + section.w - height;
+  const body = clipSection(section, 0, edge, false);
+  const lip = clipSection(clipSection(section, 0, edge, true), 1, section.minV + stop, outside);
+  return [body, lip].filter(s => s.pts.length >= 3);
+}
+
+// At a sash opening the timber blank receives a closing stop instead of a
+// glazing channel. Preserve the selected profile outside the machined strip.
+export function closingStock(section, width) {
+  const edge = section.minU + section.w - width;
+  const back = clipSection(section, 0, edge, false);
+  const x = section.minU + section.w, y = section.minV, top = y + section.d;
+  const blank = { ...section, id: section.id + "|closureBlank|" + width, innerWalls: [],
+    pts: [[edge,y], [x,y], [x,top], [edge,top]] };
+  return [back, blank].filter(s => s.pts.length >= 3);
+}
+
+// Rebate the opposite, frame-facing edge of a plain wood sash. Its original
+// glazing bed and the full-depth body keep their common machining datum.
+export function sashReturn(section, width, contact, opensOut) {
+  const edge = section.minU + width;
+  const body = clipSection(section, 0, edge, true);
+  const tongue = clipSection(clipSection(section, 0, edge, false), 1, section.minV + contact, !opensOut);
+  return [body, tongue].filter(s => s.pts.length >= 3);
+}
+
+/** Partition the length of a member wherever the neighbouring cell changes.
+ * Within a crossing member the two machinings meet at its centre line. */
+export function memberRuns(member, side, cells) {
+  const vertical = side === 'left' || side === 'right';
+  const axis = vertical ? 'y' : 'x', span = vertical ? 'height' : 'width';
+  const neighbour = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' }[side];
+  const near = cells.filter(c => rectAdjacency(member, [c.rect])[neighbour])
+    .sort((a, b) => a.rect[axis] - b.rect[axis]);
+  if (!near.length) return [{ rect: member, cell: null }];
+  const bounds = [member[axis]];
+  for (let i = 1; i < near.length; i++) {
+    const prev = near[i - 1].rect;
+    bounds.push((prev[axis] + prev[span] + near[i].rect[axis]) / 2);
+  }
+  bounds.push(member[axis] + member[span]);
+  return near.map((cell, i) => ({
+    cell, rect: { ...member, [axis]: bounds[i], [span]: bounds[i + 1] - bounds[i] },
+  }));
+}

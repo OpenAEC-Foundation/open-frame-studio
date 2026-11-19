@@ -70,6 +70,51 @@ function hasApplication(spec, names) {
   return apps.some((a) => names.includes(a));
 }
 
+/** Library JSON and saved projects use different field names for the same rebate. */
+export function profileRebate(sp) {
+  const { type: legacyType, opdek_width, rubber_count, second_width, second_depth, ...fields } = sp || {};
+  const type = fields.sponningType ?? legacyType ??
+    ({ buiten: "buitensponning", dubbel: "dubbele_sponning" }[fields.position] || "binnensponning");
+  return {
+    ...fields,
+    sponningType: type,
+    position: type === "dubbele_sponning" ? "dubbel"
+      : fields.position || (type === "buitensponning" ? "buiten" : "binnen"),
+    width: sp?.width ?? 0,
+    depth: sp?.depth ?? 0,
+    opdekWidth: fields.opdekWidth ?? opdek_width,
+    rubberCount: fields.rubberCount ?? rubber_count,
+    secondWidth: fields.secondWidth ?? second_width,
+    secondDepth: fields.secondDepth ?? second_depth,
+  };
+}
+
+export function woodSectionFits(spec) {
+  const { width: w, depth: d } = spec;
+  if (!(w > 0 && d > 0)) return false;
+  const sp = profileRebate(spec.sponning);
+  if (sp.sponningType === "geen" || (!sp.width && !sp.depth)) return true;
+  const divider = isDedicatedDivider(spec);
+  const face = divider ? w / 2 : w;
+  if (!(sp.width > 0 && sp.width < d && sp.depth > 0 && sp.depth < face)) return false;
+  if (sp.position === "dubbel") {
+    const width2 = sp.secondWidth ?? sp.width;
+    const depth2 = sp.secondDepth ?? sp.depth;
+    return width2 > 0 && width2 + sp.width < d && depth2 > 0 && depth2 < face;
+  }
+  if (sp.opdekWidth && sp.sponningType === "draaikiep") return sp.opdekWidth + 4 < w - sp.depth;
+  if (hasApplication(spec, ["sill", "sash_sill", "onderdorpel"])) {
+    const drop = Math.tan((sp.slopeDegrees ?? 10) * Math.PI / 180) * sp.width;
+    return sp.width > 8 && sp.depth + drop < w;
+  }
+  return true;
+}
+
+function isDedicatedDivider(spec) {
+  return hasApplication(spec, ["divider", "divider_horizontal", "tussenstijl", "tussendorpel"]) &&
+    !hasApplication(spec, ["frame", "sash"]);
+}
+
 /**
  * Massieve houtdoorsnede volgens de KVT-maatketen.
  *
@@ -89,32 +134,33 @@ function hasApplication(spec, names) {
 export function woodCrossSection(spec) {
   const w = spec.width;
   const d = spec.depth;
-  const sp = spec.sponning || null;
-  const h = r1(sp && sp.depth > 0 ? sp.depth : 0); // sponninghoogte (u)
-  const m = r1(
-    sp && sp.width > 0 ? sp.width : spec.glazingRebate > 0 ? spec.glazingRebate : 0
-  ); // sponningbreedte (v)
+  const sp = profileRebate(spec.sponning);
+  const h = r1(sp.depth);
+  const m = r1(spec.sponning?.width ?? spec.glazingRebate ?? 0);
 
   // Geen sponning: rechthoek.
-  if (!h || !m || (sp && sp.type === "geen")) {
+  if (h <= 0 || m <= 0 || sp.sponningType === "geen") {
     return [pt(0, 0), pt(w, 0), pt(w, d), pt(0, d)];
   }
 
-  const position =
-    (sp && sp.position) ||
-    (sp && sp.type === "buitensponning" ? "buiten" : "binnen");
+  const position = sp.position;
   const isSill = hasApplication(spec, ["sill", "sash_sill", "onderdorpel"]);
   // Alleen zuivere tussenstijlen/-dorpels dubbelzijdig tekenen; een profiel
   // dat óók stijl/raamhout kan zijn houdt de enkelzijdige standaardvorm.
-  const isDivider =
-    hasApplication(spec, ["divider", "divider_horizontal", "tussenstijl", "tussendorpel"]) &&
-    !hasApplication(spec, ["frame", "sash"]);
+  const isDivider = isDedicatedDivider(spec);
   const isDraaikiep =
-    sp && sp.opdek_width > 0 && hasApplication(spec, ["sash", "raam_stijl", "raam_dorpel"]);
+    sp.opdekWidth > 0 && (sp.sponningType === "draaikiep" || hasApplication(spec, ["sash", "raam_stijl", "raam_dorpel"]));
 
   // Onderdorpel: afwaterende sponningbodem + opstand (KVT 14.2 / 14.01).
-  if (isSill) {
-    const slope = ((sp && sp.slopeDegrees) || 10) * (Math.PI / 180);
+  if (isSill && (position === "binnen" || position === "buiten")) {
+    const slope = (sp.slopeDegrees ?? 10) * (Math.PI / 180);
+    if (position === "buiten") {
+      // The open outer end drains away from the inner stop.
+      return [
+        pt(0, 0), pt(w - h - Math.tan(slope) * m, 0),
+        pt(w - h, m), pt(w, m), pt(w, d), pt(0, d),
+      ];
+    }
     const upW = 8; // opstand breedte (KVT 14.01: >= 8)
     const upH = 15; // opstand hoogte (KVT 14.01: >= 15 bij draaiende delen)
     const bodem = Math.max(m - upW, 10); // afwaterende bodembreedte (~45 bij m=53)
@@ -131,60 +177,50 @@ export function woodCrossSection(spec) {
   }
 
   // Tussenstijl / tussendorpel: sponning aan beide vakzijden (binnenzijde).
-  if (isDivider) {
-    return [
-      pt(0, 0), pt(w, 0), pt(w, d - m), pt(w - h, d - m),
-      pt(w - h, d), pt(h, d), pt(h, d - m), pt(0, d - m),
-    ];
-  }
-
-  // Draaikiep-raamhout: glassponning + opdeklip (~13, TO 2024: aanslaglip
-  // 12,5) met rubbergroeven, aan de binnenzijde (v = d).
-  if (isDraaikiep) {
-    const opdek = (sp && sp.opdek_width) || 13;
-    const rW = 3; // rubbergroef breedte
-    const rD = 4; // rubbergroef diepte
-    return [
-      pt(0, 0), pt(w, 0), pt(w, d),
-      pt(w - h, d), pt(w - h, d - opdek),
-      pt(w - h + rW, d - opdek), pt(w - h + rW, d - opdek - rD), pt(w - h, d - opdek - rD),
-      pt(w - h, d - m),
-      pt(h, d - m),
-      pt(h, d - opdek - rD), pt(h - rW, d - opdek - rD), pt(h - rW, d - opdek), pt(h, d - opdek),
-      pt(h, d), pt(0, d),
-    ];
-  }
-
-  // Dubbele sponning: binnen- en buitensponning met kernhout ertussen.
+  let glassSide;
   if (position === "dubbel") {
-    const h2 = r1((sp && sp.second_depth) || h);
-    const m2 = r1((sp && sp.second_width) || m);
-    return [
-      pt(0, 0), pt(w - h2, 0), pt(w - h2, m2), pt(w, m2),
-      pt(w, d - m), pt(w - h, d - m), pt(w - h, d), pt(0, d),
-    ];
+    const h2 = sp.secondDepth ?? h;
+    const m2 = sp.secondWidth ?? m;
+    glassSide = [pt(w - h2, 0), pt(w - h2, m2), pt(w, m2),
+      pt(w, d - m), pt(w - h, d - m), pt(w - h, d)];
+  } else if (position === "buiten") {
+    glassSide = [pt(w - h, 0), pt(w - h, m), pt(w, m), pt(w, d)];
+  } else if (position === "midden") {
+    const start = (d - m) / 2;
+    glassSide = [pt(w, 0), pt(w, start), pt(w - h, start),
+      pt(w - h, start + m), pt(w, start + m), pt(w, d)];
+  } else {
+    glassSide = [pt(w, 0), pt(w, d - m), pt(w - h, d - m), pt(w - h, d)];
   }
 
-  // Buitensponning: inkeping op de vakzijde-buiten-hoek.
-  if (position === "buiten") {
-    return [
-      pt(0, 0), pt(w - h, 0), pt(w - h, m), pt(w, m), pt(w, d), pt(0, d),
-    ];
+  if (isDivider) {
+    const opposite = glassSide.map(([u, v]) => pt(w - u, v)).reverse();
+    return [opposite.pop(), ...glassSide, ...opposite];
   }
 
-  // Middensponning: inkeping halverwege de bouwdiepte (vakzijde).
-  if (position === "midden") {
-    const y0 = r1((d - m) / 2);
-    return [
-      pt(0, 0), pt(w, 0), pt(w, y0), pt(w - h, y0),
-      pt(w - h, y0 + m), pt(w, y0 + m), pt(w, d), pt(0, d),
-    ];
+  // The sash overlap is on the frame side. Keep the glass pocket open on u=w.
+  if (isDraaikiep) {
+    const lap = sp.opdekWidth;
+    const lipDepth = Math.min(13, d / 3);
+    const grooveWidth = Math.min(spec.kaderdichtingGroef?.width ?? 3, lap - 2);
+    const grooveDepth = Math.min(spec.kaderdichtingGroef?.depth ?? 4, lipDepth - 2);
+    const left = (lap - grooveWidth) / 2;
+    const shoulder = d - lipDepth;
+    const frameSide = [pt(0, d), pt(0, shoulder)];
+    if (grooveWidth > 0 && grooveDepth > 0) frameSide.push(
+      pt(left, shoulder), pt(left, shoulder + grooveDepth),
+      pt(left + grooveWidth, shoulder + grooveDepth), pt(left + grooveWidth, shoulder)
+    );
+    frameSide.push(pt(lap, shoulder));
+    const grooveCount = clamp(sp.rubberCount ?? 2, 1, 3);
+    for (let i = 1; i < grooveCount; i++) {
+      const center = shoulder * (1 - i / grooveCount);
+      frameSide.push(pt(lap, center + 1.5), pt(lap + 4, center + 1.5),
+        pt(lap + 4, center - 1.5), pt(lap, center - 1.5));
+    }
+    return [pt(lap, 0), ...glassSide, ...frameSide];
   }
-
-  // Binnensponning (standaard): inkeping op de vakzijde-binnen-hoek.
-  return [
-    pt(0, 0), pt(w, 0), pt(w, d - m), pt(w - h, d - m), pt(w - h, d), pt(0, d),
-  ];
+  return [pt(0, 0), ...glassSide, pt(0, d)];
 }
 
 /* ─────────────────────── PVC / ALUMINIUM ────────────────────────── */

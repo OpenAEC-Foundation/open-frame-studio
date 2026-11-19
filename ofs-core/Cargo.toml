@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -13,6 +16,9 @@ printpdf = { version = "0.9", optional = true }
 rust_xlsxwriter = { version = "0.94", optional = true }
 chrono = "0.4"
 calamine = { version = "0.34", optional = true }
+
+[dev-dependencies]
+lopdf = { version = "0.39", default-features = false }
 
 [features]
 default = ["export", "import"]

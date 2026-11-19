@@ -38,6 +38,8 @@ pub struct PurchaseOrder {
     pub project_number: String,
     pub delivery_address: String,
     pub lines: Vec<PurchaseOrderLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved_piece_ids: Vec<String>,
     pub line_count: usize,
     pub subtotal_excl_btw: f64,
     pub btw_pct: f64,
@@ -86,6 +88,7 @@ pub fn generate_purchase_orders(project: &Project) -> Vec<PurchaseOrder> {
                 project_number: info.number.clone(),
                 delivery_address: info.address.clone(),
                 line_count: lines.len(),
+                unresolved_piece_ids: proposal.unresolved_piece_ids,
                 lines,
                 subtotal_excl_btw: subtotal,
                 btw_pct: DEFAULT_BTW_PCT,

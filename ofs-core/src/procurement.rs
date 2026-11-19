@@ -6,6 +6,8 @@ pub struct PurchaseProposal {
     pub id: String,
     pub category: String,  // "Hout", "Glas", "Beslag", "Rubber"
     pub items: Vec<PurchaseItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved_piece_ids: Vec<String>,
     pub total_excl_btw: f64,
 }
 
@@ -25,6 +27,7 @@ pub fn generate_purchase_proposals(
     project: &crate::kozijn::Project,
 ) -> Vec<PurchaseProposal> {
     let mut hout_items: Vec<PurchaseItem> = Vec::new();
+    let mut unresolved_piece_ids = Vec::new();
     let mut glas_items: Vec<PurchaseItem> = Vec::new();
     let mut beslag_items: Vec<PurchaseItem> = Vec::new();
 
@@ -34,13 +37,17 @@ pub fn generate_purchase_proposals(
 
         // Aggregate cut list -> hout
         for cut in &prod.cut_list {
+            let Some(gross) = prod.blank_length_mm(cut) else {
+                unresolved_piece_ids.push(cut.piece_id.clone());
+                continue;
+            };
             hout_items.push(PurchaseItem {
-                description: format!("{} {}", cut.profile_name, cut.member_type.label_nl()),
+                description: format!("{} {}", cut.profile_name, cut.member_label_nl()),
                 article_number: None,
                 quantity: cut.quantity as f64,
                 unit: "stuk".into(),
-                unit_price: cut.gross_length_mm / 1000.0 * 12.50, // estimate
-                total: cut.quantity as f64 * cut.gross_length_mm / 1000.0 * 12.50,
+                unit_price: gross / 1000.0 * 12.50, // estimate
+                total: cut.quantity as f64 * gross / 1000.0 * 12.50,
                 kozijn_marks: vec![mark.clone()],
             });
         }
@@ -73,17 +80,17 @@ pub fn generate_purchase_proposals(
     }
 
     let mut proposals = Vec::new();
-    if !hout_items.is_empty() {
+    if !hout_items.is_empty() || !unresolved_piece_ids.is_empty() {
         let total: f64 = hout_items.iter().map(|i| i.total).sum();
-        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Hout".into(), items: hout_items, total_excl_btw: total });
+        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Hout".into(), items: hout_items, unresolved_piece_ids, total_excl_btw: total });
     }
     if !glas_items.is_empty() {
         let total: f64 = glas_items.iter().map(|i| i.total).sum();
-        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Glas".into(), items: glas_items, total_excl_btw: total });
+        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Glas".into(), items: glas_items, unresolved_piece_ids: Vec::new(), total_excl_btw: total });
     }
     if !beslag_items.is_empty() {
         let total: f64 = beslag_items.iter().map(|i| i.total).sum();
-        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Beslag".into(), items: beslag_items, total_excl_btw: total });
+        proposals.push(PurchaseProposal { id: uuid::Uuid::new_v4().to_string(), category: "Beslag".into(), items: beslag_items, unresolved_piece_ids: Vec::new(), total_excl_btw: total });
     }
     proposals
 }

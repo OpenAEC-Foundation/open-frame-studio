@@ -12,6 +12,7 @@
 
   $: grandTotal = proposals.reduce((sum, p) => sum + (p.totalExclBtw || 0), 0);
   $: ordersGrandTotal = orders.reduce((sum, o) => sum + (o.totalInclBtw || 0), 0);
+  $: unresolved = [...new Set((mode === "orders" ? orders : proposals).flatMap(p => p.unresolvedPieceIds ?? []))];
 
   async function generateProposals() {
     loading = true;
@@ -81,6 +82,9 @@
     </div>
   </div>
 
+  {#if !loading && unresolved.length}
+    <p class="hint">{$_("archJoint.unresolvedPieces")} · {unresolved.join(", ")}</p>
+  {/if}
   {#if loading}
     <p class="hint">{$_("procurement.loading")}</p>
   {:else if mode === "proposals"}

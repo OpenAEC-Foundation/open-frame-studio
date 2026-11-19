@@ -168,17 +168,47 @@ pub fn generate_production_xlsx(
     let hfmt = header_format();
 
     // Kortlijst
+    let with_joints = production_data.iter().any(|p| !p.divider_joints.is_empty());
+    let arch_kinds: Vec<_> = super::arch_joints::KINDS.into_iter()
+        .filter(|&kind| super::arch_joints::present(production_data, kind)).collect();
     {
         let ws = wb.add_worksheet();
         ws.set_name("Kortlijst").map_err(|e| e.to_string())?;
-        let headers = [
+        let with_arcs = production_data.iter().flat_map(|p| &p.cut_list).any(|i| i.has_curved_cut());
+        let with_heads = production_data.iter().flat_map(|p| &p.cut_list).any(|i| i.divider_start.is_some());
+        let with_notches = production_data.iter().flat_map(|p| &p.cut_list).any(|i| !i.masonry_notches.is_empty());
+        let mut headers = vec![
             "Kozijn", "Pos.", "Onderdeel", "Profiel", "Materiaal",
             "Netto (mm)", "Bruto (mm)", "Hoek L", "Hoek R", "Aantal",
         ];
+        if with_arcs {
+            headers[7] = "Beginhoek (90° haaks)";
+            headers[8] = "Eindhoek (90° haaks)";
+            headers.extend(["Buitenstraal (mm)", "Buitenbooglengte (mm)", "Hartstraal (mm)", "Hartbooglengte (mm)", "Buitenbooghoek (°)"]);
+            headers.extend(["Pasfrezen begin R (mm)", "Pasfrezen eind R (mm)"]);
+        }
+        let head_col = headers.len() as u16;
+        if with_heads {
+            headers[7] = "Zaag-/koordehoek begin (°)";
+            headers[8] = "Zaag-/koordehoek eind (°)";
+            headers.extend(["Begin insprong links/boven (mm)", "Begin insprong rechts/onder (mm)",
+                "Begin kopprofiel XY (mm vanaf kozijn linksboven)", "Eind insprong links/boven (mm)",
+                "Eind insprong rechts/onder (mm)", "Eind kopprofiel XY (mm vanaf kozijn linksboven)"]);
+        }
+        let notch_col = headers.len() as u16;
+        if with_notches { headers.push("Uitsparing (mm vanaf kozijn linksboven)"); }
+        let joint_col = headers.len() as u16;
+        if with_joints {
+            headers.extend(["Pen begin (mm)", "Gatdiepte begin (mm)", "Gatstuk begin",
+                "Pen eind (mm)", "Gatdiepte eind (mm)", "Gatstuk eind", "Ontvangt gaten van (aantal x diepte)"]);
+        }
+        let arch_col = headers.len() as u16;
+        for &kind in &arch_kinds { headers.extend(super::arch_joints::cut_headers(kind)); }
         write_headers(ws, &headers, &hfmt)?;
 
         let mut row = 1u32;
         for prod in production_data {
+            let joints = prod.joint_index();
             for item in &prod.cut_list {
                 let alt = row % 2 == 0;
                 let df = data_format(alt);
@@ -186,27 +216,164 @@ pub fn generate_production_xlsx(
 
                 ws.write_string_with_format(row, 0, &prod.kozijn_mark, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 1, &item.piece_id, &df).map_err(|e| e.to_string())?;
-                ws.write_string_with_format(row, 2, item.member_type.label_nl(), &df).map_err(|e| e.to_string())?;
+                ws.write_string_with_format(row, 2, item.member_label_nl(), &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 3, &item.profile_name, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 4, &item.material, &df).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 5, item.net_length_mm.round(), &dfc).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 6, item.gross_length_mm.round(), &dfc).map_err(|e| e.to_string())?;
-                ws.write_string_with_format(row, 7, &format!("{:.0}\u{00b0}", item.miter_left_deg), &dfc).map_err(|e| e.to_string())?;
-                ws.write_string_with_format(row, 8, &format!("{:.0}\u{00b0}", item.miter_right_deg), &dfc).map_err(|e| e.to_string())?;
+                if with_arcs {
+                    let mm = dfc.clone().set_num_format("0.0");
+                    let degrees = dfc.clone().set_num_format("0.00\"°\"");
+                    ws.write_number_with_format(row, 5, item.net_length_mm, &mm).map_err(|e| e.to_string())?;
+                    if let Some(value) = prod.blank_length_mm(item) {
+                        ws.write_number_with_format(row, 6, value, &mm).map_err(|e| e.to_string())?;
+                    }
+                    for (col, value, cope) in [(7, item.miter_left_deg, item.start_cope_radius_mm),
+                        (8, item.miter_right_deg, item.end_cope_radius_mm)] {
+                        ws.write_number_with_format(row, col, value, &degrees).map_err(|e| e.to_string())?;
+                        if let Some(r) = cope {
+                            ws.write_number_with_format(row, col + 8, r, &mm).map_err(|e| e.to_string())?;
+                        }
+                    }
+                    let mut lines = 1;
+                    for (col, end) in [(head_col, &item.divider_start), (head_col + 3, &item.divider_end)] {
+                        if let Some(end) = end {
+                            for (i, value) in end.edge_offsets_mm.iter().enumerate() {
+                                ws.write_number_with_format(row, col + i as u16, *value, &mm).map_err(|e| e.to_string())?;
+                            }
+                            let desc = end.segments.iter().map(crate::production::cut_step).collect::<Vec<_>>().join("\n");
+                            ws.write_string_with_format(row, col + 2, desc, &df.clone().set_text_wrap()).map_err(|e| e.to_string())?;
+                            lines = lines.max(end.segments.len());
+                        }
+                    }
+                    if lines > 1 { ws.set_row_height(row, 16.0 * lines as f64).map_err(|e| e.to_string())?; }
+                    if let Some(arc) = &item.arc {
+                        for (col, value) in [(10, arc.outer_radius_mm), (11, arc.outer_length_mm),
+                            (12, arc.centerline_radius_mm), (13, arc.centerline_length_mm)] {
+                            ws.write_number_with_format(row, col, value, &mm).map_err(|e| e.to_string())?;
+                        }
+                        ws.write_number_with_format(row, 14, arc.sweep_deg, &degrees).map_err(|e| e.to_string())?;
+                    }
+                } else {
+                    ws.write_number_with_format(row, 5, item.net_length_mm.round(), &dfc).map_err(|e| e.to_string())?;
+                    ws.write_number_with_format(row, 6, item.gross_length_mm.round(), &dfc).map_err(|e| e.to_string())?;
+                    ws.write_string_with_format(row, 7, &format!("{:.0}\u{00b0}", item.miter_left_deg), &dfc).map_err(|e| e.to_string())?;
+                    ws.write_string_with_format(row, 8, &format!("{:.0}\u{00b0}", item.miter_right_deg), &dfc).map_err(|e| e.to_string())?;
+                }
                 ws.write_number_with_format(row, 9, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                if !item.masonry_notches.is_empty() {
+                    let desc = item.masonry_notches.iter().map(crate::production::CutListItem::notch_text)
+                        .collect::<Vec<_>>().join("\n");
+                    ws.write_string_with_format(row, notch_col, desc,
+                        &df.clone().set_text_wrap()).map_err(|e| e.to_string())?;
+                }
+                if let Some(joinery) = joints.get(item.piece_id.as_str()) {
+                    let mm = dfc.clone().set_num_format("0.0");
+                    for (i, j) in joinery.ends.iter().enumerate() {
+                        let Some(j) = j else { continue };
+                        let col = joint_col + 3 * i as u16;
+                        if let Some(t) = &j.tenon {
+                            ws.write_number_with_format(row, col, t.tenon_length_mm, &mm).map_err(|e| e.to_string())?;
+                            ws.write_number_with_format(row, col + 1, t.mortise_depth_mm, &mm).map_err(|e| e.to_string())?;
+                        }
+                        ws.write_string_with_format(row, col + 2, j.receiver_piece_id.clone().unwrap_or_else(|| j.issue_text()), &df)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    ws.write_string_with_format(row, joint_col + 6, joinery.received_text(), &df).map_err(|e| e.to_string())?;
+                }
+                for (kind_index, &kind) in arch_kinds.iter().enumerate() {
+                    use crate::production::DividerJointEnd::{Start, End};
+                    for (offset, end) in [Start, End].into_iter().enumerate() {
+                        if let Some(s) = prod.arch_joint_text(&item.piece_id, end, kind) {
+                            ws.write_string_with_format(row, arch_col + (kind_index * 2 + offset) as u16, s, &df).map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
                 row += 1;
             }
         }
         autofit_widths(ws, &headers, row)?;
+        for col in arch_col..(arch_col + 2 * arch_kinds.len() as u16) {
+            ws.set_column_width(col, 54.0).map_err(|e| e.to_string())?;
+        }
+        if with_heads {
+            for col in [head_col, head_col + 3] {
+                ws.set_column_width(col, 34.0).map_err(|e| e.to_string())?;
+                ws.set_column_width(col + 1, 34.0).map_err(|e| e.to_string())?;
+                ws.set_column_width(col + 2, 76.0).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    for &kind in &arch_kinds {
+        use super::arch_joints::{fields, headers, table_name, Field};
+        let ws = wb.add_worksheet();
+        ws.set_name(table_name(kind)).map_err(|e| e.to_string())?;
+        let headers = headers(kind);
+        write_headers(ws, &headers, &hfmt)?;
+        let mut row = 1;
+        for prod in production_data {
+            for joint in prod.arch_joints.iter().filter(|j| j.joint.kind == kind) {
+                let df = data_format(row % 2 == 0);
+                for (col, field) in fields(&prod.kozijn_mark, joint).into_iter().enumerate() {
+                    let col = col as u16;
+                    match field {
+                        Field::Text(s) => ws.write_string_with_format(row, col, s, &df),
+                        Field::Number(n, precision) => {
+                            let fmt = match precision { 2 => "0.00", 1 => "0.0", _ => "0" };
+                            ws.write_number_with_format(row, col, n, &df.clone().set_num_format(fmt))
+                        }
+                        Field::Empty => continue,
+                    }.map_err(|e| e.to_string())?;
+                }
+                row += 1;
+            }
+        }
+        for (col, header) in headers.iter().enumerate() {
+            let width = (header.chars().count() + 3).max(14);
+            ws.set_column_width(col as u16, if col >= 26 { 55.0 } else { width as f64 }).map_err(|e| e.to_string())?;
+        }
+    }
+
+    if with_joints {
+        let ws = wb.add_worksheet();
+        ws.set_name("Pen en gat").map_err(|e| e.to_string())?;
+        let headers = ["Kozijn", "Penstuk", "Kop", "Ontvangend gatstuk", "Aantal pennen / gaten",
+            "Penlengte (mm)", "Gatdiepte (mm)", "Bodemspeling (mm)", "Overmaat voorbij langpunt (mm)",
+            "Penbreedte (mm)", "Schouderhart X (mm)", "Schouderhart Y (mm)", "Z-banden vanaf binnen (mm)", "Passing"];
+        write_headers(ws, &headers, &hfmt)?;
+        let mut row = 1;
+        for prod in production_data {
+            for j in &prod.divider_joints {
+                let df = data_format(row % 2 == 0);
+                for (col, value) in [&*prod.kozijn_mark, &*j.piece_id, j.end.label_nl(),
+                    j.receiver_piece_id.as_deref().unwrap_or("")].into_iter().enumerate() {
+                    ws.write_string_with_format(row, col as u16, value, &df).map_err(|e| e.to_string())?;
+                }
+                if let Some(t) = &j.tenon {
+                    let mm = df.clone().set_num_format("0.0");
+                    ws.write_number_with_format(row, 4, t.z_from_inside_mm.len() as f64, &df).map_err(|e| e.to_string())?;
+                    for (i, n) in [t.tenon_length_mm, t.mortise_depth_mm, t.bottom_clearance_mm, t.blank_extension_mm,
+                        t.cross_range_mm[1] - t.cross_range_mm[0], t.shoulder_center[0], t.shoulder_center[1]].into_iter().enumerate() {
+                        ws.write_number_with_format(row, 5 + i as u16, n, &mm).map_err(|e| e.to_string())?;
+                    }
+                    ws.write_string_with_format(row, 12, j.z_bands(), &df).map_err(|e| e.to_string())?;
+                }
+                ws.write_string_with_format(row, 13, j.issue_text(), &df).map_err(|e| e.to_string())?;
+                row += 1;
+            }
+        }
+        autofit_widths(ws, &headers, row)?;
+        ws.set_column_width(13, 34.0).map_err(|e| e.to_string())?;
     }
 
     // Glaslijst
     {
         let ws = wb.add_worksheet();
         ws.set_name("Glaslijst").map_err(|e| e.to_string())?;
-        let headers = [
+        let mut headers = vec![
             "Kozijn", "Pos.", "Glastype", "Breedte", "Hoogte", "Dikte", "Ug", "Opp. (m\u{00b2})", "Aantal",
         ];
+        let with_contours = production_data.iter().flat_map(|p| &p.glass_list).any(|i| i.cut_contour.is_some());
+        if with_contours { headers.extend(["Snijvorm (mm)", "Contour in mm vanaf linksboven, x rechts / y omlaag"]); }
         write_headers(ws, &headers, &hfmt)?;
 
         let mut row = 1u32;
@@ -219,16 +386,27 @@ pub fn generate_production_xlsx(
                 ws.write_string_with_format(row, 0, &prod.kozijn_mark, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 1, &item.piece_id, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 2, &item.glass_type, &df).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 3, item.width_mm.round(), &dfc).map_err(|e| e.to_string())?;
-                ws.write_number_with_format(row, 4, item.height_mm.round(), &dfc).map_err(|e| e.to_string())?;
+                let dim = |v: f64| if item.cut_contour.is_some() { (v * 10.0).round() / 10.0 } else { v.round() };
+                ws.write_number_with_format(row, 3, dim(item.width_mm), &dfc).map_err(|e| e.to_string())?;
+                ws.write_number_with_format(row, 4, dim(item.height_mm), &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 5, item.thickness_mm.round(), &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 6, (item.ug_value * 10.0).round() / 10.0, &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 7, (item.area_m2 * 100.0).round() / 100.0, &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 8, item.quantity as f64, &dfc).map_err(|e| e.to_string())?;
+                if with_contours {
+                    ws.write_string_with_format(row, 9, item.shape_label_nl(), &df).map_err(|e| e.to_string())?;
+                    let steps = item.cut_steps();
+                    if !steps.is_empty() {
+                        ws.set_row_height(row, 15.0 * steps.len() as f64).map_err(|e| e.to_string())?;
+                        ws.write_string_with_format(row, 10, steps.join("\n"), &df.clone().set_text_wrap())
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
                 row += 1;
             }
         }
         autofit_widths(ws, &headers, row)?;
+        if with_contours { ws.set_column_width(10, 72.0).map_err(|e| e.to_string())?; }
     }
 
     // Beslaglijst

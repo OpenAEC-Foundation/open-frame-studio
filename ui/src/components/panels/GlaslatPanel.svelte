@@ -1,6 +1,8 @@
 <script>
+  import { _ } from "svelte-i18n";
   import {
     currentKozijn,
+    currentGeometry,
     selectedCellIndex,
     updateCellGlaslat,
   } from "../../stores/kozijn.js";
@@ -35,10 +37,16 @@
       selectedCell.panelType !== "ventilation"
   );
 
-  let gl = $derived({ ...DEFAULT_GLASLAT, ...(selectedCell?.glaslat || {}) });
-
-  // KVT minimum: glaslat height ≥ 17 mm.
-  let heightOk = $derived((gl.heightMm ?? 17) >= 17);
+  let fit = $derived($currentGeometry?.cellRects?.find(c => c.cellIndex === $selectedCellIndex)?.fit);
+  let gl = $derived({
+    ...DEFAULT_GLASLAT,
+    ...(fit && { position: fit.beadPosition, heightMm: fit.beadHeight, widthMm: fit.beadWidth, mitered: fit.beadMitered }),
+    ...(selectedCell?.glaslat || {}),
+  });
+  let material = $derived($currentKozijn?.frame?.material);
+  let timber = $derived(typeof material === "object" || material === "wood_aluminum");
+  let minHeight = $derived(Math.max(17, fit?.contours?.rebateHeight ?? (fit ? fit.day.x - fit.rebate.x : 17)));
+  let minWidth = $derived(gl.position === "buiten" ? 15 : 13);
 
   async function update(patch) {
     if ($selectedCellIndex === null) return;
@@ -100,8 +108,11 @@
           Verstek (45°) hoeken
         </label>
 
-        {#if !heightOk}
-          <p class="warn">⚠ Hoogte &lt; 17mm (KVT-minimum)</p>
+        {#if timber && gl.heightMm + 0.0001 < minHeight}
+          <p class="warn">{$_("glazing.beadTooLow", { values: { mm: +minHeight.toFixed(2) } })}</p>
+        {/if}
+        {#if timber && gl.widthMm < minWidth}
+          <p class="warn">{$_("glazing.beadTooNarrow", { values: { mm: minWidth } })}</p>
         {/if}
       </div>
     {/if}

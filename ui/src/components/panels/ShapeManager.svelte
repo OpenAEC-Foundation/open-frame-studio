@@ -1,28 +1,57 @@
 <script>
+  import { untrack } from "svelte";
+  import { profileRebate, woodCrossSection, woodSectionFits } from "../../lib/profileContour.js";
   import { _ } from "svelte-i18n";
   import { invoke } from "../../lib/tauri.js";
-  import { refreshProject } from "../../stores/project.js";
+  import { markDirty, refreshProject } from "../../stores/project.js";
   import { loadProfiles, allProfiles } from "../../stores/profiles.js";
 
   let { visible = $bindable(false), editProfile = null, onsaved = null, onclose = null } = $props();
 
   // === Library browser ===
   let showLibrary = $state(false);
+  let sourceProfile = $state(null);
 
   function loadFromLibrary(profile) {
     if (!profile) return;
+    sourceProfile = profile;
     name = profile.name || name;
     material = profile.material || material;
     materialSubtype = profile.materialSubtype || materialSubtype;
     width = profile.width || width;
     depth = profile.depth || depth;
-    if (profile.sponning) {
-      sponningType = profile.sponning.type || sponningType;
-      sponningWidth = profile.sponning.width || sponningWidth;
-      sponningDepth = profile.sponning.depth || sponningDepth;
+    const sp = profileRebate(profile.sponning);
+    sponningType = !sp.width || !sp.depth ? "geen"
+      : sp.position === "midden" ? "middensponning" : sp.sponningType;
+    sponningWidth = sp.width;
+    sponningDepth = sp.depth;
+    secondWidth = sp.secondWidth ?? 29;
+    secondDepth = sp.secondDepth ?? 17;
+    opdekWidth = sp.opdekWidth ?? 13;
+    rubberCount = sp.rubberCount ?? 2;
+    slopeDegrees = sp.slopeDegrees ?? 10;
+    const roles = profile.applicableAs || [];
+    applicableAs = {
+      frame: roles.includes("frame"), sash: roles.includes("sash"),
+      divider: roles.some(r => ["divider", "divider_horizontal", "tussenstijl", "tussendorpel"].includes(r)),
+      sill: roles.some(r => ["sill", "onderdorpel", "sash_sill"].includes(r)),
+    };
+    const type = (profile.kvtType ?? profile.profileType ?? "").toUpperCase();
+    kvtType = Object.hasOwn(KVT_DEFAULTS, type) ? type : "Custom";
+    profileSeries = String(width);
+    ufValue = profile.ufValue ?? 1.8;
+    glaslatWidth = profile.glaslatWidth ?? 17;
+    glaslatHeight = profile.glaslatHeight ?? 17;
+    // Keep extra machining from supplier sections and freehand edits intact.
+    if (profile.crossSection?.length > 2 &&
+        JSON.stringify(profile.crossSection) !== JSON.stringify(crossSectionParametric)) {
+      drawMode = "freeform";
+      freeformPoints = profile.crossSection.map(p => [...p]);
+    } else {
+      switchToParametric();
     }
-    if (profile.ufValue) ufValue = profile.ufValue;
-    if (profile.series) profileSeries = profile.series.includes("90") ? "90" : profile.series.includes("78") ? "78" : "67";
+    undoStack = [];
+    selectedPointIdx = -1;
     showLibrary = false;
   }
 
@@ -37,23 +66,16 @@
 
   // Sponning dagzijde (glass side)
   let sponningType = $state("binnensponning");
-  let sponningWidth = $state(12);
+  let sponningWidth = $state(51);
   let sponningDepth = $state(17);
   let opdekWidth = $state(13);
   let rubberCount = $state(2);
 
   // Dubbele sponning (2nd)
-  let secondWidth = $state(12);
+  let secondWidth = $state(29);
   let secondDepth = $state(17);
-  let kernhout = $state(20);
-
-  // Randsponning (wall side)
-  let hasRandsponning = $state(true);
-  let randWidth = $state(10);
-  let randDepth = $state(12);
-
   // Glaslat
-  let glaslatWidth = $state(15);
+  let glaslatWidth = $state(17);
   let glaslatHeight = $state(17);
 
   // Thermal
@@ -165,21 +187,21 @@
   }
 
   // Slope (onderdorpel)
-  let slopeDegrees = $state(9);
+  let slopeDegrees = $state(10);
 
   // Selected point for editing
   let selectedPointIdx = $state(-1);
 
   // === KVT Defaults per Type ===
   let KVT_DEFAULTS = $derived({
-    A:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.stijl') },
-    A1: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.stijlWaterhol') },
-    B:  { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijl') },
-    B1: { width: 90, depth: 114, sponningType: "dubbele_sponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijlWaterhol') },
-    C:  { width: 90, depth: 150, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.onderdorpel'), slope: 9 },
-    D:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.tussendorpel') },
-    R:  { width: 54, depth: 67, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 15, name: $_('shapeManager.kvt.raamhout') },
-    Custom: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 12, sponningDepth: 17, name: $_('shapeManager.kvt.vrijProfiel') },
+    A:  { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.stijl') },
+    A1: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.stijlWaterhol') },
+    B:  { width: 90, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijl') },
+    B1: { width: 90, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.tussenstijlWaterhol') },
+    C:  { width: 90, depth: 114, sponningType: "binnensponning", sponningWidth: 53, sponningDepth: 17, name: $_('shapeManager.kvt.onderdorpel'), slope: 9 },
+    D:  { width: 90, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.tussendorpel') },
+    R:  { width: 54, depth: 78, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.raamhout') },
+    Custom: { width: 67, depth: 114, sponningType: "binnensponning", sponningWidth: 51, sponningDepth: 17, name: $_('shapeManager.kvt.vrijProfiel') },
   });
 
   const SERIES_DEFAULTS = {
@@ -192,16 +214,7 @@
   // Initialize from editProfile
   $effect(() => {
     if (editProfile && visible) {
-      name = editProfile.name || $_('profileEditor.editProfile');
-      material = editProfile.material || "wood";
-      width = editProfile.width || 67;
-      depth = editProfile.depth || 114;
-      ufValue = editProfile.ufValue || 1.8;
-      if (editProfile.sponning) {
-        sponningWidth = editProfile.sponning.width || 12;
-        sponningDepth = editProfile.sponning.depth || 17;
-        sponningType = editProfile.sponning.sponningType || "binnensponning";
-      }
+      untrack(() => loadFromLibrary(editProfile));
     }
   });
 
@@ -209,7 +222,11 @@
   function applyKvtDefaults() {
     const d = KVT_DEFAULTS[kvtType];
     if (!d) return;
-    width = SERIES_DEFAULTS[profileSeries]?.width || d.width;
+    sourceProfile = null;
+    width = d.width;
+    profileSeries = String(d.width);
+    applicableAs = { frame: ["A", "A1", "Custom"].includes(kvtType), sash: kvtType === "R", divider: ["B", "B1", "D"].includes(kvtType), sill: kvtType === "C" };
+    switchToParametric();
     depth = d.depth;
     sponningType = d.sponningType;
     sponningWidth = d.sponningWidth;
@@ -224,96 +241,44 @@
     if (s) {
       width = s.width;
       ufValue = s.uf;
-      // Force min 90mm for dubbele sponning
-      if (sponningType === "dubbele_sponning" && width < 90) width = 90;
       name = `${KVT_DEFAULTS[kvtType]?.name || $_('shapeManager.profile')} ${width}x${depth}`;
     }
   }
 
   // === Cross-section Generation ===
-  let crossSectionParametric = $derived(generateCrossSection());
+  let sponning = $derived({
+    sponningType: sponningType === "middensponning" ? "binnensponning" : sponningType,
+    position: { buitensponning: "buiten", dubbele_sponning: "dubbel", middensponning: "midden" }[sponningType] ?? "binnen",
+    width: sponningType === "geen" ? 0 : sponningWidth,
+    depth: sponningType === "geen" ? 0 : sponningDepth,
+    secondWidth: sponningType === "dubbele_sponning" ? secondWidth : null,
+    secondDepth: sponningType === "dubbele_sponning" ? secondDepth : null,
+    kernhout: sponningType === "dubbele_sponning" ? depth - sponningWidth - secondWidth : null,
+    opdekWidth: sponningType === "draaikiep" ? opdekWidth : null,
+    rubberCount: sponningType === "draaikiep" ? rubberCount : null,
+    slopeDegrees: applicableAs.sill ? slopeDegrees : null,
+  });
+  let roles = $derived(Object.keys(applicableAs).filter(role => applicableAs[role]));
+  let crossSectionParametric = $derived(woodCrossSection({ ...sourceProfile, width, depth, sponning, applicableAs: roles }));
   let crossSection = $derived(drawMode === "freeform" && freeformPoints.length > 2 ? freeformPoints : crossSectionParametric);
   let pathD = $derived(crossSection.length > 2
     ? `M ${crossSection.map(p => `${p[0]} ${p[1]}`).join(" L ")} Z`
     : ""
   );
-  let achterhoutCalc = $derived(width - sponningWidth - (hasRandsponning ? randWidth : 0));
-  let sightline = $derived(width - sponningWidth);
-
-  function generateCrossSection() {
-    const w = width, d = depth, sw = sponningWidth, sd = sponningDepth;
-
-    switch (sponningType) {
-      case "binnensponning":
-        return [
-          [0, 0], [w, 0],
-          [w, d - sd],
-          [w - sw, d - sd],
-          [w - sw, d],
-          [sw, d],
-          [sw, d - sd],
-          [0, d - sd],
-        ];
-
-      case "buitensponning":
-        return [
-          [sw, 0],
-          [w - sw, 0],
-          [w - sw, sd],
-          [w, sd],
-          [w, d],
-          [0, d],
-          [0, sd],
-          [sw, sd],
-        ];
-
-      case "dubbele_sponning": {
-        const sw2 = secondWidth, sd2 = secondDepth;
-        const cw = Math.max(10, w - sw - sw2 - (hasRandsponning ? randWidth * 2 : 0));
-        return [
-          [sw, 0],
-          [w - sw2, 0],
-          [w - sw2, sd2],
-          [w, sd2],
-          [w, d - sd],
-          [w - sw2, d - sd],
-          [w - sw2, d],
-          [sw, d],
-          [sw, d - sd],
-          [0, d - sd],
-          [0, sd],
-          [sw, sd],
-        ];
-      }
-
-      case "draaikiep": {
-        const opdek = opdekWidth;
-        const rubberOffset = 3;
-        return [
-          [0, 0], [w, 0],
-          [w, d - sd - opdek],       // start opdek aanslag
-          [w - sw + opdek, d - sd - opdek],
-          [w - sw + opdek, d - sd],  // sponningbodem buiten
-          [w - sw, d - sd],
-          [w - sw, d],               // sponningbodem binnen
-          [sw, d],
-          [sw, d - sd],
-          [0, d - sd],
-        ];
-      }
-
-      default:
-        return [[0, 0], [w, 0], [w, d], [0, d]];
-    }
-  }
+  let achterhoutCalc = $derived(depth - sponning.width - (sponning.secondWidth ?? 0));
+  let sightline = $derived(width - sponning.depth);
 
   // === KVT Validation ===
   let validations = $derived(computeValidations());
 
   function computeValidations() {
-    const results = [];
+    const results = [{
+      label: $_("shapeManager.crossSectionLabel"),
+      ok: woodSectionFits({ width, depth, sponning, applicableAs: roles }),
+    }];
+    if (sponningType === "geen") return results;
     // Sponninghoogte
-    const minSH = kvtType === "D" ? 14 : 17;
+    const minSH = kvtType === "D" ? (sponning.position === "buiten" ? 16 : 14) : 17;
     results.push({
       label: `${$_('shapeManager.validation.sponningHeight')} >= ${minSH}mm`,
       ok: sponningDepth >= minSH,
@@ -327,19 +292,15 @@
       value: Math.round(achterhoutCalc),
     });
     // Glaslat
+    const minBead = sponning.position === "buiten" ? 15 : 13;
     results.push({
-      label: `${$_('shapeManager.validation.glazingBead')} >= 13mm`,
-      ok: glaslatWidth >= 13,
+      label: `${$_('shapeManager.validation.glazingBead')} >= ${minBead}mm`,
+      ok: glaslatWidth >= minBead,
       value: glaslatWidth,
     });
     // Dubbele sponning breedte
     if (sponningType === "dubbele_sponning") {
-      results.push({
-        label: `${$_('shapeManager.validation.widthDouble')} >= 90mm`,
-        ok: width >= 90,
-        value: width,
-      });
-      const kern = width - sponningWidth - secondWidth;
+      const kern = depth - sponningWidth - secondWidth;
       results.push({
         label: `${$_('shapeManager.validation.kernhout')} >= 20mm`,
         ok: kern >= 20,
@@ -347,11 +308,12 @@
       });
     }
     // Onderdorpel helling
-    if (kvtType === "C") {
+    if (applicableAs.sill) {
       results.push({
         label: `${$_('shapeManager.validation.slope')} >= 9°`,
         ok: slopeDegrees >= 9,
         value: slopeDegrees,
+        unit: "°",
       });
     }
     return results;
@@ -361,15 +323,10 @@
 
   // === Save ===
   async function handleSave() {
-    const aa = [];
-    if (applicableAs.frame) aa.push("frame");
-    if (applicableAs.sash) aa.push("sash");
-    if (applicableAs.divider) aa.push("divider");
-    if (applicableAs.sill) aa.push("sill");
-
     const profileId = editProfile?.id || `custom-${kvtType.toLowerCase()}-${width}x${depth}-${Date.now()}`;
 
     const profile = {
+      ...sourceProfile,
       id: profileId,
       name,
       material,
@@ -377,27 +334,16 @@
       width,
       depth,
       sightline,
-      glazingRebate: sponningDepth,
+      glazingRebate: sponning.width,
       crossSection: crossSection,
       ufValue,
-      applicableAs: aa,
+      applicableAs: roles,
       // KvtProfileType deserialiseert snake_case ("a", "a1", "custom")
       kvtType: kvtType.toLowerCase(),
       profileSeries,
-      isParametric: true,
-      sponning: {
-        sponningType,
-        width: sponningWidth,
-        depth: sponningDepth,
-        position: sponningType === "buitensponning" ? "buiten" : sponningType === "dubbele_sponning" ? "midden" : "binnen",
-        opdekWidth: sponningType === "draaikiep" ? opdekWidth : null,
-        rubberCount: sponningType === "draaikiep" ? rubberCount : null,
-        secondWidth: sponningType === "dubbele_sponning" ? secondWidth : null,
-        secondDepth: sponningType === "dubbele_sponning" ? secondDepth : null,
-        kernhout: sponningType === "dubbele_sponning" ? (width - sponningWidth - secondWidth) : null,
-        slopeDegrees: kvtType === "C" ? slopeDegrees : null,
-      },
-      grooveFigures: [],
+      isParametric: drawMode === "parametric",
+      sponning,
+      grooveFigures: sourceProfile?.grooveFigures ?? [],
       glaslatWidth,
       glaslatHeight,
       achterhout: achterhoutCalc,
@@ -405,8 +351,9 @@
 
     try {
       await invoke("add_custom_profile", { profileJson: JSON.stringify(profile) });
+      markDirty();
       await refreshProject();
-      await loadProfiles();
+      await loadProfiles(true);
       onsaved?.(profile);
       visible = false;
     } catch (e) {
@@ -481,20 +428,6 @@
             <!-- Profile shape -->
             <path d={pathD} fill="var(--bg-surface-alt, #E7E5E4)" stroke="var(--amber, #D97706)" stroke-width="1.5" />
 
-            <!-- Sponning zones (parametric mode only) -->
-            {#if drawMode === "parametric" && (sponningType === "binnensponning" || sponningType === "draaikiep")}
-              <rect x={sponningWidth} y={depth - sponningDepth} width={width - 2 * sponningWidth} height={sponningDepth}
-                fill="rgba(59, 130, 246, 0.08)" stroke="rgba(59, 130, 246, 0.3)" stroke-width="0.4" stroke-dasharray="2 2" />
-            {/if}
-
-            <!-- Rubber groeven (draaikiep, parametric only) -->
-            {#if drawMode === "parametric" && sponningType === "draaikiep"}
-              <line x1={width - sponningWidth + 2} y1={depth - sponningDepth + 3} x2={width - sponningWidth + opdekWidth - 2} y2={depth - sponningDepth + 3}
-                stroke="#DC2626" stroke-width="1.5" stroke-dasharray="1 1" />
-              <line x1={width - sponningWidth + 2} y1={depth - 3} x2={width - sponningWidth + opdekWidth - 2} y2={depth - 3}
-                stroke="#DC2626" stroke-width="1.5" stroke-dasharray="1 1" />
-            {/if}
-
             <!-- Edge lines between points (freeform: highlight on hover) -->
             {#if drawMode === "freeform"}
               {#each crossSection as pt, i}
@@ -539,9 +472,6 @@
               </text>
             {/if}
 
-            <!-- Dimension: sponning depth (far right) -->
-            <line x1={width + 22} y1={depth - sponningDepth} x2={width + 22} y2={depth} stroke="rgba(59,130,246,0.5)" stroke-width="0.3" />
-            <text x={width + 28} y={depth - sponningDepth / 2} text-anchor="start" dominant-baseline="central" font-size="5" fill="rgba(59,130,246,0.7)">{sponningDepth}</text>
           </svg>
 
           <!-- Point coordinates -->
@@ -552,7 +482,7 @@
           {/if}
 
           <div class="computed-row">
-            <span>{$_('profileEditor.sightline')}: {sightline}mm</span>
+            <span>{$_('profileEditor.sightline', { values: { value: sightline } })}</span>
             <span>{$_('shapeManager.achterhout')}: {Math.round(achterhoutCalc)}mm</span>
           </div>
         </div>
@@ -639,6 +569,7 @@
               <select bind:value={sponningType}>
                 <option value="binnensponning">{$_('shapeManager.sponning.binnen')}</option>
                 <option value="buitensponning">{$_('shapeManager.sponning.buiten')}</option>
+                <option value="middensponning">{$_('profileEditor.center')}</option>
                 <option value="dubbele_sponning">{$_('shapeManager.sponning.dubbel')}</option>
                 <option value="draaikiep">{$_('shapeManager.sponning.draaikiep')}</option>
                 <option value="geen">{$_('shapeManager.sponning.geen')}</option>
@@ -652,7 +583,7 @@
                 </div>
                 <div class="field">
                   <label>{$_('props.width')}</label>
-                  <input type="number" bind:value={sponningWidth} min="5" max="40" step="1" />
+                  <input type="number" bind:value={sponningWidth} min="1" max={depth - 1} step="1" />
                 </div>
               </div>
             {/if}
@@ -679,13 +610,13 @@
                 </div>
                 <div class="field">
                   <label>{$_('shapeManager.secondWidth')}</label>
-                  <input type="number" bind:value={secondWidth} min="5" max="40" step="1" />
+                  <input type="number" bind:value={secondWidth} min="1" max={depth - sponningWidth - 1} step="1" />
                 </div>
               </div>
             {/if}
           </div>
 
-          {#if kvtType === "C"}
+          {#if applicableAs.sill}
             <div class="psection">
               <h4>{$_('profileEditor.sill')}</h4>
               <div class="field">
@@ -730,7 +661,7 @@
               <div class="vrow" class:vok={v.ok} class:vfail={!v.ok}>
                 <span class="vicon">{v.ok ? "\u2713" : "\u2717"}</span>
                 <span>{v.label}</span>
-                <span class="vval">({v.value}mm)</span>
+                {#if v.value != null}<span class="vval">({v.value}{v.unit ?? "mm"})</span>{/if}
               </div>
             {/each}
           </div>

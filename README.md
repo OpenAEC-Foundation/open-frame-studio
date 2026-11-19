@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.46.2
+# Open Frame Studio v2026.47.0
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -7,7 +7,7 @@ Built by the [OpenAEC Foundation](https://github.com/OpenAEC-Foundation) — acc
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![Built with Tauri 2](https://img.shields.io/badge/Built%20with-Tauri%202-FFC131)
 
-> **Release-status:** `v2026.46.2` is de laatste release (alfa) voor ontwerp- en BIM-uitwisselproeven. De installers zijn geen productie- of normvrijgave; zie de [releasecontroles](docs/release-readiness.md) en [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases).
+> **Releasekanaal** — Versie `v2026.47.0` verschijnt via GitHub Latest en de OpenAEC Installer voor ontwerp- en BIM-uitwisselproeven. [Releasecontroles](docs/release-readiness.md) · [GitHub Releases](https://github.com/OpenAEC-Foundation/open-frame-studio/releases)
 
 > **Updaten:** de desktopapp heeft nog geen automatische updater. Een nieuwe GitHub-release verschijnt daarom niet vanzelf in een al geïnstalleerde app. Download de passende installer rechtstreeks van de [laatste release (`latest`)](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/latest) en voer die uit, of werk bij via de OpenAEC Installer. Die leest de laatste release uit een feed die periodiek wordt vernieuwd, dus een update kan er een paar uur later staan. Een release moet daarvoor als stabiele `latest` zijn gemarkeerd; een prerelease ziet de installer niet.
 
@@ -48,6 +48,13 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.47.0 (2026-11-19)
+
+- Bij ronde en getoogde kozijnen volgen de glassponningen, glaslatten en draaiende vleugels de boog. De glaslijst vermeldt de bijbehorende glasmaat.
+- De houtkortlijst geeft stralen, booglengtes, kopse rondingen en zaaghoeken voor kozijnhout, raamhout, tussenstijlen en tussendorpels.
+- Pen-en-gatverbindingen worden per houtdeel berekend. Bij de boogvoeten en de twee naden van een rond kozijn kun je per verbinding de penzijde en penlengte kiezen. De houtkortlijst en de PDF-, Excel- en CSV-uitvoer koppelen de penlengte, gatdiepte en zaaghoek aan het juiste uiteinde.
+- Met **Pen-en-gat bekijken** in de 3D-viewer schuif je de houtdelen uit elkaar om de schouders, pennen en blinde gaten te bekijken.
 
 ## Changelog v2026.46.2 (installer-prerelease, 2026-11-13)
 

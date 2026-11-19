@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
   import {
     layoutToRects, vullingLabel, splitLeaf, setVulling, countLeaves,
@@ -6,7 +7,7 @@
     findNode, setSplitChildSizes, mergeAt, patchVulling, ensureIds,
     RAAM_OPENTYPES, DEUR_SOORTEN,
   } from "../../lib/layout.js";
-  import { currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
+  import { currentKozijn, currentGeometry, setKozijnLayout } from "../../stores/kozijn.js";
 
   // Proof-of-concept for the free subdivision model (recursive split tree).
   // Fully local — pure JS/SVG, no backend/wasm.
@@ -32,7 +33,7 @@
   function loadFromKozijn() {
     const k = $currentKozijn;
     if (!k) return;
-    tree = k.layout ? ensureIds(k.layout) : gridToLayout(k); // matrix → split tree when no layout yet
+    tree = k.layout ? ensureIds(k.layout) : gridToLayout(k, $currentGeometry);
     selectedId = null;
   }
 
@@ -87,7 +88,7 @@
     // Carry compatible extras across a type switch — resetting glaslat/
     // scharnier/draairichting/beslag on every switch loses the user's input.
     const prev = selectedLeaf.vulling || {};
-    const glazed = (t) => t === "glas" || t === "raam";
+    const glazed = (t) => t === "glas" || t === "raam" || t === "deur";
     const operable = (t) => t === "raam" || t === "deur";
     const keep = (t) => ({
       ...(glazed(t) && prev.glaslat != null ? { glaslat: prev.glaslat } : {}),
@@ -103,7 +104,7 @@
   }
 
   function patch(p) { if (selectedLeaf) tree = patchVulling(tree, selectedLeaf.id, p); }
-  const isGlazed = (v) => v && (v.type === "glas" || v.type === "raam");
+  const isGlazed = (v) => v && ["glas", "raam", "deur"].includes(v.type);
   const isOperable = (v) => v && (v.type === "raam" || v.type === "deur");
 
   // Centre of a rect for label placement
@@ -177,7 +178,7 @@
           {#if isGlazed(selectedLeaf.vulling)}
             <label class="vsel"><span>Glaslat</span>
               <select value={selectedLeaf.vulling.glaslat || "geen"} onchange={(e) => patch({ glaslat: e.target.value === "geen" ? null : e.target.value })}>
-                <option value="geen">Geen</option>
+                <option value="geen">{$_("glazing.profileDefault")}</option>
                 <option value="binnen">Binnen</option>
                 <option value="buiten">Buiten</option>
               </select>

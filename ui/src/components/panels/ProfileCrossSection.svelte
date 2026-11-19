@@ -2,6 +2,7 @@
   import { _ } from "svelte-i18n";
   let { crossSection = [], innerWalls = [], width = 80, height = 60, sponning = null } = $props();
 
+  let showRebate = $derived(sponning?.width > 0 && sponning?.depth > 0);
   let points = $derived(crossSection && crossSection.length > 2 ? crossSection : null);
 
   // Binnenstructuur (kamers/staal/isolatoren) — impliciet gesloten polygonen
@@ -20,7 +21,7 @@
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
     const pad = 2;
-    return `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`;
+    return `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad + (showRebate ? 10 : 0)}`;
   })());
 
   let pathD = $derived(points
@@ -44,22 +45,13 @@
       {#each wallPaths as wp}
         <path d={wp} fill="var(--bg-surface)" fill-opacity="0.6" stroke="var(--amber)" stroke-width="0.5" opacity="0.9" />
       {/each}
-      {#if sponning}
-        {@const xs = points.map(p => p[0])}
-        {@const ys = points.map(p => p[1])}
-        {@const maxX = Math.max(...xs)}
-        {@const maxY = Math.max(...ys)}
-        <!-- Sponning dimension annotation -->
-        <text
-          x={maxX - 1}
-          y={maxY - sponning.depth / 2}
-          font-size="3.5"
-          fill="#22c55e"
-          font-family="var(--font-body)"
-          font-weight="600"
-          text-anchor="end"
-        >
-          ↕{sponning.depth}
+      {#if showRebate}
+        {@const minU = Math.min(...points.map(([u]) => u))}
+        {@const maxU = Math.max(...points.map(([u]) => u))}
+        {@const maxV = Math.max(...points.map(([, v]) => v))}
+        <text x={(minU + maxU) / 2} y={maxV + 8} text-anchor="middle"
+          font-size="6" fill="var(--text-muted)" font-family="var(--font-body)">
+          ↔ {sponning.depth} · ↕ {sponning.width} mm
         </text>
       {/if}
     </svg>

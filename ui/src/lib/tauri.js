@@ -215,7 +215,7 @@ function wasmCommand(cmd, args) {
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_cell_sash_profile":
         return typeof wasm.update_cell_sash_profile === "function"
-          ? J(wasm.update_cell_sash_profile(args?.id, args?.cellIndex, args?.profileId, args?.profileName, args?.sashWidth, args?.sashDepth))
+          ? J(wasm.update_cell_sash_profile(args?.id, args?.cellIndex, args?.profileId, args?.profileName, args?.sashWidth, args?.sashDepth, args?.profileSnapshotJson ?? null))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_edge_config":
         return typeof wasm.update_edge_config === "function"
@@ -223,7 +223,7 @@ function wasmCommand(cmd, args) {
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_corner_joints":
         return typeof wasm.update_corner_joints === "function"
-          ? J(wasm.update_corner_joints(args?.id, args?.jointsJson))
+          ? J(wasm.update_corner_joints(args?.id, args?.jointsJson, args?.configured))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
       case "update_frame_shape":
         return typeof wasm.update_frame_shape === "function"
@@ -238,10 +238,10 @@ function wasmCommand(cmd, args) {
         // (rebuilt) wasm exposes it; old bundles return the kozijn unchanged.
         return typeof wasm.update_frame_profile === "function"
           ? J(wasm.update_frame_profile(args?.id, args?.profileId, args?.profileName,
-              args?.profileWidth ?? null, args?.profileDepth ?? null, args?.profileSnapshotJson ?? null))
+              args?.profileWidth ?? null, args?.profileDepth ?? null, args?.profileSnapshotJson ?? null, args?.profileMaterialJson ?? null))
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
-      case "add_column": return J(wasm.add_column(args?.id, args?.position));
-      case "add_row": return J(wasm.add_row(args?.id, args?.position));
+      case "add_column": return J(wasm.add_column(args?.id, args?.position, args?.elevation));
+      case "add_row": return J(wasm.add_row(args?.id, args?.position, args?.elevation));
 
       case "get_kozijn_geometry": return J(wasm.get_kozijn_geometry(args?.id));
       case "get_production_data_project": return J(wasm.get_production_data_project());
@@ -260,13 +260,16 @@ function wasmCommand(cmd, args) {
           : (args?.id ? J(wasm.get_kozijn(args.id)) : null);
 
       case "update_grid_sizes":
-        return J(wasm.update_grid_sizes(args?.id, Float64Array.from(args?.columnSizes || []), Float64Array.from(args?.rowSizes || [])));
+        return J(wasm.update_grid_sizes(args?.id, Float64Array.from(args?.columnSizes || []), Float64Array.from(args?.rowSizes || []), args?.rowsFromDay));
 
       // Unsupported edits must not report an unchanged kozijn as a success.
+      case "update_cell_glazing":
+        return typeof wasm.update_cell_glazing === "function"
+          ? J(wasm.update_cell_glazing(args.id, args.cellIndex, args.glazingJson))
+          : unavailableInWeb(cmd);
       case "update_cell_hardware":
       case "auto_select_hardware":
       case "update_security_class":
-      case "update_cell_glazing":
       case "update_frame_colors":
       case "add_frame_extension":
       case "remove_frame_extension":
@@ -276,8 +279,11 @@ function wasmCommand(cmd, args) {
         return typeof wasm.get_custom_profiles === "function"
           ? J(wasm.get_custom_profiles())
           : [];
-      case "load_profile_library":
       case "add_custom_profile":
+        return typeof wasm.add_custom_profile === "function"
+          ? wasm.add_custom_profile(args.profileJson)
+          : unavailableInWeb(cmd);
+      case "load_profile_library":
         return unavailableInWeb(cmd);
       case "get_sjablonen": return loadWebSjablonen();
       case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
@@ -368,7 +374,7 @@ function wasmCommand(cmd, args) {
       case "get_cnc_parts": return [];
       case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
       case "validate_project_ids": return [];
-      case "get_glass_library": return [];
+      case "get_glass_library": return wasm.get_glass_library ? J(wasm.get_glass_library()) : [];
       // File exports/imports need the filesystem — desktop only.
       case "export_cnc_gcode": return null;
       case "export_labels_pdf": return null;
@@ -403,6 +409,8 @@ function browserFallback(cmd, args) {
     case "get_all_vliesgevels": return [];
     case "load_profile_library": return [];
     case "get_custom_profiles": return [];
+    case "add_custom_profile":
+    case "update_cell_glazing": return unavailableInWeb(cmd);
     case "get_sjablonen": return loadWebSjablonen();
     case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
     case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);

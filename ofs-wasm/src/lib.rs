@@ -68,7 +68,7 @@ pub fn create_kozijn(name: &str, mark: &str, width: f64, height: f64) -> Result<
     with_project(|p| {
         let k = Kozijn::new(name, mark, width, height);
         let json = serde_json::to_string(&k).unwrap();
-        p.kozijnen.push(k);
+        p.add_kozijn(k);
         json
     })
 }
@@ -97,7 +97,7 @@ pub fn create_kozijn_from_template(
             _ => Kozijn::new_with_sjabloon("Kozijn", "K01", width, height, &sj),
         };
         let json = serde_json::to_string(&k).unwrap();
-        p.kozijnen.push(k);
+        p.add_kozijn(k);
         json
     })
 }
@@ -155,9 +155,10 @@ pub fn update_kozijn_dimensions(id: &str, width: f64, height: f64) -> Result<Str
 /// Browser twin of the Tauri `update_grid_sizes`: typed vak sizes stay exact,
 /// untouched vakken absorb the difference (chain keeps closing on binnenmaat).
 #[wasm_bindgen]
-pub fn update_grid_sizes(id: &str, column_sizes: Vec<f64>, row_sizes: Vec<f64>) -> Result<String, String> {
+pub fn update_grid_sizes(id: &str, column_sizes: Vec<f64>, row_sizes: Vec<f64>, rows_from_day: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
+        if rows_from_day == Some(true) { p.kozijnen[idx].grid.rows_from_day = true; }
         p.kozijnen[idx].set_grid_sizes_fitted(&column_sizes, &row_sizes);
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
@@ -175,7 +176,7 @@ pub fn update_cell_type(
         let k = &mut p.kozijnen[idx];
         if cell_index < k.cells.len() {
             if let Ok(pt) = serde_json::from_str::<ofs_core::kozijn::PanelType>(&format!("\"{}\"", panel_type)) {
-                k.cells[cell_index].panel_type = pt;
+                k.cells[cell_index].change_panel_type(pt, &k.frame);
             }
             k.cells[cell_index].opening_direction = opening_direction
                 .as_deref()
@@ -262,11 +263,15 @@ pub fn update_cell_sash_profile(
     profile_name: &str,
     sash_width: f64,
     sash_depth: f64,
+    profile_snapshot_json: Option<String>,
 ) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
         let cell = k.cells.get_mut(cell_index).ok_or("Cel niet gevonden")?;
+        cell.sash_profile_snapshot = profile_snapshot_json.as_deref()
+            .map(serde_json::from_str).transpose().map_err(|e| format!("Ongeldig profiel: {e}"))?
+            .flatten();
         cell.sash_profile = Some(ofs_core::profile::ProfileRef {
             id: profile_id.to_string(),
             name: profile_name.to_string(),
@@ -300,15 +305,13 @@ pub fn update_edge_config(
 }
 
 #[wasm_bindgen]
-pub fn update_corner_joints(id: &str, joints_json: &str) -> Result<String, String> {
+pub fn update_corner_joints(id: &str, joints_json: &str, configured: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let joints: Vec<ofs_core::joint::Joint> = serde_json::from_str(joints_json)
             .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
         p.kozijnen[idx].frame.corner_joints = joints;
-        // Explicitly saved joints always win from now on, even when they
-        // equal the auto-populated default set (see Frame::joints_configured).
-        p.kozijnen[idx].frame.joints_configured = true;
+        p.kozijnen[idx].frame.joints_configured = configured.unwrap_or(true);
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -343,10 +346,6 @@ pub fn update_frame_shape(
             polygon_points: prev.polygon_points,
             apex_offset: prev.apex_offset,
         };
-        // Round frames have no grid dividers: normalize to a single 1×1 cell
-        if st == ofs_core::kozijn::ShapeType::Round {
-            ofs_core::geometry::normalize_grid_single_cell(k);
-        }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -359,35 +358,15 @@ pub fn update_frame_profile(
     profile_width: Option<f64>,
     profile_depth: Option<f64>,
     profile_snapshot_json: Option<String>,
+    profile_material_json: Option<String>,
 ) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
-        k.frame.profile = ofs_core::profile::ProfileRef {
-            id: profile_id.to_string(),
-            name: profile_name.to_string(),
-        };
-        if let Some(w) = profile_width {
-            k.frame.frame_width = w;
-            // Re-fit the grid (same semantics as the Tauri command).
-            k.fit_grid_to_frame();
-        }
-        if let Some(d) = profile_depth {
-            k.frame.frame_depth = d;
-        }
-        // Resolved snapshot: explicit "null"/empty clears it, an omitted
-        // argument leaves the stored snapshot untouched.
-        if let Some(json) = profile_snapshot_json {
-            let trimmed = json.trim();
-            k.frame.profile_snapshot = if trimmed.is_empty() || trimmed == "null" {
-                None
-            } else {
-                Some(
-                    serde_json::from_str::<ofs_core::profile::ProfileSnapshot>(trimmed)
-                        .map_err(|e| format!("Ongeldig profielsnapshot JSON: {}", e))?,
-                )
-            };
-        }
+        k.apply_frame_profile(
+            ofs_core::profile::ProfileRef { id: profile_id.into(), name: profile_name.into() },
+            profile_width, profile_depth, profile_snapshot_json.as_deref(), profile_material_json.as_deref(),
+        )?;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -456,24 +435,52 @@ pub fn update_member_profile(
 }
 
 #[wasm_bindgen]
-pub fn add_column(id: &str, position: f64) -> Result<String, String> {
+pub fn add_column(id: &str, position: f64, elevation: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        p.kozijnen[idx].add_column(position);
+        if elevation == Some(true) { p.kozijnen[idx].add_divider_in_elevation(false, position); }
+        else { p.kozijnen[idx].add_column(position); }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
 
 #[wasm_bindgen]
-pub fn add_row(id: &str, position: f64) -> Result<String, String> {
+pub fn add_row(id: &str, position: f64, elevation: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        p.kozijnen[idx].add_row(position);
+        if elevation == Some(true) { p.kozijnen[idx].add_divider_in_elevation(true, position); }
+        else { p.kozijnen[idx].add_row(position); }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
 
 // ── Custom profiles ────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub fn add_custom_profile(profile_json: &str) -> Result<(), String> {
+    let profile: ofs_core::profile::ProfileDefinition =
+        serde_json::from_str(profile_json).map_err(|e| format!("Ongeldig profiel: {}", e))?;
+    with_project(|p| {
+        p.set_custom_profile(profile);
+    })
+}
+
+#[wasm_bindgen]
+pub fn get_glass_library() -> String {
+    serde_json::to_string(&ofs_core::glass_library::builtin_glass_library()).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn update_cell_glazing(id: &str, cell_index: usize, glazing_json: &str) -> Result<String, String> {
+    let glazing = serde_json::from_str(glazing_json).map_err(|e| format!("Ongeldige beglazing: {}", e))?;
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        let cell = k.cells.get_mut(cell_index).ok_or("Vak niet gevonden")?;
+        cell.glazing = glazing;
+        serde_json::to_string(k).map_err(|e| e.to_string())
+    })?
+}
 
 #[wasm_bindgen]
 pub fn get_custom_profiles() -> Result<String, String> {
@@ -612,8 +619,48 @@ pub fn get_project_export_data() -> Result<String, String> {
 mod tests {
     use super::*;
 
+    // Browser commands address a single open project across a sequence of calls.
+    static BROWSER_SESSION: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn browser_custom_profile_survives_save_and_reopen() {
+        let _session = BROWSER_SESSION.lock().unwrap();
+        new_project("Profieltest", "P-1").unwrap();
+        let pvc: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../../profiles/pvc/veka.json")).unwrap();
+        let mut edited = pvc[0].clone();
+        edited["id"] = "custom-pvc".into();
+        edited["sponning"]["position"] = "midden".into();
+        add_custom_profile(&edited.to_string()).unwrap();
+        edited["name"] = "Bewerkte vleugel".into();
+        add_custom_profile(&edited.to_string()).unwrap();
+
+        let timber: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../../profiles/wood/raamhout.json")).unwrap();
+        let sash = timber.iter().find(|p| p["id"] == "raamhout-69x90-opdek").unwrap();
+        add_custom_profile(&sash.to_string()).unwrap();
+        let saved = save_project_json().unwrap();
+        new_project("Leeg", "").unwrap();
+        open_project_json(&saved).unwrap();
+
+        let profiles: Vec<serde_json::Value> = serde_json::from_str(&get_custom_profiles().unwrap()).unwrap();
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(profiles[0]["name"], edited["name"]);
+        assert!(edited["innerWalls"].as_array().unwrap().len() > 1);
+        assert_eq!(profiles[0]["innerWalls"], edited["innerWalls"]);
+        let contour = |profile: &serde_json::Value| {
+            serde_json::from_value::<Vec<[f64; 2]>>(profile["crossSection"].clone()).unwrap()
+        };
+        assert_eq!(contour(&profiles[0]), contour(&edited));
+        assert_eq!(profiles[0]["sponning"]["position"], edited["sponning"]["position"]);
+        assert_eq!(profiles[1]["sponning"]["sponningType"], "draaikiep");
+        assert_eq!(profiles[1]["sponning"]["opdekWidth"].as_f64(), Some(13.0));
+        assert_eq!(profiles[1]["kaderdichtingGroef"], sash["kaderdichtingGroef"]);
+    }
+
     #[test]
     fn browser_duplicate_rekeys_ifc_part_ids() {
+        let _session = BROWSER_SESSION.lock().unwrap();
         new_project("WASM duplicatie", "W-1").unwrap();
         let original: serde_json::Value =
             serde_json::from_str(&create_kozijn("Vast raam", "K01", 1200.0, 1500.0).unwrap())

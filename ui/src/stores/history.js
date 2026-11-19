@@ -100,6 +100,14 @@ async function restoreKozijn(snapshot) {
       height: snapshot.frame.outerHeight,
     });
 
+    const cornerSettings = JSON.stringify(snapshot.frame.cornerJoints ?? []);
+    if (updated.frame.jointsConfigured !== snapshot.frame.jointsConfigured ||
+        JSON.stringify(updated.frame.cornerJoints ?? []) !== cornerSettings) {
+      await invoke("update_corner_joints", {
+        id: snapshot.id, jointsJson: cornerSettings, configured: snapshot.frame.jointsConfigured ?? false,
+      });
+    }
+
     // Restore cell types
     for (let i = 0; i < snapshot.cells.length; i++) {
       const cell = snapshot.cells[i];

@@ -361,7 +361,7 @@ export async function importDxfProfile() {
   if (importUnavailable(result)) return;
   const profile = JSON.parse(result);
   await api("add_custom_profile", { profileJson: JSON.stringify(profile) });
-  await refreshCustomProfiles();
+  await refreshCustomProfiles(true);
   toast.success(
     get(_)("alert.profileImported", {
       values: { name: profile.name, width: profile.width, depth: profile.depth },
@@ -382,7 +382,7 @@ export async function importCatalog() {
   for (const profile of profiles) {
     await api("add_custom_profile", { profileJson: JSON.stringify(profile) });
   }
-  await refreshCustomProfiles();
+  await refreshCustomProfiles(true);
   toast.success(
     get(_)("alert.catalogImported", { values: { count: profiles.length } })
   );

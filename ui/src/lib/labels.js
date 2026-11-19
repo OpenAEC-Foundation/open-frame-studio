@@ -19,6 +19,8 @@ export const PANEL_TYPE_KEYS = {
 };
 
 const MEMBER_TYPE_KEYS = {
+  frame_arc: "member.arc",
+  sash_arc: "member.sashArc",
   frame_top: "member.topRail",
   frame_bottom: "member.bottomRail",
   frame_left: "member.leftStile",
@@ -30,6 +32,13 @@ const MEMBER_TYPE_KEYS = {
   sash_left: "member.sashLeft",
   sash_right: "member.sashRight",
 };
+
+/** A circle uses the top and bottom profile slots for its two half-rings. */
+export function timberMemberType(piece) {
+  if (piece.profileSide) return `frame_${piece.profileSide}`;
+  if (piece.role === "arc") return piece.index === 0 ? "frame_top" : "frame_bottom";
+  return `frame_${piece.role}`;
+}
 
 const GASKET_TYPE_KEYS = {
   glazing_inner: "production.gasketInner",
@@ -52,7 +61,15 @@ export function panelLabel(t, type) {
  * @param {Function} t - the `$_` translation function
  * @param {string} type - member type key (e.g. "frame_top")
  */
-export function memberLabel(t, type) {
+export function dividerPieceLabel(t, piece, members) {
+  const name = memberLabel(t, piece.vertical ? "divider_v" : "divider_h") + " " + (piece.sourceIndex + 1);
+  const split = members.some(p => p.vertical === piece.vertical && p.sourceIndex === piece.sourceIndex && p.pieceIndex > 0);
+  return split ? name + " · " + t("divider.partNumber", { values: { n: piece.pieceIndex + 1 } }) : name;
+}
+
+export function memberLabel(t, type, side) {
+  if (type === "frame_arc" && side) return t(side === "bottom" ? "member.lowerArc" : "member.upperArc");
+  if (type === "sash_arc" && ["top", "bottom", "left", "right"].includes(side)) return t(`member.sashArc.${side}`);
   return t(MEMBER_TYPE_KEYS[type] || type);
 }
 

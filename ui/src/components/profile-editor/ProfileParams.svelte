@@ -1,20 +1,15 @@
 <script>
   import { _ } from "svelte-i18n";
-  import { profileEditor, editorProfile, editorBounds, editorIsDirty } from "../../stores/profileEditor.js";
+  import { profileEditor, editorProfile, editorBounds, editorIsDirty, editorDimensions, editorParametric } from "../../stores/profileEditor.js";
+  import { invoke } from "../../lib/tauri.js";
   import { refreshCustomProfiles } from "../../stores/profiles.js";
+  import { markDirty, refreshProject } from "../../stores/project.js";
   import { toast } from "../../stores/toast.js";
 
   let profile = $derived($editorProfile);
   let bounds = $derived($editorBounds);
 
-  let sponning = $state({ width: 12, depth: 17, position: "buiten" });
-
-  // Sync sponning from store
-  $effect(() => {
-    let s;
-    profileEditor.subscribe(v => s = v)();
-    sponning = { ...s.sponning };
-  });
+  let sponning = $derived($profileEditor.sponning);
 
   function updateName(e) {
     profileEditor.updateProfile({ name: e.target.value });
@@ -35,30 +30,31 @@
   function updateWidth(e) {
     const newW = parseFloat(e.target.value);
     if (newW > 0 && newW !== bounds.width) {
-      profileEditor.scaleToSize(newW, bounds.height);
+      if (!profileEditor.scaleToSize(newW, bounds.height)) e.target.value = bounds.width;
     }
   }
 
   function updateDepth(e) {
     const newH = parseFloat(e.target.value);
     if (newH > 0 && newH !== bounds.height) {
-      profileEditor.scaleToSize(bounds.width, newH);
+      if (!profileEditor.scaleToSize(bounds.width, newH)) e.target.value = bounds.height;
     }
   }
 
-  function updateSponningWidth(e) {
-    sponning.width = parseFloat(e.target.value) || 0;
-    profileEditor.updateSponning(sponning);
-  }
-
-  function updateSponningDepth(e) {
-    sponning.depth = parseFloat(e.target.value) || 0;
-    profileEditor.updateSponning(sponning);
+  function updateRebateSize(e, field) {
+    const value = e.target.valueAsNumber;
+    if (!Number.isFinite(value) || value < 0 || !profileEditor.updateSponning({ ...sponning, [field]: value })) {
+      e.target.value = sponning[field];
+    }
   }
 
   function updateSponningPos(e) {
-    sponning.position = e.target.value;
-    profileEditor.updateSponning(sponning);
+    const position = e.target.value;
+    const sponningType = position === "buiten" ? "buitensponning" : position === "dubbel"
+      ? "dubbele_sponning" : sponning.sponningType === "draaikiep" ? "draaikiep" : "binnensponning";
+    if (!profileEditor.updateSponning({ ...sponning, position, sponningType })) {
+      e.target.value = sponning.position;
+    }
   }
 
   function toggleApplicable(type) {
@@ -80,12 +76,10 @@
     const profileJson = JSON.stringify({ ...data, id });
 
     try {
-      const isTauri = typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
-      if (isTauri) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("add_custom_profile", { profileJson });
-        await refreshCustomProfiles();
-      }
+      await invoke("add_custom_profile", { profileJson });
+      markDirty();
+      await refreshProject();
+      await refreshCustomProfiles(true);
       toast.success($_("profileEditor.saved") || `Profiel "${data.name}" opgeslagen.`);
       profileEditor.update((s) => ({ ...s, isDirty: false, profile: { ...s.profile, id } }));
     } catch (e) {
@@ -146,13 +140,16 @@
       </label>
     </div>
     <div class="computed-row">
-      <span>{$_("profileEditor.sightline") || "Zichtlijn"}: <strong>{Math.round((bounds.width - sponning.width) * 10) / 10}mm</strong></span>
-      <span>{$_("profileEditor.glazingRebate") || "Glasfalz"}: <strong>{sponning.depth}mm</strong></span>
+      <span>{$_("profileEditor.sightline", { values: { value: $editorDimensions.sightline } })}</span>
+      <span>{$_("profileEditor.glazingRebate", { values: { value: $editorDimensions.glazingRebate } })}</span>
     </div>
   </div>
 
   <div class="section">
     <div class="section-header">{$_("profileEditor.sponning") || "Sponning"}</div>
+    {#if !$editorParametric}
+      <span class="meta">{$_("profileEditor.freeformRebate")}</span>
+    {/if}
     <label class="field">
       <span class="label">{$_("profileEditor.position") || "Positie"}</span>
       <select value={sponning.position} onchange={updateSponningPos}>
@@ -165,13 +162,13 @@
     <div class="field-row">
       <label class="field">
         <span class="label">{$_("profileEditor.sponningWidth") || "Breedte (mm)"}</span>
-        <input type="number" value={sponning.width} onchange={updateSponningWidth}
-          min="5" max="40" step="1" />
+        <input type="number" value={sponning.width} onchange={e => updateRebateSize(e, "width")}
+          min="0" max={bounds.height} step="0.1" />
       </label>
       <label class="field">
-        <span class="label">{$_("profileEditor.sponningDepth") || "Diepte (mm)"}</span>
-        <input type="number" value={sponning.depth} onchange={updateSponningDepth}
-          min="10" max="50" step="1" />
+        <span class="label">{$_("shapeManager.heightMm")}</span>
+        <input type="number" value={sponning.depth} onchange={e => updateRebateSize(e, "depth")}
+          min="0" max={bounds.width} step="0.1" />
       </label>
     </div>
   </div>

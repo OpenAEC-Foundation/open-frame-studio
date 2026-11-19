@@ -1,4 +1,5 @@
 <script>
+  import { _ } from "svelte-i18n";
   import { currentKozijn, selectedLayoutLeafId, setKozijnLayout } from "../../stores/kozijn.js";
   import {
     ensureIds, findNode, setVulling, patchVulling,
@@ -14,7 +15,7 @@
   let leaf = $derived(tree && $selectedLayoutLeafId ? findNode(tree, $selectedLayoutLeafId) : null);
   let v = $derived(leaf && leaf.kind === "leaf" ? leaf.vulling : null);
 
-  const isGlazed = (t) => t === "glas" || t === "raam";
+  const isGlazed = (t) => t === "glas" || t === "raam" || t === "deur";
   const isOperable = (t) => t === "raam" || t === "deur";
 
   let typeValue = $derived(
@@ -73,7 +74,7 @@
         <label for="vv-glaslat">Glaslat</label>
         <select id="vv-glaslat" value={v.glaslat || "geen"}
                 onchange={(e) => patch({ glaslat: e.target.value === "geen" ? null : e.target.value })}>
-          <option value="geen">Geen</option>
+          <option value="geen">{$_("glazing.profileDefault")}</option>
           <option value="binnen">Binnen</option>
           <option value="buiten">Buiten</option>
         </select>
@@ -89,7 +90,7 @@
       </div>
       <div class="field">
         <label for="vv-dir">Draairichting</label>
-        <select id="vv-dir" value={v.opensOutward ? "buiten" : "binnen"}
+        <select id="vv-dir" value={(v.opensOutward ?? (v.type === "raam" && v.openType === "uitzet")) ? "buiten" : "binnen"}
                 onchange={(e) => patch({ opensOutward: e.target.value === "buiten" })}>
           <option value="binnen">Binnendraaiend</option>
           <option value="buiten">Buitendraaiend</option>

@@ -1,16 +1,16 @@
 <script>
   import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
-  import { currentKozijn, selectedCellIndex } from "../../stores/kozijn.js";
+  import { currentKozijn, selectedCellIndex, updateCellGlazing } from "../../stores/kozijn.js";
   import { invoke } from "../../lib/tauri.js";
-  import { get } from "svelte/store";
+  import { toast } from "../../stores/toast.js";
 
   const FALLBACK_PRESETS = [
-    { type: "Enkel", thickness: 6, ug: 5.8, panes: [{ thickness_mm: 6, pane_type: "float" }], spacer: "aluminium" },
-    { type: "Dubbel", thickness: 20, ug: 2.8, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "float" }], spacer: "aluminium" },
-    { type: "HR++", thickness: 24, ug: 1.0, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "warm-edge" },
-    { type: "HR+++", thickness: 30, ug: 0.7, panes: [{ thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "super-spacer" },
-    { type: "Triple", thickness: 36, ug: 0.5, panes: [{ thickness_mm: 4, pane_type: "low-e" }, { thickness_mm: 4, pane_type: "float" }, { thickness_mm: 4, pane_type: "low-e" }], spacer: "super-spacer" },
+    { type: "Enkel", thickness: 6, ug: 5.8, panes: [{ thicknessMm: 6, paneType: "float" }], spacer: "aluminium" },
+    { type: "Dubbel", thickness: 20, ug: 2.8, panes: [{ thicknessMm: 4, paneType: "float" }, { thicknessMm: 4, paneType: "float" }], spacer: "aluminium" },
+    { type: "HR++", thickness: 24, ug: 1.0, panes: [{ thicknessMm: 4, paneType: "float" }, { thicknessMm: 4, paneType: "low-e" }], spacer: "warm-edge" },
+    { type: "HR+++", thickness: 30, ug: 0.7, panes: [{ thicknessMm: 4, paneType: "float" }, { thicknessMm: 4, paneType: "low-e" }, { thicknessMm: 4, paneType: "low-e" }], spacer: "super-spacer" },
+    { type: "Triple", thickness: 36, ug: 0.5, panes: [{ thicknessMm: 4, paneType: "low-e" }, { thicknessMm: 4, paneType: "float" }, { thicknessMm: 4, paneType: "low-e" }], spacer: "super-spacer" },
   ];
 
   let GLASS_PRESETS = [...FALLBACK_PRESETS];
@@ -21,7 +21,7 @@
       if (library && Array.isArray(library) && library.length > 0) {
         GLASS_PRESETS = library.map(g => ({
           type: g.type || g.name,
-          thickness: g.thickness || g.thicknessMm || 24,
+          thickness: g.totalThicknessMm ?? g.thicknessMm ?? g.thickness,
           ug: g.ug || g.ugValue || 1.0,
           panes: g.panes || [],
           spacer: g.spacer || g.spacerType || "warm-edge",
@@ -45,7 +45,7 @@
 
   $: glazing = cell?.glazing || null;
 
-  async function applyPreset(preset) {
+  function applyPreset(preset) {
     if ($selectedCellIndex === null || !$currentKozijn) return;
     const newGlazing = {
       glassType: preset.type,
@@ -54,33 +54,14 @@
       panes: preset.panes,
       spacerType: preset.spacer,
     };
-    try {
-      await invoke("update_cell_glazing", {
-        id: $currentKozijn.id,
-        cellIndex: $selectedCellIndex,
-        glazingJson: JSON.stringify(newGlazing),
-      });
-      // Refresh
-      const k = await invoke("get_kozijn", { id: $currentKozijn.id });
-      currentKozijn.set(k);
-    } catch (e) {
-      console.error("Glazing update fout:", e);
-    }
+    saveGlazing(newGlazing);
   }
 
-  async function updateGlazingField(field, value) {
-    if ($selectedCellIndex === null || !$currentKozijn || !glazing) return;
-    const updated = { ...glazing, [field]: value };
+  async function saveGlazing(value) {
     try {
-      await invoke("update_cell_glazing", {
-        id: $currentKozijn.id,
-        cellIndex: $selectedCellIndex,
-        glazingJson: JSON.stringify(updated),
-      });
-      const k = await invoke("get_kozijn", { id: $currentKozijn.id });
-      currentKozijn.set(k);
+      await updateCellGlazing($selectedCellIndex, value);
     } catch (e) {
-      console.error("Glazing update fout:", e);
+      toast.error(String(e));
     }
   }
 </script>
@@ -92,6 +73,9 @@
     <div class="field">
       <label>{$_('glazing.glassType')}</label>
       <select value={glazing.glassType} onchange={(e) => applyPreset(GLASS_PRESETS.find(p => p.type === e.target.value) || GLASS_PRESETS[2])}>
+        {#if !GLASS_PRESETS.some(p => p.type === glazing.glassType)}
+          <option value={glazing.glassType}>{glazing.glassType}</option>
+        {/if}
         {#each GLASS_PRESETS as preset}
           <option value={preset.type}>{preset.type}</option>
         {/each}
@@ -123,8 +107,8 @@
             </div>
           {/if}
           <div class="pane-row">
-            <span class="pane-thickness">{pane.thickness_mm}mm</span>
-            <select class="pane-type-select" value={pane.pane_type} disabled>
+            <span class="pane-thickness">{pane.thicknessMm}mm</span>
+            <select class="pane-type-select" value={pane.paneType} disabled>
               {#each PANE_TYPES as pt}
                 <option value={pt}>{pt}</option>
               {/each}
@@ -142,7 +126,7 @@
 
     <div class="field">
       <label>{$_('glazing.spacer')}</label>
-      <select value={glazing.spacerType || "warm-edge"} onchange={(e) => updateGlazingField("spacerType", e.target.value)}>
+      <select value={glazing.spacerType || "warm-edge"} onchange={(e) => saveGlazing({ ...glazing, spacerType: e.target.value })}>
         {#each SPACER_TYPES as st}
           <option value={st.value}>{st.label}</option>
         {/each}

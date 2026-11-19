@@ -41,6 +41,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
             miter_left_deg: 90.0,
             miter_right_deg: 90.0,
             quantity: 1,
+            arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
         });
     }
 
@@ -57,6 +58,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
             miter_left_deg: 90.0,
             miter_right_deg: 90.0,
             quantity: 1,
+            arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
         });
     }
 
@@ -78,6 +80,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                     miter_left_deg: 90.0,
                     miter_right_deg: 90.0,
                     quantity: 1,
+                    arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
                 });
             }
         }
@@ -98,6 +101,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                     miter_left_deg: 90.0,
                     miter_right_deg: 90.0,
                     quantity: 1,
+                    arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
                 });
             }
         }
@@ -120,6 +124,7 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
             if gw > 0.0 && gh > 0.0 {
                 let glazing = panel.glazing.as_ref();
                 glass_list.push(GlassListItem {
+                    cut_contour: None,
                     piece_id: format!("{}-G{}-{}", vg.mark, panel.row + 1, panel.col + 1),
                     cell_index: panel.row * vg.num_cols() + panel.col,
                     glass_type: glazing.map(|g| g.glass_type.clone()).unwrap_or("HR++".into()),

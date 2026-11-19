@@ -252,6 +252,21 @@ fn clip_dividers_against_buiten(out: &mut LayoutGeometry) {
     out.dividers = kept;
 }
 
+/// Stretches covered on both sides, e.g. dividers wholly surrounded by masonry.
+pub(crate) fn intersect_interval_unions(a: &[(f64, f64)], b: &[(f64, f64)], eps: f64) -> Vec<(f64, f64)> {
+    let mut out = Vec::new();
+    for &(a0, a1) in a {
+        for &(b0, b1) in b {
+            let lo = a0.max(b0);
+            let hi = a1.min(b1);
+            if hi > lo + eps {
+                out.push((lo, hi));
+            }
+        }
+    }
+    out
+}
+
 /// `[lo, hi]` minus the union of `blocked` intervals, as a list of remaining
 /// sub-intervals (each wider than `eps`). Shared with production's own
 /// divider-member resolution (`crate::production`).

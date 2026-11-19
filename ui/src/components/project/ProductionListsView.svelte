@@ -1,10 +1,15 @@
 <script>
-  import { _ } from "svelte-i18n";
+  import { _, locale } from "svelte-i18n";
   import { onMount } from "svelte";
   import { invoke } from "../../lib/tauri.js";
   import { productionDataProject, loadProductionDataProject } from "../../stores/production.js";
   import { vliesgevels, loadVliesgevels } from "../../stores/vliesgevel.js";
   import { memberLabel, gasketLabel } from "../../lib/labels.js";
+  import DividerEndMeasure from "../panels/DividerEndMeasure.svelte";
+  import ArchEndMeasure from "../panels/ArchEndMeasure.svelte";
+  import ReceivedMortises from "../panels/ReceivedMortises.svelte";
+  import { archJointLabel, cutRows, endLabel } from "../../lib/dividerJoinery.js";
+  import { circleDiameter, contourPath } from "../../lib/contour2d.js";
 
   let activeTab = "kortlijst";
 
@@ -54,9 +59,10 @@
   }
 
   // Flatten data per list type
-  $: allCut = ($productionDataProject || []).flatMap(p =>
-    (p.cutList || []).map(i => ({ ...i, mark: p.kozijnMark }))
-  );
+  $: allCut = ($productionDataProject || []).flatMap(cutRows);
+  $: hasDividerJoinery = ($productionDataProject || []).some(p => p.dividerJoints?.length);
+  $: hasArchJoinery = ($productionDataProject || []).some(p => p.archJoints?.length);
+  $: hasRingJoints = ($productionDataProject || []).some(p => p.archJoints?.some(j => j.kind === "ring_seam"));
   $: allGlass = ($productionDataProject || []).flatMap(p =>
     (p.glassList || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
@@ -72,6 +78,11 @@
   $: allGlaslat = ($productionDataProject || []).flatMap(p =>
     (p.glaslatList || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
+  $: hasCutShapes = allGlass.some(i => i.cutContour);
+  $: hasTimberArcs = allCut.some(i => i.arc || i.startCopeRadiusMm != null || i.endCopeRadiusMm != null);
+  $: hasDividerEnds = allCut.some(i => i.dividerStart || i.dividerEnd);
+  $: hasBentBeads = allGlaslat.some(i => i.contourRuns?.length);
+  $: mm = new Intl.NumberFormat($locale || "nl", { maximumFractionDigits: 1 });
   $: allBom = ($productionDataProject || []).flatMap(p =>
     (p.bom || []).map(i => ({ ...i, mark: p.kozijnMark }))
   );
@@ -113,27 +124,71 @@
 
   <div class="table-container">
     {#if activeTab === "kortlijst"}
-      <table>
+      {#if hasTimberArcs}
+        <p class="cut-reference">{$_("production.arcReference")}</p>
+      {/if}
+      {#if hasDividerEnds}
+        <p class="cut-reference">{$_("divider.cutReference")} {$_("divider.edgeReference")}</p>
+      {/if}
+      {#if hasDividerJoinery}<p class="cut-reference">{$_("joinery.reference")}</p>{/if}
+      {#if hasArchJoinery}
+        <p class="cut-reference">{#if hasRingJoints}{$_("ringJoint.endOrder")} {/if}{$_("archJoint.reference")} {$_("production.frameOrigin")}</p>
+      {/if}
+      <table class:timber-table={hasTimberArcs}>
+        {#if !hasTimberArcs}
         <colgroup>
           <col style="width:7%"><col style="width:9%"><col style="width:14%"><col style="width:14%">
           <col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:8%"><col style="width:6%">
         </colgroup>
+        {/if}
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.part')}</th><th>{$_('production.profile')}</th>
-          <th>{$_('production.material')}</th><th class="num">{$_('production.net')}</th><th class="num">{$_('production.gross')}</th><th class="num">{$_('production.angleL')}</th><th class="num">{$_('production.angleR')}</th><th class="num">{$_('production.quantity')}</th>
+          <th>{$_('production.material')}</th><th class="num">{$_('production.net')}</th><th class="num">{$_('production.gross')}</th>
+          {#if hasTimberArcs}
+            <th class="num">{$_('production.outerRadius')}</th><th class="num">{$_('production.outerArcLength')}</th>
+          {/if}
+          <th class="num">{$_(hasTimberArcs ? 'production.cutStart' : 'production.angleL')}</th><th class="num">{$_(hasTimberArcs ? 'production.cutEnd' : 'production.angleR')}</th><th class="num">{$_('production.quantity')}</th>
         </tr></thead>
         <tbody>
           {#each allCut as item}
             <tr>
               <td>{item.mark}</td>
               <td>{item.pieceId}</td>
-              <td>{memberLabel($_, item.memberType)}</td>
+              <td>
+                {memberLabel($_, item.memberType, item.profileSide)}
+                {#if item.mortises.length}
+                  <ReceivedMortises entries={item.mortises.map(m => ({ tenon: m.tenon, label: m.id, endLabel: m.corner == null ? endLabel($_, m.vertical, m.side) : archJointLabel($_, m.corner, m.kind) }))} />
+                {/if}
+                {#if item.masonryNotches?.length}
+                  <details class="notch-detail">
+                    <summary>{$_("production.masonryNotch")}</summary>
+                    <div>{$_("production.frameOrigin")}</div>
+                    {#each item.masonryNotches as notch}
+                      <div>X {mm.format(notch.x)} · Y {mm.format(notch.y)}<br />{mm.format(notch.width)} × {mm.format(notch.height)} mm</div>
+                    {/each}
+                  </details>
+                {/if}
+              </td>
               <td>{item.profileName}</td>
               <td>{item.material}</td>
-              <td class="num">{Math.round(item.netLengthMm)}</td>
-              <td class="num">{Math.round(item.grossLengthMm)}</td>
-              <td class="num">{item.miterLeftDeg}&deg;</td>
-              <td class="num">{item.miterRightDeg}&deg;</td>
+              <td class="num">{hasTimberArcs ? mm.format(item.netLengthMm) : Math.round(item.netLengthMm)}</td>
+              <td class="num">{item.unknownGross ? $_("archJoint.unknownGross") : hasTimberArcs ? mm.format(item.grossLengthMm) : Math.round(item.grossLengthMm)}</td>
+              {#if hasTimberArcs}
+                <td class="num">{#if item.arc}{mm.format(item.arc.outerRadiusMm)}<small>{$_('production.centerline')} {mm.format(item.arc.centerlineRadiusMm)}</small>{:else}—{/if}</td>
+                <td class="num">{#if item.arc}{mm.format(item.arc.outerLengthMm)}<small>{$_('production.centerline')} {mm.format(item.arc.centerlineLengthMm)}</small>{:else}—{/if}</td>
+              {/if}
+              {#each ["start", "end"] as side}
+                {@const joint = item[side + "ArchJoint"]}
+                <td class="num">
+                  {#if joint}
+                    <ArchEndMeasure {joint} received={joint.received} mate={joint.mate} />
+                  {:else}
+                    <DividerEndMeasure end={side === "start" ? item.dividerStart : item.dividerEnd} vertical={item.memberType === "divider_v"}
+                      angleDeg={side === "start" ? item.miterLeftDeg : item.miterRightDeg} radiusMm={side === "start" ? item.startCopeRadiusMm : item.endCopeRadiusMm}
+                      receiverName={item[side + "Receiver"]} />
+                  {/if}
+                </td>
+              {/each}
               <td class="num">{item.quantity}</td>
             </tr>
           {/each}
@@ -145,10 +200,12 @@
         <colgroup>
           <col style="width:8%"><col style="width:10%"><col style="width:14%"><col style="width:12%">
           <col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:6%">
+          {#if hasCutShapes}<col style="width:18%">{/if}
         </colgroup>
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.glassType')}</th><th class="num">{$_('production.width')}</th>
           <th class="num">{$_('production.height')}</th><th class="num">{$_('production.thickness')}</th><th class="num">{$_('production.ug')}</th><th class="num">{$_('production.area')}</th><th class="num">{$_('production.quantity')}</th>
+          {#if hasCutShapes}<th class="shape-column">{$_('production.cutShape')}</th>{/if}
         </tr></thead>
         <tbody>
           {#each allGlass as item}
@@ -156,12 +213,37 @@
               <td>{item.mark}</td>
               <td>{item.pieceId}</td>
               <td>{item.glassType}</td>
-              <td class="num">{Math.round(item.widthMm)}</td>
-              <td class="num">{Math.round(item.heightMm)}</td>
+              <td class="num">{item.cutContour ? mm.format(item.widthMm) : Math.round(item.widthMm)}</td>
+              <td class="num">{item.cutContour ? mm.format(item.heightMm) : Math.round(item.heightMm)}</td>
               <td class="num">{item.thicknessMm}</td>
               <td class="num">{item.ugValue.toFixed(1)}</td>
               <td class="num">{item.areaM2.toFixed(2)} m&sup2;</td>
               <td class="num">{item.quantity}</td>
+              {#if hasCutShapes}
+                <td class="shape-cell">
+                  {#if item.cutContour}
+                    {@const diameter = circleDiameter(item.cutContour)}
+                    <svg width="50" height="38" viewBox={`0 0 ${item.widthMm} ${item.heightMm}`} aria-hidden="true">
+                      <path d={contourPath(item.cutContour)} fill="var(--editor-glass)" stroke="currentColor" vector-effect="non-scaling-stroke" />
+                    </svg>
+                    {#if diameter != null}
+                      <span>Ø {mm.format(diameter)} mm</span>
+                    {:else}
+                      {@const arcs = item.cutContour.segments.filter(e => e.kind === 'arc')}
+                      <details>
+                        <summary>{arcs.length ? `R ${mm.format(arcs[0].radius)} mm` : $_('props.polygon')}</summary>
+                        <div>{$_('production.paneOrigin')}</div>
+                        {#each item.cutContour.segments as edge}
+                          {#if edge.kind === 'arc'}<div>R {mm.format(edge.radius)} · M ({mm.format(edge.center[0])}; {mm.format(edge.center[1])}) · {mm.format(edge.sweepAngle * 180 / Math.PI)}°</div>{/if}
+                          <div>({mm.format(edge.from[0])}; {mm.format(edge.from[1])}) → ({mm.format(edge.to[0])}; {mm.format(edge.to[1])})</div>
+                        {/each}
+                      </details>
+                    {/if}
+                  {:else}
+                    {$_('props.rectangular')}
+                  {/if}
+                </td>
+              {/if}
             </tr>
           {/each}
         </tbody>
@@ -225,18 +307,26 @@
       <table>
         <thead><tr>
           <th>{$_('production.frame')}</th><th>{$_('production.position')}</th><th>{$_('production.material')}</th><th class="num">{$_('production.width')}</th><th class="num">{$_('production.height')}</th><th class="num">{$_('production.totalLength')}</th><th class="num">{$_('production.mitered')}</th><th class="num">{$_('production.quantity')}</th>
+          {#if hasBentBeads}<th class="shape-column">{$_('production.beadEdge')}</th>{/if}
         </tr></thead>
         <tbody>
           {#each allGlaslat as item}
             <tr>
               <td>{item.mark}</td>
-              <td>{item.position}</td>
+              <td>{item.pieceId} · {item.position}</td>
               <td>{item.material}</td>
               <td class="num">{Math.round(item.widthMm)}</td>
               <td class="num">{Math.round(item.heightMm)}</td>
-              <td class="num">{Math.round(item.totalLengthMm)}</td>
-              <td class="num">{item.mitered ? "45°" : "90°"}</td>
+              <td class="num">{item.contourRuns?.length ? mm.format(item.totalLengthMm) : Math.round(item.totalLengthMm)}</td>
+              <td class="num">{item.contourRuns?.length ? "—" : item.mitered ? "45°" : "90°"}</td>
               <td class="num">{item.quantity}</td>
+              {#if hasBentBeads}
+                <td class="shape-cell">
+                  {#each item.contourRuns || [] as run}
+                    <div>{mm.format(run.lengthMm)} mm {run.radiusMm == null ? "" : `(R ${mm.format(run.radiusMm)})`}</div>
+                  {/each}
+                </td>
+              {/if}
             </tr>
           {/each}
         </tbody>
@@ -498,6 +588,12 @@
     text-align: right;
   }
 
+  thead th.shape-column {
+    width: 18%;
+    text-align: left;
+    white-space: normal;
+  }
+
   tbody tr {
     border-bottom: 1px solid var(--border-color, #e5e7eb);
   }
@@ -518,4 +614,15 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+
+  .cut-reference { color: var(--text-secondary); font-size: 12px; line-height: 1.5; margin: 0 0 var(--sp-3); }
+  .timber-table { table-layout: auto; min-width: 980px; }
+  .timber-table th { white-space: normal; }
+  .timber-table small { display: block; margin-top: 2px; font-size: 10px; color: var(--text-muted); }
+  .notch-detail { white-space: normal; font-size: 11px; }
+  .notch-detail summary { cursor: pointer; }
+
+  .shape-cell { white-space: normal; }
+  .shape-cell svg { display: block; margin-bottom: 3px; }
+  .shape-cell summary { cursor: pointer; }
 </style>

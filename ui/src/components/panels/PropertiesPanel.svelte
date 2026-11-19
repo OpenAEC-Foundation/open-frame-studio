@@ -1,10 +1,12 @@
 <script>
-  import { _ } from "svelte-i18n";
+  import { _, locale } from "svelte-i18n";
   import { invoke } from "../../lib/tauri.js";
   import {
     currentKozijn,
+    currentGeometry,
     selectedCellIndex,
     selectedMember,
+    selectedTimberJoints,
     selectedLayoutLeafId,
     setKozijnLayout,
     updateDimensions,
@@ -21,14 +23,19 @@
     addFrameExtension,
     removeFrameExtension,
   } from "../../stores/kozijn.js";
-  import { gridToLayout } from "../../lib/layout.js";
+  import { gridToLayout, ensureIds, layoutToRects } from "../../lib/layout.js";
   import VakVullingPanel from "./VakVullingPanel.svelte";
   import { allProfiles } from "../../stores/profiles.js";
   import { toast } from "../../stores/toast.js";
-  import { PANEL_TYPE_KEYS, panelLabel, memberLabel } from "../../lib/labels.js";
+  import { PANEL_TYPE_KEYS, panelLabel, memberLabel, timberMemberType } from "../../lib/labels.js";
+  import { archJointLabel, endLabel, jointMemberLabel, receiverLabel } from "../../lib/dividerJoinery.js";
   import HardwarePanel from "./HardwarePanel.svelte";
   import JointPanel from "./JointPanel.svelte";
   import GlazingPanel from "./GlazingPanel.svelte";
+  import GlazingDimensions from "./GlazingDimensions.svelte";
+  import DividerEndMeasure from "./DividerEndMeasure.svelte";
+  import ArchEndMeasure from "./ArchEndMeasure.svelte";
+  import ReceivedMortises from "./ReceivedMortises.svelte";
   import PanelFillingPanel from "./PanelFillingPanel.svelte";
   import GlaslatPanel from "./GlaslatPanel.svelte";
   import ProfileSelector from "./ProfileSelector.svelte";
@@ -61,10 +68,44 @@
       ? $currentKozijn.cells[$selectedCellIndex]
       : null;
 
+  function selectedOpening(k, geom, leafId, cellIndex) {
+    if (!k || !geom) return null;
+    if ((k.frame.shape?.shapeType ?? "rectangular") !== "rectangular" && !geom.curvedFrame) return null;
+    const index = k.layout && leafId
+      ? layoutToRects(ensureIds(k.layout), geom.innerRect, k.frame.frameWidth).leaves.findIndex(l => l.node.id === leafId)
+      : cellIndex;
+    return geom.cellRects?.find(cr => cr.cellIndex === index);
+  }
+  $: opening = selectedOpening($currentKozijn, $currentGeometry, $selectedLayoutLeafId, $selectedCellIndex);
+  $: timber = $currentGeometry?.curvedTimber?.find(piece => timberMemberType(piece) === $selectedMember?.type && piece.index === $selectedMember.index);
+  $: dividerParts = $currentGeometry?.curvedDividerTimber?.filter(p =>
+    $selectedMember?.type === (p.vertical ? "divider_v" : "divider_h") && $selectedMember.index === p.sourceIndex) ?? [];
+  $: divider = dividerParts.find(p => p.pieceIndex === ($selectedMember?.pieceIndex ?? 0));
+  $: incoming = $selectedTimberJoints.filter(j => j.received && j.tenon).map(j => ({
+    label: jointMemberLabel($_, $currentGeometry, j.piece),
+    endLabel: j.corner == null ? endLabel($_, j.piece.vertical, j.side) : archJointLabel($_, j.corner, j.kind), tenon: j.tenon,
+  }));
+  $: outgoing = $selectedTimberJoints.filter(j => !j.received);
+  $: timberMm = new Intl.NumberFormat($locale || "nl", { maximumFractionDigits: 1 });
+
   function handleDimensionChange() {
     if (editWidth > 0 && editHeight > 0) {
       updateDimensions(editWidth, editHeight);
     }
+  }
+
+  function maxArchHeight(frame) {
+    return Math.max(0, Math.min(frame.outerWidth / 2, frame.outerHeight - frame.frameWidth));
+  }
+
+  function changeArchHeight(input, frame) {
+    const max = maxArchHeight(frame);
+    if (max <= 0) return;
+    const previous = frame.shape.archHeight || frame.outerWidth / 4;
+    const height = Math.min(max, Math.max(Math.min(1, max), input.valueAsNumber || previous));
+    input.value = String(height);
+    const { shapeType, topWidth, leftAngle, rightAngle } = frame.shape;
+    updateFrameShape(shapeType, height, topWidth, leftAngle, rightAngle);
   }
 
   $: panelTypes = Object.keys(PANEL_TYPE_KEYS).map(value => ({
@@ -97,10 +138,10 @@
     if (member.type === "frame_left") return frame.leftProfile || null;
     if (member.type === "frame_right") return frame.rightProfile || null;
     if (member.type === "divider_v") {
-      return kozijn.grid.columns[member.index + 1]?.dividerProfile || null;
+      return !kozijn.layout && kozijn.grid.columns[member.index + 1]?.dividerProfile || null;
     }
     if (member.type === "divider_h") {
-      return kozijn.grid.rows[member.index + 1]?.dividerProfile || null;
+      return !kozijn.layout && kozijn.grid.rows[member.index + 1]?.dividerProfile || null;
     }
     return null;
   }
@@ -110,13 +151,13 @@
     const override = getMemberOverride(member, $currentKozijn);
     if (override) return override;
     const frame = $currentKozijn.frame;
-    if (member.type === "frame_bottom") return frame.sillProfile || frame.profile;
+    if (member.type === "frame_bottom" && frame.shape?.shapeType !== "round") return frame.sillProfile || frame.profile;
     return frame.profile;
   }
 
   function getMemberProfileFilter(member) {
     if (!member) return "frame";
-    if (member.type === "frame_bottom") return "sill";
+    if (member.type === "frame_bottom" && $currentKozijn?.frame.shape?.shapeType !== "round") return "sill";
     if (member.type === "divider_v" || member.type === "divider_h") return "divider";
     return "frame";
   }
@@ -191,6 +232,17 @@
         <input type="text" value={$currentKozijn.mark} disabled />
       </div>
       <div class="field-row">
+        {#if $currentKozijn.frame.shape?.shapeType === "round"}
+        <div class="field">
+          <label>{$_('props.diameter')}</label>
+          <input type="number" min="200" max="4000" step="any"
+            value={Math.min(editWidth, editHeight)}
+            onchange={(e) => {
+              const diameter = e.currentTarget.valueAsNumber;
+              if (diameter > 0) updateDimensions(diameter, diameter);
+            }} />
+        </div>
+        {:else}
         <div class="field">
           <label>{$_('props.width')}</label>
           <input
@@ -213,10 +265,12 @@
             max="4000"
           />
         </div>
+        {/if}
       </div>
       <div class="field">
         <label>{$_('props.material')}</label>
-        <div class="value">{$currentKozijn.frame.material?.wood || $_('props.wood')}</div>
+        <div class="value">{$currentKozijn.frame.material?.wood ||
+          $_('material.' + ($currentKozijn.frame.material === 'wood_aluminum' ? 'woodAluminum' : $currentKozijn.frame.material))}</div>
       </div>
     </div>
 
@@ -258,14 +312,20 @@
         label={$_('props.frameProfile')}
         filter="frame"
         value={$currentKozijn.frame.profile}
-        onchange={(detail) => updateFrameProfile(detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
+        onchange={(p) => updateFrameProfile(p.id, p.name, p.width, p.depth, p.snapshot, p.material, p.materialSubtype)}
       />
-      <ProfileSelector
-        label={$_('props.sillProfile')}
-        filter="sill"
-        value={$currentKozijn.frame.sillProfile}
-        onchange={(detail) => updateSillProfile(detail.id, detail.name)}
-      />
+      {#if $currentKozijn.frame.shape?.shapeType === "round"}
+        <ProfileSelector label={$_('member.lowerArc')} filter="frame"
+          value={$currentKozijn.frame.bottomProfile || $currentKozijn.frame.profile}
+          onchange={(p) => updateMemberProfile("frame_bottom", null, p.id, p.name, p.width, p.depth)} />
+      {:else}
+        <ProfileSelector
+          label={$_('props.sillProfile')}
+          filter="sill"
+          value={$currentKozijn.frame.sillProfile}
+          onchange={(detail) => updateSillProfile(detail.id, detail.name)}
+        />
+      {/if}
     </div>
 
     <div class="section">
@@ -295,11 +355,11 @@
           <label>{$_('props.archHeight')}</label>
           <input
             type="number"
-            value={$currentKozijn.frame.shape.archHeight || Math.round($currentKozijn.frame.outerWidth / 6)}
-            onchange={(e) => updateFrameShape($currentKozijn.frame.shape.shapeType, parseFloat(e.target.value))}
-            min="50"
-            max={Math.round($currentKozijn.frame.outerHeight / 2)}
-            step="10"
+            value={Math.min(maxArchHeight($currentKozijn.frame), $currentKozijn.frame.shape.archHeight || $currentKozijn.frame.outerWidth / 4)}
+            onchange={(e) => changeArchHeight(e.currentTarget, $currentKozijn.frame)}
+            min={Math.min(1, maxArchHeight($currentKozijn.frame))}
+            max={maxArchHeight($currentKozijn.frame)}
+            step="any"
           />
         </div>
       {/if}
@@ -311,10 +371,10 @@
             <label>{$_('props.leftAngle') || "Hoek links (°)"}</label>
             <input
               type="number"
-              value={shape.leftAngle || 75}
+              value={shape.leftAngle ?? 90}
               onchange={(e) => {
                 const angle = parseFloat(e.target.value);
-                updateFrameShape(shapeType, shape.archHeight, shape.topWidth, angle, shape.rightAngle || 75);
+                updateFrameShape(shapeType, shape.archHeight, shape.topWidth, angle, shape.rightAngle ?? 90);
               }}
               min="45" max="90" step="1"
             />
@@ -323,10 +383,10 @@
             <label>{$_('props.rightAngle') || "Hoek rechts (°)"}</label>
             <input
               type="number"
-              value={shape.rightAngle || 75}
+              value={shape.rightAngle ?? 90}
               onchange={(e) => {
                 const angle = parseFloat(e.target.value);
-                updateFrameShape(shapeType, shape.archHeight, shape.topWidth, shape.leftAngle || 75, angle);
+                updateFrameShape(shapeType, shape.archHeight, shape.topWidth, shape.leftAngle ?? 90, angle);
               }}
               min="45" max="90" step="1"
             />
@@ -354,7 +414,7 @@
     <div class="section">
       <h3>{$_('props.gridSizes')}</h3>
       <div class="field">
-        <button class="convert-btn" onclick={() => setKozijnLayout(gridToLayout($currentKozijn))}>
+        <button class="convert-btn" onclick={() => setKozijnLayout(gridToLayout($currentKozijn, $currentGeometry))}>
           → Vrije indeling activeren
         </button>
         <p class="hint-text">Zet het raster om naar de vrije indeling: per vak
@@ -405,6 +465,14 @@
     {#if $currentKozijn.layout && $selectedLayoutLeafId}
       <VakVullingPanel />
     {/if}
+    {#if opening?.fit && !$selectedMember}
+      <GlazingDimensions fit={opening.fit} paired={!!opening.secondFit && !opening.fit.contours?.sashOuter}
+        timber={typeof $currentKozijn.frame.material === "object" || $currentKozijn.frame.material === "wood_aluminum"} />
+      {#if opening.secondFit?.contours?.sashOuter}
+        <GlazingDimensions fit={opening.secondFit}
+          timber={typeof $currentKozijn.frame.material === "object" || $currentKozijn.frame.material === "wood_aluminum"} />
+      {/if}
+    {/if}
 
     {#if $selectedMember}
       {@const memberOverride = getMemberOverride($selectedMember, $currentKozijn)}
@@ -412,14 +480,44 @@
         <h3>{$_('member.title')}</h3>
         <div class="field">
           <label>{$_('member.type')}</label>
-          <div class="value">{getMemberLabel($selectedMember)}</div>
+          <div class="value">{timber?.arc ? memberLabel($_, "frame_arc", timber.profileSide) : getMemberLabel($selectedMember)}
+            {#if divider && dividerParts.length > 1} · {$_("divider.partNumber", { values: { n: divider.pieceIndex + 1 } })}{/if}
+          </div>
         </div>
+        {#if divider}
+          <div class="divider-measures">
+            <div class="field"><label>{$_("production.net")}</label><div class="value">{timberMm.format(divider.netLengthMm)} mm</div></div>
+            <div class="field-row">
+              <div class="field"><label>{$_(divider.vertical ? "divider.top" : "divider.left")}</label><div class="value">
+                <DividerEndMeasure end={divider.start} vertical={divider.vertical} receiverName={receiverLabel($_, $currentGeometry, outgoing.find(j => j.side === "start"))} />
+              </div></div>
+              <div class="field"><label>{$_(divider.vertical ? "divider.bottom" : "divider.right")}</label><div class="value">
+                <DividerEndMeasure end={divider.end} vertical={divider.vertical} receiverName={receiverLabel($_, $currentGeometry, outgoing.find(j => j.side === "end"))} />
+              </div></div>
+            </div>
+          </div>
+        {/if}
+        {#each $selectedTimberJoints.filter(j => j.corner != null) as joint}
+          <ArchEndMeasure {joint} received={joint.received} mate={jointMemberLabel($_, $currentGeometry, joint.received ? joint.piece : joint.receiver)} />
+        {/each}
+        {#if incoming.length}<ReceivedMortises entries={incoming} />{/if}
+        {#if $selectedTimberJoints.some(j => j.tenon)}<p class="joint-key">{$_("joinery.overlayKey")}</p>{/if}
+        {#if timber?.arc}
+          <div class="field-row">
+            <div class="field"><label>{$_("production.outerRadius")}</label><div class="value">{timberMm.format(timber.arc.outerRadiusMm)} mm</div></div>
+            <div class="field"><label>{$_("production.outerArcLength")}</label><div class="value">{timberMm.format(timber.arc.outerLengthMm)} mm</div></div>
+          </div>
+        {/if}
+        {#if divider && $currentKozijn.layout}
+          <div class="field"><label>{$_('member.profile')}</label><div class="value">{$currentKozijn.frame.profile.name}</div></div>
+        {:else}
         <ProfileSelector
           label={$_('member.profile')}
           filter={getMemberProfileFilter($selectedMember)}
           value={getMemberProfile($selectedMember)}
           onchange={(detail) => handleMemberProfileChange(detail)}
         />
+        {/if}
         <div class="field">
           <label>{$_('props.memberOverride')}</label>
           {#if memberOverride}
@@ -464,6 +562,7 @@
           {/if}
         {/if}
       </div>
+      {#if timber}<JointPanel />{/if}
     {:else if selectedCell && !$currentKozijn.layout}
       <!-- Cel-eigenschappen horen bij de matrix; op een vrije-indeling-kozijn
            zouden ze de onzichtbare (vestigiale) cellen muteren zonder effect. -->
@@ -495,21 +594,23 @@
               <option value="right">{$_('props.right')}</option>
             </select>
           </div>
+        {/if}
+        {#if ["turn_tilt", "turn", "tilt", "top_hung", "bottom_hung", "pivot"].includes(selectedCell.panelType)}
           <ProfileSelector
             label={$_('props.sashProfile')}
             filter="sash"
             value={selectedCell.sashProfile}
-            onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth)}
+            onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />
           {#if selectedCell.sashProfile}
             <div class="field-row">
               <div class="field">
                 <label>{$_('props.sashWidth')}</label>
-                <div class="value">{selectedCell.sashWidth || 54}mm</div>
+                <div class="value">{selectedCell.sashWidth ?? 69} mm</div>
               </div>
               <div class="field">
                 <label>{$_('props.sashDepth')}</label>
-                <div class="value">{selectedCell.sashDepth || 67}mm</div>
+                <div class="value">{selectedCell.sashDepth ?? 90} mm</div>
               </div>
             </div>
           {/if}
@@ -530,7 +631,7 @@
             label={$_('props.doorProfile')}
             filter="sash"
             value={selectedCell.sashProfile}
-            onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth)}
+            onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />
         {/if}
       </div>
@@ -706,6 +807,7 @@
 </div>
 
 <style>
+  .joint-key { margin: 6px 0; font-size: 11px; color: var(--text-secondary); }
   .panel {
     width: 100%;
     height: 100%;
