@@ -1,7 +1,12 @@
-use crate::kozijn::{GridDivision, Kozijn, PanelType, OpeningDirection};
+use crate::kozijn::{GridDivision, Kozijn, OpeningDirection, PanelType};
 use crate::template::KozijnSjabloon;
 
 // ── Sjabloon-aware templates ──────────────────────────────────
+
+fn system_divider_width(profile_id: &str, sj: &KozijnSjabloon) -> Option<f64> {
+    crate::glazing_fit::catalog_snapshot(profile_id, &sj.material)
+        .and_then(|profile| profile.divider_face_width)
+}
 
 pub fn template_single_turn_tilt_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn {
     let mut k = Kozijn::new_with_sjabloon("Draaikiepraam", "K01", width, height, sj);
@@ -14,12 +19,23 @@ pub fn template_single_turn_tilt_sj(width: f64, height: f64, sj: &KozijnSjabloon
 pub fn template_double_turn_tilt_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn {
     let fw = sj.frame_width;
     let inner_w = width - 2.0 * fw;
-    let half = (inner_w - fw) / 2.0;
+    let divider_w = system_divider_width(&sj.tussenstijl_profile.id, sj).unwrap_or(fw);
+    let half = (inner_w - divider_w) / 2.0;
 
     let mut k = Kozijn::new_with_sjabloon("Dubbel draaikiepraam", "K01", width, height, sj);
     k.grid.columns = vec![
-        GridDivision { size: half, divider_profile: None },
-        GridDivision { size: half, divider_profile: Some(sj.tussenstijl_profile.clone()) },
+        GridDivision {
+            size: half,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        },
+        GridDivision {
+            size: half,
+            divider_profile: Some(sj.tussenstijl_profile.clone()),
+            divider_width: (divider_w != fw).then_some(divider_w),
+            divider_depth: None,
+        },
     ];
     k.rebuild_cells();
     k.cells[0].panel_type = PanelType::TurnTilt;
@@ -34,12 +50,23 @@ pub fn template_double_turn_tilt_sj(width: f64, height: f64, sj: &KozijnSjabloon
 pub fn template_sliding_door_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn {
     let fw = sj.frame_width;
     let inner_w = width - 2.0 * fw;
-    let half = (inner_w - fw) / 2.0;
+    let divider_w = system_divider_width(&sj.tussenstijl_profile.id, sj).unwrap_or(fw);
+    let half = (inner_w - divider_w) / 2.0;
 
     let mut k = Kozijn::new_with_sjabloon("Schuifpui", "P01", width, height, sj);
     k.grid.columns = vec![
-        GridDivision { size: half, divider_profile: None },
-        GridDivision { size: half, divider_profile: Some(sj.tussenstijl_profile.clone()) },
+        GridDivision {
+            size: half,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        },
+        GridDivision {
+            size: half,
+            divider_profile: Some(sj.tussenstijl_profile.clone()),
+            divider_width: (divider_w != fw).then_some(divider_w),
+            divider_depth: None,
+        },
     ];
     k.rebuild_cells();
     k.cells[0].panel_type = PanelType::FixedGlass;
@@ -52,12 +79,23 @@ pub fn template_front_door_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> K
     let fw = sj.frame_width;
     let inner_h = height - 2.0 * fw;
     let top_light = 400.0;
-    let door_h = inner_h - top_light - fw;
+    let divider_h = system_divider_width(&sj.tussendorpel_profile.id, sj).unwrap_or(fw);
+    let door_h = inner_h - top_light - divider_h;
 
     let mut k = Kozijn::new_with_sjabloon("Voordeur", "D01", width, height, sj);
     k.grid.rows = vec![
-        GridDivision { size: top_light, divider_profile: None },
-        GridDivision { size: door_h, divider_profile: Some(sj.tussendorpel_profile.clone()) },
+        GridDivision {
+            size: top_light,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        },
+        GridDivision {
+            size: door_h,
+            divider_profile: Some(sj.tussendorpel_profile.clone()),
+            divider_width: (divider_h != fw).then_some(divider_h),
+            divider_depth: None,
+        },
     ];
     k.rebuild_cells();
     k.cells[0].panel_type = PanelType::FixedGlass;
@@ -78,12 +116,23 @@ pub fn template_top_hung_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Koz
 pub fn template_lift_slide_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn {
     let fw = sj.frame_width;
     let inner_w = width - 2.0 * fw;
-    let half = (inner_w - fw) / 2.0;
+    let divider_w = system_divider_width(&sj.tussenstijl_profile.id, sj).unwrap_or(fw);
+    let half = (inner_w - divider_w) / 2.0;
 
     let mut k = Kozijn::new_with_sjabloon("Hefschuifpui", "P01", width, height, sj);
     k.grid.columns = vec![
-        GridDivision { size: half, divider_profile: None },
-        GridDivision { size: half, divider_profile: Some(sj.tussenstijl_profile.clone()) },
+        GridDivision {
+            size: half,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        },
+        GridDivision {
+            size: half,
+            divider_profile: Some(sj.tussenstijl_profile.clone()),
+            divider_width: (divider_w != fw).then_some(divider_w),
+            divider_depth: None,
+        },
     ];
     k.rebuild_cells();
     k.cells[0].panel_type = PanelType::FixedGlass;
@@ -103,12 +152,23 @@ pub fn template_pivot_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn
 pub fn template_stolp_sj(width: f64, height: f64, sj: &KozijnSjabloon) -> Kozijn {
     let fw = sj.frame_width;
     let inner_w = width - 2.0 * fw;
-    let half = (inner_w - fw) / 2.0;
+    let divider_w = system_divider_width(&sj.tussenstijl_profile.id, sj).unwrap_or(fw);
+    let half = (inner_w - divider_w) / 2.0;
 
     let mut k = Kozijn::new_with_sjabloon("Stolpraam", "K01", width, height, sj);
     k.grid.columns = vec![
-        GridDivision { size: half, divider_profile: None },
-        GridDivision { size: half, divider_profile: Some(sj.tussenstijl_profile.clone()) },
+        GridDivision {
+            size: half,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        },
+        GridDivision {
+            size: half,
+            divider_profile: Some(sj.tussenstijl_profile.clone()),
+            divider_width: (divider_w != fw).then_some(divider_w),
+            divider_depth: None,
+        },
     ];
     k.rebuild_cells();
     k.cells[0].panel_type = PanelType::Turn;

@@ -8,13 +8,21 @@
   let filteredProfiles = $derived(($allProfiles || []).filter(p => {
     if (material && p.material !== material) return false;
     if (!filter) return true;
-    return (p.applicableAs || []).includes(filter) || p.id === systemProfile?.id;
+    if (!(p.applicableAs || []).includes(filter) && p.id !== systemProfile?.id) return false;
+    if (["sash", "sliding_sash", "divider"].includes(filter) && systemProfile && ["aluminum", "pvc"].includes(p.material)) {
+      const active = ($allProfiles || []).find(candidate => candidate.id === systemProfile.id);
+      const activeSystem = active && resolveProfileSnapshot(active).systemId;
+      const profileSystem = resolveProfileSnapshot(p).systemId;
+      if (!activeSystem || profileSystem !== activeSystem) return p.id === systemProfile.id;
+    }
+    return true;
   }).map(p => {
     const snapshot = resolveProfileSnapshot(p);
     const systemSash = ["sash", "sliding_sash"].includes(filter) && ["aluminum", "pvc"].includes(p.material);
+    const systemDivider = filter === "divider" && ["aluminum", "pvc"].includes(p.material);
     return {
       id: p.id, name: p.name, material: p.material, materialSubtype: p.materialSubtype, snapshot,
-      width: (systemSash && snapshot.sashFaceWidth) || p.width,
+      width: (systemSash && snapshot.sashFaceWidth) || (systemDivider && snapshot.dividerFaceWidth) || p.width,
       depth: (systemSash && snapshot.sashBuildDepth) || p.depth,
     };
   }));

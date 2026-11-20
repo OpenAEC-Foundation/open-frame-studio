@@ -3,8 +3,8 @@
 //! Exposes the same domain logic as the Tauri backend, but callable
 //! from JavaScript in a browser. All data passes as JSON strings.
 
-use wasm_bindgen::prelude::*;
 use std::sync::Mutex;
+use wasm_bindgen::prelude::*;
 
 use ofs_core::kozijn::{Kozijn, Project};
 use ofs_core::production::compute_production_data;
@@ -155,10 +155,17 @@ pub fn update_kozijn_dimensions(id: &str, width: f64, height: f64) -> Result<Str
 /// Browser twin of the Tauri `update_grid_sizes`: typed vak sizes stay exact,
 /// untouched vakken absorb the difference (chain keeps closing on binnenmaat).
 #[wasm_bindgen]
-pub fn update_grid_sizes(id: &str, column_sizes: Vec<f64>, row_sizes: Vec<f64>, rows_from_day: Option<bool>) -> Result<String, String> {
+pub fn update_grid_sizes(
+    id: &str,
+    column_sizes: Vec<f64>,
+    row_sizes: Vec<f64>,
+    rows_from_day: Option<bool>,
+) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        if rows_from_day == Some(true) { p.kozijnen[idx].grid.rows_from_day = true; }
+        if rows_from_day == Some(true) {
+            p.kozijnen[idx].grid.rows_from_day = true;
+        }
         p.kozijnen[idx].set_grid_sizes_fitted(&column_sizes, &row_sizes);
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
@@ -237,7 +244,9 @@ pub fn update_cell_panel_filling(
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
         if cell_index < k.cells.len() {
-            if let Ok(filling) = serde_json::from_str::<ofs_core::panel_filling::PanelFilling>(panel_filling_json) {
+            if let Ok(filling) =
+                serde_json::from_str::<ofs_core::panel_filling::PanelFilling>(panel_filling_json)
+            {
                 k.cells[cell_index].panel_filling = Some(filling);
             }
         }
@@ -264,28 +273,24 @@ pub fn update_cell_glaslat(
 }
 
 #[wasm_bindgen]
-pub fn update_kozijn_layout(
-    id: &str,
-    layout_json: &str,
-) -> Result<String, String> {
+pub fn update_kozijn_layout(id: &str, layout_json: &str) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let trimmed = layout_json.trim();
         p.kozijnen[idx].layout = if trimmed.is_empty() || trimmed == "null" {
             None
         } else {
-            Some(serde_json::from_str::<ofs_core::layout::VakNode>(trimmed).map_err(|e| e.to_string())?)
+            Some(
+                serde_json::from_str::<ofs_core::layout::VakNode>(trimmed)
+                    .map_err(|e| e.to_string())?,
+            )
         };
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
 
 #[wasm_bindgen]
-pub fn update_cell_escape(
-    id: &str,
-    cell_index: usize,
-    is_escape: bool,
-) -> Result<String, String> {
+pub fn update_cell_escape(id: &str, cell_index: usize, is_escape: bool) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
@@ -309,16 +314,22 @@ pub fn update_cell_sash_profile(
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
-        let cell = k.cells.get_mut(cell_index).ok_or("Cel niet gevonden")?;
-        cell.sash_profile_snapshot = profile_snapshot_json.as_deref()
-            .map(serde_json::from_str).transpose().map_err(|e| format!("Ongeldig profiel: {e}"))?
+        let snapshot = profile_snapshot_json
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(|e| format!("Ongeldig profiel: {e}"))?
             .flatten();
-        cell.sash_profile = Some(ofs_core::profile::ProfileRef {
-            id: profile_id.to_string(),
-            name: profile_name.to_string(),
-        });
-        cell.sash_width = Some(sash_width);
-        cell.sash_depth = Some(sash_depth);
+        k.update_cell_sash_profile(
+            cell_index,
+            ofs_core::profile::ProfileRef {
+                id: profile_id.to_string(),
+                name: profile_name.to_string(),
+            },
+            sash_width,
+            sash_depth,
+            snapshot,
+        )?;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -334,15 +345,11 @@ pub fn update_perimeter_stop(id: &str, profile_json: &str) -> Result<String, Str
 }
 
 #[wasm_bindgen]
-pub fn update_edge_config(
-    id: &str,
-    edge_index: usize,
-    edge_json: &str,
-) -> Result<String, String> {
+pub fn update_edge_config(id: &str, edge_index: usize, edge_json: &str) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        let edge: ofs_core::edge::EdgeConfig = serde_json::from_str(edge_json)
-            .map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
+        let edge: ofs_core::edge::EdgeConfig =
+            serde_json::from_str(edge_json).map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
         let k = &mut p.kozijnen[idx];
         // Ensure edges vector has 4 entries (left, right, top, bottom)
         while k.frame.edges.len() < 4 {
@@ -356,7 +363,11 @@ pub fn update_edge_config(
 }
 
 #[wasm_bindgen]
-pub fn update_corner_joints(id: &str, joints_json: &str, configured: Option<bool>) -> Result<String, String> {
+pub fn update_corner_joints(
+    id: &str,
+    joints_json: &str,
+    configured: Option<bool>,
+) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let joints: Vec<ofs_core::joint::Joint> = serde_json::from_str(joints_json)
@@ -378,9 +389,8 @@ pub fn update_frame_shape(
 ) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        let st: ofs_core::kozijn::ShapeType =
-            serde_json::from_str(&format!("\"{}\"", shape_type))
-                .map_err(|e| format!("Ongeldig shape type: {}", e))?;
+        let st: ofs_core::kozijn::ShapeType = serde_json::from_str(&format!("\"{}\"", shape_type))
+            .map_err(|e| format!("Ongeldig shape type: {}", e))?;
         let k = &mut p.kozijnen[idx];
         // Merge with the existing shape: None arguments keep the stored value
         // (same semantics as the Tauri command).
@@ -415,8 +425,14 @@ pub fn update_frame_profile(
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
         k.apply_frame_profile(
-            ofs_core::profile::ProfileRef { id: profile_id.into(), name: profile_name.into() },
-            profile_width, profile_depth, profile_snapshot_json.as_deref(), profile_material_json.as_deref(),
+            ofs_core::profile::ProfileRef {
+                id: profile_id.into(),
+                name: profile_name.into(),
+            },
+            profile_width,
+            profile_depth,
+            profile_snapshot_json.as_deref(),
+            profile_material_json.as_deref(),
         )?;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
@@ -445,42 +461,22 @@ pub fn update_member_profile(
     member_index: Option<u32>,
     profile_id: &str,
     profile_name: &str,
-    _profile_width: Option<f64>,
-    _profile_depth: Option<f64>,
+    profile_width: Option<f64>,
+    profile_depth: Option<f64>,
 ) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
-        let profile = ofs_core::profile::ProfileRef {
-            id: profile_id.to_string(),
-            name: profile_name.to_string(),
-        };
-        // Same member mapping as the Tauri command: per-member frame
-        // overrides, dividers by index (+1: the first column/row carries no
-        // divider). Width/depth are accepted but not applied per-member (the
-        // Tauri command ignores them too — per-member widths need geometry
-        // support first).
-        match member_type {
-            "frame_top" => k.frame.top_profile = Some(profile),
-            "frame_bottom" => k.frame.bottom_profile = Some(profile),
-            "frame_left" => k.frame.left_profile = Some(profile),
-            "frame_right" => k.frame.right_profile = Some(profile),
-            "divider_v" => {
-                if let Some(i) = member_index {
-                    if let Some(col) = k.grid.columns.get_mut(i as usize + 1) {
-                        col.divider_profile = Some(profile);
-                    }
-                }
-            }
-            "divider_h" => {
-                if let Some(i) = member_index {
-                    if let Some(row) = k.grid.rows.get_mut(i as usize + 1) {
-                        row.divider_profile = Some(profile);
-                    }
-                }
-            }
-            _ => return Err(format!("Onbekend member type: {}", member_type)),
-        }
+        k.update_member_profile(
+            member_type,
+            member_index.map(|i| i as usize),
+            ofs_core::profile::ProfileRef {
+                id: profile_id.to_string(),
+                name: profile_name.to_string(),
+            },
+            profile_width,
+            profile_depth,
+        )?;
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -489,8 +485,11 @@ pub fn update_member_profile(
 pub fn add_column(id: &str, position: f64, elevation: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        if elevation == Some(true) { p.kozijnen[idx].add_divider_in_elevation(false, position); }
-        else { p.kozijnen[idx].add_column(position); }
+        if elevation == Some(true) {
+            p.kozijnen[idx].add_divider_in_elevation(false, position);
+        } else {
+            p.kozijnen[idx].add_column(position);
+        }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -499,8 +498,11 @@ pub fn add_column(id: &str, position: f64, elevation: Option<bool>) -> Result<St
 pub fn add_row(id: &str, position: f64, elevation: Option<bool>) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        if elevation == Some(true) { p.kozijnen[idx].add_divider_in_elevation(true, position); }
-        else { p.kozijnen[idx].add_row(position); }
+        if elevation == Some(true) {
+            p.kozijnen[idx].add_divider_in_elevation(true, position);
+        } else {
+            p.kozijnen[idx].add_row(position);
+        }
         Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
     })?
 }
@@ -522,8 +524,13 @@ pub fn get_glass_library() -> String {
 }
 
 #[wasm_bindgen]
-pub fn update_cell_glazing(id: &str, cell_index: usize, glazing_json: &str) -> Result<String, String> {
-    let glazing = serde_json::from_str(glazing_json).map_err(|e| format!("Ongeldige beglazing: {}", e))?;
+pub fn update_cell_glazing(
+    id: &str,
+    cell_index: usize,
+    glazing_json: &str,
+) -> Result<String, String> {
+    let glazing =
+        serde_json::from_str(glazing_json).map_err(|e| format!("Ongeldige beglazing: {}", e))?;
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
         let k = &mut p.kozijnen[idx];
@@ -554,7 +561,11 @@ pub fn get_kozijn_geometry(id: &str) -> Result<String, String> {
 #[wasm_bindgen]
 pub fn get_production_data_project() -> Result<String, String> {
     with_project(|p| {
-        let data: Vec<_> = p.kozijnen.iter().map(|k| compute_production_data(k)).collect();
+        let data: Vec<_> = p
+            .kozijnen
+            .iter()
+            .map(|k| compute_production_data(k))
+            .collect();
         serde_json::to_string(&data).unwrap()
     })
 }
@@ -658,10 +669,14 @@ pub fn get_export_data(id: &str) -> Result<String, String> {
 #[wasm_bindgen]
 pub fn get_project_export_data() -> Result<String, String> {
     with_project(|p| {
-        let data: Vec<_> = p.kozijnen.iter().map(|k| {
-            let prod = compute_production_data(k);
-            serde_json::json!({ "kozijn": k, "production": prod })
-        }).collect();
+        let data: Vec<_> = p
+            .kozijnen
+            .iter()
+            .map(|k| {
+                let prod = compute_production_data(k);
+                serde_json::json!({ "kozijn": k, "production": prod })
+            })
+            .collect();
         serde_json::to_string(&data).unwrap()
     })
 }
@@ -688,13 +703,17 @@ mod tests {
 
         let timber: Vec<serde_json::Value> =
             serde_json::from_str(include_str!("../../profiles/wood/raamhout.json")).unwrap();
-        let sash = timber.iter().find(|p| p["id"] == "raamhout-69x90-opdek").unwrap();
+        let sash = timber
+            .iter()
+            .find(|p| p["id"] == "raamhout-69x90-opdek")
+            .unwrap();
         add_custom_profile(&sash.to_string()).unwrap();
         let saved = save_project_json().unwrap();
         new_project("Leeg", "").unwrap();
         open_project_json(&saved).unwrap();
 
-        let profiles: Vec<serde_json::Value> = serde_json::from_str(&get_custom_profiles().unwrap()).unwrap();
+        let profiles: Vec<serde_json::Value> =
+            serde_json::from_str(&get_custom_profiles().unwrap()).unwrap();
         assert_eq!(profiles.len(), 2);
         assert_eq!(profiles[0]["name"], edited["name"]);
         assert!(edited["innerWalls"].as_array().unwrap().len() > 1);
@@ -703,10 +722,16 @@ mod tests {
             serde_json::from_value::<Vec<[f64; 2]>>(profile["crossSection"].clone()).unwrap()
         };
         assert_eq!(contour(&profiles[0]), contour(&edited));
-        assert_eq!(profiles[0]["sponning"]["position"], edited["sponning"]["position"]);
+        assert_eq!(
+            profiles[0]["sponning"]["position"],
+            edited["sponning"]["position"]
+        );
         assert_eq!(profiles[1]["sponning"]["sponningType"], "draaikiep");
         assert_eq!(profiles[1]["sponning"]["opdekWidth"].as_f64(), Some(13.0));
-        assert_eq!(profiles[1]["kaderdichtingGroef"], sash["kaderdichtingGroef"]);
+        assert_eq!(
+            profiles[1]["kaderdichtingGroef"],
+            sash["kaderdichtingGroef"]
+        );
     }
 
     #[test]

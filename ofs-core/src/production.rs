@@ -1,20 +1,23 @@
 use serde::{Deserialize, Serialize};
 
 use crate::curved_contour::{Contour, SashLeaf, Segment};
-use crate::curved_timber::{ArchJoint, CurvedTimberMember, DividerTenon, FrameMemberRef, TenonIssue, TenonReceiver, TimberArc, TimberProfileSide, TimberRole};
+use crate::curved_timber::{
+    ArchJoint, CurvedTimberMember, DividerTenon, FrameMemberRef, TenonIssue, TenonReceiver,
+    TimberArc, TimberProfileSide, TimberRole,
+};
+use crate::glazing_fit::compatible_profile;
 use crate::joint::{effective_corner_joints, Joint, JointType, ThroughMember};
 use crate::kozijn::{Kozijn, Material, PanelType};
 use crate::layout::{intersect_interval_unions, Vakvulling};
-use crate::glazing_fit::compatible_profile;
 mod system;
 
 // ── Cut list constants ─────────────────────────────────────────────
 
-const WOOD_PEN_ALLOWANCE_MM: f64 = 20.0;   // tenon allowance per side
-const SAW_KERF_MM: f64 = 4.0;              // saw blade width
-const PVC_WELD_OVERMEASURE_MM: f64 = 4.0;  // weld overmeasure per side
-const GLASS_CLEARANCE_MM: f64 = 4.0;       // legacy glass/panel clearance per side (kozijnen zonder profielsnapshot; panelen altijd)
-const GASKET_OVERLAP_MM: f64 = 20.0;       // gasket overlap at corners
+const WOOD_PEN_ALLOWANCE_MM: f64 = 20.0; // tenon allowance per side
+const SAW_KERF_MM: f64 = 4.0; // saw blade width
+const PVC_WELD_OVERMEASURE_MM: f64 = 4.0; // weld overmeasure per side
+const GLASS_CLEARANCE_MM: f64 = 4.0; // legacy glass/panel clearance per side (kozijnen zonder profielsnapshot; panelen altijd)
+const GASKET_OVERLAP_MM: f64 = 20.0; // gasket overlap at corners
 
 // ── Data structures ────────────────────────────────────────────────
 
@@ -39,11 +42,17 @@ pub struct ProductionData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum DividerJointEnd { Start, End }
+pub enum DividerJointEnd {
+    Start,
+    End,
+}
 
 impl DividerJointEnd {
     pub fn label_nl(self) -> &'static str {
-        match self { Self::Start => "Begin", Self::End => "Eind" }
+        match self {
+            Self::Start => "Begin",
+            Self::End => "Eind",
+        }
     }
 }
 
@@ -60,12 +69,20 @@ pub struct ArchJointItem {
 
 impl ArchJointItem {
     pub fn side_nl(&self) -> &'static str {
-        if self.joint.corner == 0 { "Links" } else { "Rechts" }
+        if self.joint.corner == 0 {
+            "Links"
+        } else {
+            "Rechts"
+        }
     }
 }
 
 pub(crate) fn z_band_text(bands: &[[f64; 2]]) -> String {
-    bands.iter().map(|band| format!("{:.1}-{:.1}", band[0], band[1])).collect::<Vec<_>>().join(" / ")
+    bands
+        .iter()
+        .map(|band| format!("{:.1}-{:.1}", band[0], band[1]))
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,11 +100,16 @@ pub struct DividerJointItem {
 
 impl DividerJointItem {
     pub(crate) fn z_bands(&self) -> String {
-        self.tenon.as_ref().map(|t| z_band_text(&t.z_from_inside_mm)).unwrap_or_default()
+        self.tenon
+            .as_ref()
+            .map(|t| z_band_text(&t.z_from_inside_mm))
+            .unwrap_or_default()
     }
 
     pub fn issue_text(&self) -> String {
-        self.issue.map(|reason| reason.to_string()).unwrap_or_default()
+        self.issue
+            .map(|reason| reason.to_string())
+            .unwrap_or_default()
     }
 }
 
@@ -100,30 +122,72 @@ pub(crate) struct CutJoinery<'a> {
 
 impl CutJoinery<'_> {
     pub fn received_text(&self) -> String {
-        self.mortises.iter().filter_map(|j| j.tenon.as_ref().map(|t|
-            format!("{} {} ({} x {:.1} mm)", j.piece_id, j.end.label_nl(), t.z_from_inside_mm.len(), t.mortise_depth_mm)
-        )).collect::<Vec<_>>().join(" | ")
+        self.mortises
+            .iter()
+            .filter_map(|j| {
+                j.tenon.as_ref().map(|t| {
+                    format!(
+                        "{} {} ({} x {:.1} mm)",
+                        j.piece_id,
+                        j.end.label_nl(),
+                        t.z_from_inside_mm.len(),
+                        t.mortise_depth_mm
+                    )
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
     }
 }
 
 impl ProductionData {
     pub fn blank_length_mm(&self, cut: &CutListItem) -> Option<f64> {
-        let unresolved = self.arch_joints.iter().any(|row| row.piece_id == cut.piece_id && row.joint.issue.is_some());
+        let unresolved = self
+            .arch_joints
+            .iter()
+            .any(|row| row.piece_id == cut.piece_id && row.joint.issue.is_some());
         (!unresolved).then_some(cut.gross_length_mm)
     }
 
-    pub(crate) fn arch_joint_text(&self, piece_id: &str, end: DividerJointEnd, kind: crate::curved_timber::ArchJointKind) -> Option<String> {
-        self.arch_joints.iter().filter(|row| row.joint.kind == kind).find_map(|row| {
-            let (part, partner, partner_end, pen) = if row.piece_id == piece_id && row.end == end {
-                ("Pen", &row.receiver_piece_id, row.receiver_end, true)
-            } else if row.receiver_piece_id == piece_id && row.receiver_end == end {
-                ("Gat", &row.piece_id, row.end, false)
-            } else { return None };
-            let measure = row.joint.tenon.as_ref().map(|t| format!("{:.1} mm",
-                if pen { t.tenon_length_mm } else { t.mortise_depth_mm }))
-                .or_else(|| row.joint.issue.map(|issue| issue.to_string())).unwrap_or_default();
-            Some(format!("{part} {measure} / {partner} {}", partner_end.label_nl()))
-        })
+    pub(crate) fn arch_joint_text(
+        &self,
+        piece_id: &str,
+        end: DividerJointEnd,
+        kind: crate::curved_timber::ArchJointKind,
+    ) -> Option<String> {
+        self.arch_joints
+            .iter()
+            .filter(|row| row.joint.kind == kind)
+            .find_map(|row| {
+                let (part, partner, partner_end, pen) =
+                    if row.piece_id == piece_id && row.end == end {
+                        ("Pen", &row.receiver_piece_id, row.receiver_end, true)
+                    } else if row.receiver_piece_id == piece_id && row.receiver_end == end {
+                        ("Gat", &row.piece_id, row.end, false)
+                    } else {
+                        return None;
+                    };
+                let measure = row
+                    .joint
+                    .tenon
+                    .as_ref()
+                    .map(|t| {
+                        format!(
+                            "{:.1} mm",
+                            if pen {
+                                t.tenon_length_mm
+                            } else {
+                                t.mortise_depth_mm
+                            }
+                        )
+                    })
+                    .or_else(|| row.joint.issue.map(|issue| issue.to_string()))
+                    .unwrap_or_default();
+                Some(format!(
+                    "{part} {measure} / {partner} {}",
+                    partner_end.label_nl()
+                ))
+            })
     }
 
     pub(crate) fn joint_index(&self) -> std::collections::HashMap<&str, CutJoinery<'_>> {
@@ -212,8 +276,10 @@ pub struct CutListItem {
 
 impl CutListItem {
     pub(crate) fn has_curved_cut(&self) -> bool {
-        self.arc.is_some() || self.divider_start.is_some()
-            || self.start_cope_radius_mm.is_some() || self.end_cope_radius_mm.is_some()
+        self.arc.is_some()
+            || self.divider_start.is_some()
+            || self.start_cope_radius_mm.is_some()
+            || self.end_cope_radius_mm.is_some()
     }
 
     pub fn member_label_nl(&self) -> &'static str {
@@ -236,7 +302,10 @@ impl CutListItem {
     }
 
     pub fn notch_text(r: &crate::geometry::Rect2D) -> String {
-        format!("x {:.1}, y {:.1}, b {:.1}, h {:.1}", r.x, r.y, r.width, r.height)
+        format!(
+            "x {:.1}, y {:.1}, b {:.1}, h {:.1}",
+            r.x, r.y, r.width, r.height
+        )
     }
 }
 
@@ -252,32 +321,58 @@ pub struct GlassListItem {
     pub ug_value: f64,
     pub area_m2: f64,
     pub quantity: u32,
+    /// False when the selected system article combination or glass thickness
+    /// fails a verified product limit; the pane remains visible for correction.
+    #[serde(default = "glass_ready_default")]
+    pub production_ready: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub production_issue: Option<String>,
     /// Finished cut outline in mm, relative to the top-left of the pane's
     /// bounding box (x right, y down). Rectangular panes need only width/height.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cut_contour: Option<Contour>,
 }
 
+fn glass_ready_default() -> bool {
+    true
+}
+
 impl GlassListItem {
     pub fn dimension_text(&self, mm: f64) -> String {
-        if self.cut_contour.is_some() { format!("{mm:.1}") } else { format!("{mm:.0}") }
+        if self.cut_contour.is_some() {
+            format!("{mm:.1}")
+        } else {
+            format!("{mm:.0}")
+        }
     }
 
     pub fn shape_label_nl(&self) -> String {
-        let Some(contour) = &self.cut_contour else { return "Rechthoek".into() };
-        if contour.segments.iter().all(|e| matches!(e, Segment::Arc { .. })) {
+        let Some(contour) = &self.cut_contour else {
+            return "Rechthoek".into();
+        };
+        if contour
+            .segments
+            .iter()
+            .all(|e| matches!(e, Segment::Arc { .. }))
+        {
             return format!("Rond Ø{:.1}", self.width_mm);
         }
-        contour.segments.iter().find_map(|e| match e {
-            Segment::Arc { radius, .. } => Some(format!("Boog R{radius:.1}")),
-            _ => None,
-        }).unwrap_or_else(|| "Veelhoek".into())
+        contour
+            .segments
+            .iter()
+            .find_map(|e| match e {
+                Segment::Arc { radius, .. } => Some(format!("Boog R{radius:.1}")),
+                _ => None,
+            })
+            .unwrap_or_else(|| "Veelhoek".into())
     }
 
     /// Ordered cutting instructions in the same local x-right, y-down plane as
     /// the drawing. Including both endpoints distinguishes mirrored panes.
     pub fn cut_steps(&self) -> Vec<String> {
-        let Some(cut) = &self.cut_contour else { return Vec::new() };
+        let Some(cut) = &self.cut_contour else {
+            return Vec::new();
+        };
         cut.segments.iter().map(cut_step).collect()
     }
 }
@@ -287,9 +382,20 @@ pub(crate) fn cut_step(segment: &Segment) -> String {
     let b = segment.to();
     match segment {
         Segment::Line { .. } => format!("L ({:.1},{:.1}) -> ({:.1},{:.1})", a[0], a[1], b[0], b[1]),
-        Segment::Arc { center, radius, sweep_angle, .. } => format!(
+        Segment::Arc {
+            center,
+            radius,
+            sweep_angle,
+            ..
+        } => format!(
             "R{radius:.1} M({:.1},{:.1}) ({:.1},{:.1}) -> ({:.1},{:.1}) {:.2}°",
-            center[0], center[1], a[0], a[1], b[0], b[1], sweep_angle.to_degrees(),
+            center[0],
+            center[1],
+            a[0],
+            a[1],
+            b[0],
+            b[1],
+            sweep_angle.to_degrees(),
         ),
     }
 }
@@ -355,7 +461,11 @@ pub struct SealReference {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SealMeasureLine { GlazingDay, BeadOpening, SashOuter }
+pub enum SealMeasureLine {
+    GlazingDay,
+    BeadOpening,
+    SashOuter,
+}
 
 impl SealMeasureLine {
     pub fn label_nl(self) -> &'static str {
@@ -429,9 +539,7 @@ fn gross_length(net: f64, material: &Material, miter: bool) -> f64 {
             // but add saw kerf
             net + 2.0 * SAW_KERF_MM
         }
-        Material::Pvc => {
-            net + 2.0 * PVC_WELD_OVERMEASURE_MM + SAW_KERF_MM
-        }
+        Material::Pvc => net + 2.0 * PVC_WELD_OVERMEASURE_MM + SAW_KERF_MM,
         Material::WoodAluminum => {
             // Wood rules for the wood part
             net + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM
@@ -441,7 +549,11 @@ fn gross_length(net: f64, material: &Material, miter: bool) -> f64 {
 
 fn divider_gross(net: f64, material: &Material) -> f64 {
     // A mechanical T-junction has square butt ends; only the saw kerf consumes stock.
-    if material.is_profile_system() { net + SAW_KERF_MM } else { gross_length(net, material, false) }
+    if material.is_profile_system() {
+        net + SAW_KERF_MM
+    } else {
+        gross_length(net, material, false)
+    }
 }
 
 fn miter_angle(material: &Material) -> f64 {
@@ -469,14 +581,20 @@ fn miter_gross_length(net: f64, material: &Material, fw: f64) -> f64 {
 /// Total for all four beads. Square-cut verticals fit between the horizontals.
 fn glaslat_total_length(fit: &crate::glazing_fit::GlazingFit) -> f64 {
     let horizontal = (fit.rebate.width - 1.0).max(0.0);
-    let end_reduction = if fit.bead_mitered { 0.0 } else { 2.0 * fit.bead_height };
+    let end_reduction = if fit.bead_mitered {
+        0.0
+    } else {
+        2.0 * fit.bead_height
+    };
     let vertical = (fit.rebate.height - end_reduction - 1.0).max(0.0);
     2.0 * (horizontal + vertical)
 }
 
 fn is_rectangular_contour(contour: &Contour) -> bool {
-    contour.segments.iter().all(|s| matches!(s, Segment::Line { from, to }
-        if (from[0] - to[0]).abs() < 1e-7 || (from[1] - to[1]).abs() < 1e-7))
+    contour.segments.iter().all(|s| {
+        matches!(s, Segment::Line { from, to }
+        if (from[0] - to[0]).abs() < 1e-7 || (from[1] - to[1]).abs() < 1e-7)
+    })
 }
 
 fn piece_cut_contour(contour: &Contour) -> Option<Contour> {
@@ -491,8 +609,17 @@ fn piece_cut_contour(contour: &Contour) -> Option<Contour> {
     let mut cut = contour.clone();
     for edge in &mut cut.segments {
         match edge {
-            Segment::Line { from, to } => { local(from); local(to); }
-            Segment::Arc { from, to, center, .. } => { local(from); local(to); local(center); }
+            Segment::Line { from, to } => {
+                local(from);
+                local(to);
+            }
+            Segment::Arc {
+                from, to, center, ..
+            } => {
+                local(from);
+                local(to);
+                local(center);
+            }
         }
     }
     Some(cut)
@@ -506,16 +633,25 @@ fn bead_runs(contour: &Contour) -> Vec<BeadRun> {
     // Split arcs at the circle's parameter seam form one continuous bend.
     let mut runs: Vec<BeadRun> = Vec::new();
     for edge in &contour.segments {
-        let radius_mm = match edge { Segment::Arc { radius, .. } => Some(*radius), _ => None };
+        let radius_mm = match edge {
+            Segment::Arc { radius, .. } => Some(*radius),
+            _ => None,
+        };
         if let Some(last) = runs.last_mut() {
             if radius_mm.is_some() && last.radius_mm == radius_mm {
                 last.length_mm += edge.length();
                 continue;
             }
         }
-        runs.push(BeadRun { length_mm: edge.length(), radius_mm });
+        runs.push(BeadRun {
+            length_mm: edge.length(),
+            radius_mm,
+        });
     }
-    if runs.len() > 1 && runs[0].radius_mm.is_some() && runs[0].radius_mm == runs.last().unwrap().radius_mm {
+    if runs.len() > 1
+        && runs[0].radius_mm.is_some()
+        && runs[0].radius_mm == runs.last().unwrap().radius_mm
+    {
         let end = runs.pop().unwrap();
         runs[0].length_mm += end.length_mm;
     }
@@ -538,7 +674,11 @@ fn push_sash_members(
     outer_height: f64,
     sash_w: f64,
 ) {
-    let stile_net = if is_miter { (outer_height - 2.0 * sash_w).max(0.0) } else { outer_height };
+    let stile_net = if is_miter {
+        (outer_height - 2.0 * sash_w).max(0.0)
+    } else {
+        outer_height
+    };
     let rail_net = (outer_width - 2.0 * sash_w).max(0.0);
     let members = [
         ("SL", MemberType::SashLeft, stile_net),
@@ -564,7 +704,13 @@ fn push_sash_members(
             miter_left_deg: angle,
             miter_right_deg: angle,
             quantity: 1,
-            arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+            arc: None,
+            profile_side: None,
+            start_cope_radius_mm: None,
+            end_cope_radius_mm: None,
+            divider_start: None,
+            divider_end: None,
+            masonry_notches: Vec::new(),
         });
     }
 }
@@ -753,7 +899,12 @@ fn stepped_frame_spans(kozijn: &Kozijn, fw: f64) -> (f64, f64, f64, f64) {
     };
     let lg = crate::layout::compute_layout_geometry(
         node,
-        crate::layout::LayoutRect { x: fw, y: fw, width: ow - 2.0 * fw, height: oh - 2.0 * fw },
+        crate::layout::LayoutRect {
+            x: fw,
+            y: fw,
+            width: ow - 2.0 * fw,
+            height: oh - 2.0 * fw,
+        },
         fw,
     );
     if !lg.leaves.iter().any(|l| l.vulling.is_buiten()) {
@@ -797,7 +948,8 @@ fn stepped_frame_spans(kozijn: &Kozijn, fw: f64) -> (f64, f64, f64, f64) {
         }
     }
     // Covered clear extent + the two corner members = outer member span.
-    let span = |acc: Option<(f64, f64)>, full: f64| acc.map_or(full, |(lo, hi)| (hi - lo) + 2.0 * fw);
+    let span =
+        |acc: Option<(f64, f64)>, full: f64| acc.map_or(full, |(lo, hi)| (hi - lo) + 2.0 * fw);
     (
         span(left, oh),
         span(right, oh),
@@ -820,11 +972,25 @@ fn material_name(material: &Material) -> &'static str {
     }
 }
 
-fn system_stock_name(frame: &crate::kozijn::Frame, material: &Material, stock: Option<&crate::profile::ProfileRef>) -> String {
-    stock.filter(|p| compatible_profile(&p.id, material))
+fn system_stock_name(
+    frame: &crate::kozijn::Frame,
+    material: &Material,
+    stock: Option<&crate::profile::ProfileRef>,
+) -> String {
+    stock
+        .filter(|p| compatible_profile(&p.id, material))
         .or_else(|| compatible_profile(&frame.profile.id, material).then_some(&frame.profile))
-        .map_or_else(|| format!("{} {}x{} mm", material_name(material), frame.frame_width, frame.frame_depth),
-            |p| p.name.clone())
+        .map_or_else(
+            || {
+                format!(
+                    "{} {}x{} mm",
+                    material_name(material),
+                    frame.frame_width,
+                    frame.frame_depth
+                )
+            },
+            |p| p.name.clone(),
+        )
 }
 
 /// Both fixed and moving timber are cut from the same finished faces used in the elevation.
@@ -845,18 +1011,31 @@ fn formed_timber_cut(
         format!("{assembly}-{suffix}")
     };
     CutListItem {
-        piece_id, member_type, profile_name: profile.into(), material: material_name(material).into(),
-        net_length_mm: member.net_length_mm, gross_length_mm,
-        miter_left_deg: member.start_angle_deg, miter_right_deg: member.end_angle_deg,
-        quantity: 1, arc: member.arc.clone(),
+        piece_id,
+        member_type,
+        profile_name: profile.into(),
+        material: material_name(material).into(),
+        net_length_mm: member.net_length_mm,
+        gross_length_mm,
+        miter_left_deg: member.start_angle_deg,
+        miter_right_deg: member.end_angle_deg,
+        quantity: 1,
+        arc: member.arc.clone(),
         profile_side: member.arc.as_ref().map(|_| member.profile_side),
-        start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None,
+        start_cope_radius_mm: None,
+        end_cope_radius_mm: None,
+        divider_start: None,
+        divider_end: None,
         masonry_notches: member.masonry_notches.clone(),
     }
 }
 
 fn curved_sash_cut(
-    member: &CurvedTimberMember, assembly: &str, prefix: &str, profile: &str, material: &Material,
+    member: &CurvedTimberMember,
+    assembly: &str,
+    prefix: &str,
+    profile: &str,
+    material: &Material,
 ) -> CutListItem {
     let (kind, position) = match member.role {
         TimberRole::Arc => (MemberType::SashArc, "BO"),
@@ -874,61 +1053,142 @@ fn curved_sash_cut(
         Material::Aluminum => 0.0,
     };
     let gross = member.net_length_mm + allowance + SAW_KERF_MM;
-    formed_timber_cut(member, assembly, &format!("{prefix}{position}"), kind, profile, material, gross)
+    formed_timber_cut(
+        member,
+        assembly,
+        &format!("{prefix}{position}"),
+        kind,
+        profile,
+        material,
+        gross,
+    )
 }
 
 /// Curved stock is dimensioned on the finished outer arc. Its gross value is
 /// developed length plus the joint allowances and one kerf, in millimetres.
-fn curved_frame_cuts(kozijn: &Kozijn, geometry: &crate::geometry::KozijnGeometry2D) -> Vec<CutListItem> {
+fn curved_frame_cuts(
+    kozijn: &Kozijn,
+    geometry: &crate::geometry::KozijnGeometry2D,
+) -> Vec<CutListItem> {
     let frame = &kozijn.frame;
     let joints = effective_corner_joints(&frame.corner_joints, frame.joints_configured);
     let round = frame.shape.shape_type == crate::kozijn::ShapeType::Round;
-    geometry.curved_timber.iter().map(|member| {
-        let (kind, suffix, profile, material, orientation) = match member.role {
-            TimberRole::Top => (MemberType::FrameTop, "DB", &frame.top_profile, &frame.top_material, FrameOrientation::Dorpel),
-            TimberRole::Left => (MemberType::FrameLeft, "SL", &frame.left_profile, &frame.left_material, FrameOrientation::Stijl),
-            TimberRole::Right => (MemberType::FrameRight, "SR", &frame.right_profile, &frame.right_material, FrameOrientation::Stijl),
-            TimberRole::Bottom => (MemberType::FrameBottom, "DO", &frame.bottom_profile, &frame.bottom_material, FrameOrientation::Dorpel),
-            TimberRole::Arc if matches!(member.profile_side, TimberProfileSide::Bottom) =>
-                (MemberType::FrameArc, "BO", &frame.bottom_profile, &frame.bottom_material, FrameOrientation::Dorpel),
-            TimberRole::Arc => (MemberType::FrameArc, "BO", &frame.top_profile, &frame.top_material, FrameOrientation::Dorpel),
-        };
-        let material = material.as_ref().unwrap_or(&frame.material);
-        let fallback_profile = if kind == MemberType::FrameBottom { frame.sill_profile.as_ref() } else { None };
-        let profile = profile.as_ref().or(fallback_profile);
-        let stock_name = system_stock_name(frame, material, profile);
-        // Each tongue belongs to one physical blank. Its developed extension
-        // already covers every Z-band, including a double mortise and tenon.
-        let extension: f64 = geometry.arch_joints.iter().filter(|j|
-            j.source.role == member.role && j.source.index == member.index)
-            .filter_map(|j| j.tenon.as_ref()).map(|t| t.blank_extension_mm).sum();
-        let mut gross = member.net_length_mm + extension + SAW_KERF_MM;
-        for corner in [member.start_corner, member.end_corner].into_iter().flatten() {
-            if round {
-                if matches!(material, Material::Pvc) { gross += PVC_WELD_OVERMEASURE_MM; }
-                continue;
-            }
-            if corner < 2 && matches!(material, Material::Wood(_) | Material::WoodAluminum) { continue; }
-            // Net already reaches the long point, so there is no extra miter allowance.
-            gross += if let Some(joints) = joints {
-                joint_end_allowance(orientation, joints[corner], material, 0.0)
-            } else {
-                match (material, orientation) {
-                    (Material::Wood(_) | Material::WoodAluminum, FrameOrientation::Stijl) => WOOD_PEN_ALLOWANCE_MM,
-                    (Material::Pvc, _) => PVC_WELD_OVERMEASURE_MM,
-                    _ => 0.0,
-                }
+    geometry
+        .curved_timber
+        .iter()
+        .map(|member| {
+            let (kind, suffix, profile, material, orientation) = match member.role {
+                TimberRole::Top => (
+                    MemberType::FrameTop,
+                    "DB",
+                    &frame.top_profile,
+                    &frame.top_material,
+                    FrameOrientation::Dorpel,
+                ),
+                TimberRole::Left => (
+                    MemberType::FrameLeft,
+                    "SL",
+                    &frame.left_profile,
+                    &frame.left_material,
+                    FrameOrientation::Stijl,
+                ),
+                TimberRole::Right => (
+                    MemberType::FrameRight,
+                    "SR",
+                    &frame.right_profile,
+                    &frame.right_material,
+                    FrameOrientation::Stijl,
+                ),
+                TimberRole::Bottom => (
+                    MemberType::FrameBottom,
+                    "DO",
+                    &frame.bottom_profile,
+                    &frame.bottom_material,
+                    FrameOrientation::Dorpel,
+                ),
+                TimberRole::Arc if matches!(member.profile_side, TimberProfileSide::Bottom) => (
+                    MemberType::FrameArc,
+                    "BO",
+                    &frame.bottom_profile,
+                    &frame.bottom_material,
+                    FrameOrientation::Dorpel,
+                ),
+                TimberRole::Arc => (
+                    MemberType::FrameArc,
+                    "BO",
+                    &frame.top_profile,
+                    &frame.top_material,
+                    FrameOrientation::Dorpel,
+                ),
             };
-        }
-        formed_timber_cut(member, &kozijn.mark, suffix, kind, &stock_name, material, gross)
-    }).collect()
+            let material = material.as_ref().unwrap_or(&frame.material);
+            let fallback_profile = if kind == MemberType::FrameBottom {
+                frame.sill_profile.as_ref()
+            } else {
+                None
+            };
+            let profile = profile.as_ref().or(fallback_profile);
+            let stock_name = system_stock_name(frame, material, profile);
+            // Each tongue belongs to one physical blank. Its developed extension
+            // already covers every Z-band, including a double mortise and tenon.
+            let extension: f64 = geometry
+                .arch_joints
+                .iter()
+                .filter(|j| j.source.role == member.role && j.source.index == member.index)
+                .filter_map(|j| j.tenon.as_ref())
+                .map(|t| t.blank_extension_mm)
+                .sum();
+            let mut gross = member.net_length_mm + extension + SAW_KERF_MM;
+            for corner in [member.start_corner, member.end_corner]
+                .into_iter()
+                .flatten()
+            {
+                if round {
+                    if matches!(material, Material::Pvc) {
+                        gross += PVC_WELD_OVERMEASURE_MM;
+                    }
+                    continue;
+                }
+                if corner < 2 && matches!(material, Material::Wood(_) | Material::WoodAluminum) {
+                    continue;
+                }
+                // Net already reaches the long point, so there is no extra miter allowance.
+                gross += if let Some(joints) = joints {
+                    joint_end_allowance(orientation, joints[corner], material, 0.0)
+                } else {
+                    match (material, orientation) {
+                        (Material::Wood(_) | Material::WoodAluminum, FrameOrientation::Stijl) => {
+                            WOOD_PEN_ALLOWANCE_MM
+                        }
+                        (Material::Pvc, _) => PVC_WELD_OVERMEASURE_MM,
+                        _ => 0.0,
+                    }
+                };
+            }
+            formed_timber_cut(
+                member,
+                &kozijn.mark,
+                suffix,
+                kind,
+                &stock_name,
+                material,
+                gross,
+            )
+        })
+        .collect()
 }
 
-fn arch_joints(geometry: &crate::geometry::KozijnGeometry2D, cuts: &[CutListItem]) -> Vec<ArchJointItem> {
+fn arch_joints(
+    geometry: &crate::geometry::KozijnGeometry2D,
+    cuts: &[CutListItem],
+) -> Vec<ArchJointItem> {
     let mut result = Vec::new();
     for joint in &geometry.arch_joints {
         let find_end = |part: &FrameMemberRef| {
-            let (piece, cut) = geometry.curved_timber.iter().zip(cuts)
+            let (piece, cut) = geometry
+                .curved_timber
+                .iter()
+                .zip(cuts)
                 .find(|(p, _)| p.role == part.role && p.index == part.index)?;
             let end = if piece.start_corner == Some(joint.corner) {
                 DividerJointEnd::Start
@@ -940,53 +1200,101 @@ fn arch_joints(geometry: &crate::geometry::KozijnGeometry2D, cuts: &[CutListItem
             Some((cut.piece_id.clone(), end))
         };
         if let (Some((piece_id, end)), Some((receiver_piece_id, receiver_end))) =
-            (find_end(&joint.source), find_end(&joint.receiver)) {
-            result.push(ArchJointItem { piece_id, end, receiver_piece_id, receiver_end, joint: joint.clone() });
+            (find_end(&joint.source), find_end(&joint.receiver))
+        {
+            result.push(ArchJointItem {
+                piece_id,
+                end,
+                receiver_piece_id,
+                receiver_end,
+                joint: joint.clone(),
+            });
         }
     }
     result
 }
 
-fn curved_divider_cuts(kozijn: &Kozijn, geometry: &crate::geometry::KozijnGeometry2D) -> Vec<CutListItem> {
+fn curved_divider_cuts(
+    kozijn: &Kozijn,
+    geometry: &crate::geometry::KozijnGeometry2D,
+) -> Vec<CutListItem> {
     let members = &geometry.curved_divider_timber;
     let mut source_counts = std::collections::HashMap::new();
     for member in members {
-        *source_counts.entry((member.vertical, member.source_index)).or_insert(0) += 1;
+        *source_counts
+            .entry((member.vertical, member.source_index))
+            .or_insert(0) += 1;
     }
-    members.iter().map(|member| {
-        let (kind, suffix, divisions) = if member.vertical {
-            (MemberType::DividerV, "TS", &kozijn.grid.columns)
-        } else {
-            (MemberType::DividerH, "TD", &kozijn.grid.rows)
-        };
-        let grid = kozijn.layout.is_none();
-        let slot = if grid { member.source_index + 1 } else { member.source_index };
-        let profile = if grid { divisions.get(slot).and_then(|d| d.divider_profile.as_ref()) } else { None };
-        let mut id = format!("{}-{suffix}{slot}", kozijn.mark);
-        if source_counts[&(member.vertical, member.source_index)] > 1 {
-            id.push_str(&format!(".{}", member.piece_index + 1));
-        }
-        CutListItem {
-            piece_id: id, member_type: kind, profile_name: system_stock_name(&kozijn.frame, &kozijn.frame.material, profile),
-            material: material_name(&kozijn.frame.material).into(),
-            net_length_mm: member.net_length_mm,
-            gross_length_mm: if matches!(kozijn.frame.material, Material::Wood(_) | Material::WoodAluminum) {
-                member.net_length_mm + SAW_KERF_MM
-                    + member.start.tenon.as_ref().map_or(0.0, |t| t.blank_extension_mm)
-                    + member.end.tenon.as_ref().map_or(0.0, |t| t.blank_extension_mm)
+    members
+        .iter()
+        .map(|member| {
+            let (kind, suffix, divisions) = if member.vertical {
+                (MemberType::DividerV, "TS", &kozijn.grid.columns)
             } else {
-                divider_gross(member.net_length_mm, &kozijn.frame.material)
-            },
-            miter_left_deg: member.start.angle_deg, miter_right_deg: member.end.angle_deg,
-            start_cope_radius_mm: member.start.radius_mm, end_cope_radius_mm: member.end.radius_mm,
-            divider_start: Some(member.start.clone()), divider_end: Some(member.end.clone()),
-            quantity: 1, arc: None, profile_side: None, masonry_notches: Vec::new(),
-        }
-    }).collect()
+                (MemberType::DividerH, "TD", &kozijn.grid.rows)
+            };
+            let grid = kozijn.layout.is_none();
+            let slot = if grid {
+                member.source_index + 1
+            } else {
+                member.source_index
+            };
+            let profile = if grid {
+                divisions.get(slot).and_then(|d| d.divider_profile.as_ref())
+            } else {
+                None
+            };
+            let mut id = format!("{}-{suffix}{slot}", kozijn.mark);
+            if source_counts[&(member.vertical, member.source_index)] > 1 {
+                id.push_str(&format!(".{}", member.piece_index + 1));
+            }
+            CutListItem {
+                piece_id: id,
+                member_type: kind,
+                profile_name: system_stock_name(&kozijn.frame, &kozijn.frame.material, profile),
+                material: material_name(&kozijn.frame.material).into(),
+                net_length_mm: member.net_length_mm,
+                gross_length_mm: if matches!(
+                    kozijn.frame.material,
+                    Material::Wood(_) | Material::WoodAluminum
+                ) {
+                    member.net_length_mm
+                        + SAW_KERF_MM
+                        + member
+                            .start
+                            .tenon
+                            .as_ref()
+                            .map_or(0.0, |t| t.blank_extension_mm)
+                        + member
+                            .end
+                            .tenon
+                            .as_ref()
+                            .map_or(0.0, |t| t.blank_extension_mm)
+                } else {
+                    divider_gross(member.net_length_mm, &kozijn.frame.material)
+                },
+                miter_left_deg: member.start.angle_deg,
+                miter_right_deg: member.end.angle_deg,
+                start_cope_radius_mm: member.start.radius_mm,
+                end_cope_radius_mm: member.end.radius_mm,
+                divider_start: Some(member.start.clone()),
+                divider_end: Some(member.end.clone()),
+                quantity: 1,
+                arc: None,
+                profile_side: None,
+                masonry_notches: Vec::new(),
+            }
+        })
+        .collect()
 }
 
-fn divider_joints(geometry: &crate::geometry::KozijnGeometry2D, cuts: &[CutListItem]) -> Vec<DividerJointItem> {
-    if geometry.curved_divider_timber.is_empty() { return vec![]; }
+fn divider_joints(
+    geometry: &crate::geometry::KozijnGeometry2D,
+    cuts: &[CutListItem],
+) -> Vec<DividerJointItem> {
+    if geometry.curved_divider_timber.is_empty() {
+        return vec![];
+    }
     // Both functions emitting these cut rows follow the core's piece order.
     // Reuse the resulting IDs, including suffixes for splits and free layouts.
     let (frame_rows, divider_rows) = cuts.split_at(geometry.curved_timber.len());
@@ -994,18 +1302,36 @@ fn divider_joints(geometry: &crate::geometry::KozijnGeometry2D, cuts: &[CutListI
     let dividers = geometry.curved_divider_timber.iter().zip(divider_rows);
     let mut joints = Vec::new();
     for (piece, cut) in dividers.clone() {
-        for (end, shoulder) in [(DividerJointEnd::Start, &piece.start), (DividerJointEnd::End, &piece.end)] {
-            if shoulder.tenon.is_none() && shoulder.tenon_issue.is_none() { continue; }
+        for (end, shoulder) in [
+            (DividerJointEnd::Start, &piece.start),
+            (DividerJointEnd::End, &piece.end),
+        ] {
+            if shoulder.tenon.is_none() && shoulder.tenon_issue.is_none() {
+                continue;
+            }
             let receiver = shoulder.tenon.as_ref().and_then(|t| match &t.receiver {
-                TenonReceiver::Frame { role, index } => frame.clone()
-                    .find(|(p, _)| p.role == *role && p.index == *index).map(|(_, c)| &c.piece_id),
-                TenonReceiver::Divider { vertical, source_index, piece_index } => dividers.clone()
-                    .find(|(p, _)| (p.vertical, p.source_index, p.piece_index) == (*vertical, *source_index, *piece_index))
+                TenonReceiver::Frame { role, index } => frame
+                    .clone()
+                    .find(|(p, _)| p.role == *role && p.index == *index)
+                    .map(|(_, c)| &c.piece_id),
+                TenonReceiver::Divider {
+                    vertical,
+                    source_index,
+                    piece_index,
+                } => dividers
+                    .clone()
+                    .find(|(p, _)| {
+                        (p.vertical, p.source_index, p.piece_index)
+                            == (*vertical, *source_index, *piece_index)
+                    })
                     .map(|(_, c)| &c.piece_id),
             });
             joints.push(DividerJointItem {
-                piece_id: cut.piece_id.clone(), end, receiver_piece_id: receiver.cloned(),
-                tenon: shoulder.tenon.clone(), issue: shoulder.tenon_issue.clone(),
+                piece_id: cut.piece_id.clone(),
+                end,
+                receiver_piece_id: receiver.cloned(),
+                tenon: shoulder.tenon.clone(),
+                issue: shoulder.tenon_issue.clone(),
             });
         }
     }
@@ -1019,40 +1345,143 @@ fn rectangular_frame_cuts(kozijn: &Kozijn, profile_name: &str) -> Vec<CutListIte
     let corners = effective_corner_joints(&frame.corner_joints, frame.joints_configured);
     let (left, right, top, bottom) = stepped_frame_spans(kozijn, fw);
     let rows = [
-        (MemberType::FrameLeft, "SL", FrameOrientation::Stijl, left, 0, 2),
-        (MemberType::FrameRight, "SR", FrameOrientation::Stijl, right, 1, 3),
-        (MemberType::FrameTop, "DB", FrameOrientation::Dorpel, top, 0, 1),
-        (MemberType::FrameBottom, "DO", FrameOrientation::Dorpel, bottom, 2, 3),
+        (
+            MemberType::FrameLeft,
+            "SL",
+            FrameOrientation::Stijl,
+            left,
+            0,
+            2,
+        ),
+        (
+            MemberType::FrameRight,
+            "SR",
+            FrameOrientation::Stijl,
+            right,
+            1,
+            3,
+        ),
+        (
+            MemberType::FrameTop,
+            "DB",
+            FrameOrientation::Dorpel,
+            top,
+            0,
+            1,
+        ),
+        (
+            MemberType::FrameBottom,
+            "DO",
+            FrameOrientation::Dorpel,
+            bottom,
+            2,
+            3,
+        ),
     ];
-    rows.into_iter().map(|(member_type, suffix, orient, span, start, end)| {
-        let (own_profile, own_material) = match member_type {
-            MemberType::FrameLeft => (&frame.left_profile, &frame.left_material),
-            MemberType::FrameRight => (&frame.right_profile, &frame.right_material),
-            MemberType::FrameTop => (&frame.top_profile, &frame.top_material),
-            _ => (&frame.bottom_profile, &frame.bottom_material),
-        };
-        let mat = own_material.as_ref().unwrap_or(mat);
-        let is_miter = mat.is_profile_system();
-        let cut = frame_member_cut(orient, span, corners.map(|j| (j[start], j[end])),
-            mat, fw, is_miter, miter_angle(mat));
-        let sill = if member_type == MemberType::FrameBottom { frame.sill_profile.as_ref() } else { None };
-        let own_profile = own_profile.as_ref().or(sill);
-        let profile_name = if frame.material.is_profile_system() {
-            system_stock_name(frame, mat, own_profile)
-        } else if !frame.material.is_profile_system() && member_type == MemberType::FrameBottom && frame.sill_profile.is_some() {
-            format!("Dorpel {}", profile_name)
-        } else {
-            profile_name.to_owned()
-        };
-        CutListItem {
-            piece_id: format!("{}-{}", kozijn.mark, suffix), member_type, profile_name,
-            material: material_name(mat).to_owned(), net_length_mm: cut.net, gross_length_mm: cut.gross,
-            miter_left_deg: cut.angle_start, miter_right_deg: cut.angle_end, quantity: 1, arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
-        }
-    }).collect()
+    rows.into_iter()
+        .map(|(member_type, suffix, orient, span, start, end)| {
+            let (own_profile, own_material) = match member_type {
+                MemberType::FrameLeft => (&frame.left_profile, &frame.left_material),
+                MemberType::FrameRight => (&frame.right_profile, &frame.right_material),
+                MemberType::FrameTop => (&frame.top_profile, &frame.top_material),
+                _ => (&frame.bottom_profile, &frame.bottom_material),
+            };
+            let mat = own_material.as_ref().unwrap_or(mat);
+            let is_miter = mat.is_profile_system();
+            let cut = frame_member_cut(
+                orient,
+                span,
+                corners.map(|j| (j[start], j[end])),
+                mat,
+                fw,
+                is_miter,
+                miter_angle(mat),
+            );
+            let sill = if member_type == MemberType::FrameBottom {
+                frame.sill_profile.as_ref()
+            } else {
+                None
+            };
+            let own_profile = own_profile.as_ref().or(sill);
+            let profile_name = if frame.material.is_profile_system() {
+                system_stock_name(frame, mat, own_profile)
+            } else if !frame.material.is_profile_system()
+                && member_type == MemberType::FrameBottom
+                && frame.sill_profile.is_some()
+            {
+                format!("Dorpel {}", profile_name)
+            } else {
+                profile_name.to_owned()
+            };
+            CutListItem {
+                piece_id: format!("{}-{}", kozijn.mark, suffix),
+                member_type,
+                profile_name,
+                material: material_name(mat).to_owned(),
+                net_length_mm: cut.net,
+                gross_length_mm: cut.gross,
+                miter_left_deg: cut.angle_start,
+                miter_right_deg: cut.angle_end,
+                quantity: 1,
+                arc: None,
+                profile_side: None,
+                start_cope_radius_mm: None,
+                end_cope_radius_mm: None,
+                divider_start: None,
+                divider_end: None,
+                masonry_notches: Vec::new(),
+            }
+        })
+        .collect()
 }
 
 // ── Main computation ───────────────────────────────────────────────
+
+fn glass_production_issue(
+    kozijn: &Kozijn,
+    cell: Option<&crate::kozijn::Cell>,
+    fit: &crate::glazing_fit::GlazingFit,
+) -> Option<String> {
+    if let Some(cell) = cell {
+        if let Some(sash) = &cell.sash_profile {
+            let frame_snapshot = kozijn.frame.profile_snapshot.as_ref().or_else(|| {
+                crate::glazing_fit::catalog_snapshot(
+                    &kozijn.frame.profile.id,
+                    &kozijn.frame.material,
+                )
+            });
+            if !crate::glazing_fit::system_profile_pair_compatible(
+                &kozijn.frame.material,
+                &kozijn.frame.profile.id,
+                frame_snapshot,
+                &sash.id,
+                cell.sash_profile_snapshot.as_ref(),
+            ) {
+                return Some(format!(
+                    "Vleugelprofiel '{}' hoort niet bij kozijnsysteem '{}'",
+                    sash.name, kozijn.frame.profile.name,
+                ));
+            }
+        }
+    }
+    if let Some(minimum) = fit.min_glass_thickness {
+        if fit.glass_thickness + 1e-6 < minimum {
+            return Some(format!(
+                "Glasdikte {:.1} mm is kleiner dan systeemminimum {:.1} mm",
+                fit.glass_thickness, minimum
+            ));
+        }
+    }
+    if let Some(maximum) = fit.max_glass_thickness {
+        if fit.glass_thickness > maximum + 1e-6 {
+            return Some(format!(
+                "Glas {} mm overschrijdt systeemmaximum {} mm",
+                fit.glass_thickness, maximum
+            ));
+        }
+    }
+    None
+}
 
 pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
     let mark = &kozijn.mark;
@@ -1106,7 +1535,12 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         // vak contents still match the drawing.
         let lg = crate::layout::compute_layout_geometry_unclipped(
             node,
-            crate::layout::LayoutRect { x: fw, y: fw, width: inner_w, height: inner_h },
+            crate::layout::LayoutRect {
+                x: fw,
+                y: fw,
+                width: inner_w,
+                height: inner_h,
+            },
             fw,
         );
 
@@ -1129,7 +1563,11 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             .map(|l| l.rect)
             .collect();
         let (mut ts, mut td) = (0usize, 0usize);
-        for d in lg.dividers.iter().filter(|_| geometry.curved_frame.is_none()) {
+        for d in lg
+            .dividers
+            .iter()
+            .filter(|_| geometry.curved_frame.is_none())
+        {
             let r = d.rect;
             if d.direction == "v" {
                 // Tussenstijl: only stretches walled in on BOTH sides drop.
@@ -1160,7 +1598,13 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                         miter_left_deg: 90.0,
                         miter_right_deg: 90.0,
                         quantity: 1,
-                        arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                        arc: None,
+                        profile_side: None,
+                        start_cope_radius_mm: None,
+                        end_cope_radius_mm: None,
+                        divider_start: None,
+                        divider_end: None,
+                        masonry_notches: Vec::new(),
                     });
                 }
             } else {
@@ -1209,7 +1653,13 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                         miter_left_deg: 90.0,
                         miter_right_deg: 90.0,
                         quantity: 1,
-                        arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                        arc: None,
+                        profile_side: None,
+                        start_cope_radius_mm: None,
+                        end_cope_radius_mm: None,
+                        divider_start: None,
+                        divider_end: None,
+                        masonry_notches: Vec::new(),
                     });
                 }
             }
@@ -1228,20 +1678,24 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             if l.vulling.is_buiten() {
                 continue;
             }
-            let cell = if cells_aligned { kozijn.cells.get(l.leaf_index) } else { None };
+            let cell = if cells_aligned {
+                kozijn.cells.get(l.leaf_index)
+            } else {
+                None
+            };
             let cell_id = format!("{}-V{}", mark, l.leaf_index + 1);
             let vak_w = l.rect.width;
             let vak_h = l.rect.height;
 
             match &l.vulling {
                 Vakvulling::Glas { .. } | Vakvulling::Raam { .. } | Vakvulling::Deur { .. } => {
-
                     // Hardware van de uitgelijnde cel (raam/deur-vullingen).
                     if !is_system && !matches!(&l.vulling, Vakvulling::Glas { .. }) {
                         if let Some(hw) = cell.and_then(|c| c.hardware_set.as_ref()) {
                             if let Some(ref hinges) = hw.hinges {
                                 hardware_list.push(HardwareListItem {
-                                    piece_id: None, cell_index: l.leaf_index,
+                                    piece_id: None,
+                                    cell_index: l.leaf_index,
                                     component: "Scharnier".into(),
                                     description: format!(
                                         "{:?} - draagkracht {:.0} kg",
@@ -1252,7 +1706,8 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                             }
                             if let Some(ref handle) = hw.handle {
                                 hardware_list.push(HardwareListItem {
-                                    piece_id: None, cell_index: l.leaf_index,
+                                    piece_id: None,
+                                    cell_index: l.leaf_index,
                                     component: "Greep".into(),
                                     description: format!(
                                         "{:?} - hoogte {} mm",
@@ -1263,7 +1718,8 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                             }
                             if let Some(ref locking) = hw.locking {
                                 hardware_list.push(HardwareListItem {
-                                    piece_id: None, cell_index: l.leaf_index,
+                                    piece_id: None,
+                                    cell_index: l.leaf_index,
                                     component: "Sluiting".into(),
                                     description: format!(
                                         "{:?} - {} sluitpunten",
@@ -1313,13 +1769,22 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
         // ── Dividers (grid) ────────────────────────────────────
 
         // Vertical dividers (tussenstijlen)
-        for (i, col) in kozijn.grid.columns.iter().enumerate().filter(|_| geometry.curved_frame.is_none()) {
+        for (i, col) in kozijn
+            .grid
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|_| geometry.curved_frame.is_none())
+        {
             if i > 0 && (is_system || col.divider_profile.is_some()) {
                 let div_net = inner_h;
                 cut_list.push(CutListItem {
                     piece_id: format!("{}-TS{}", mark, i),
                     member_type: MemberType::DividerV,
-                    profile_name: col.divider_profile.as_ref().filter(|p| is_system && compatible_profile(&p.id, mat))
+                    profile_name: col
+                        .divider_profile
+                        .as_ref()
+                        .filter(|p| is_system && compatible_profile(&p.id, mat))
                         .map_or_else(|| profile_name.clone(), |p| p.name.clone()),
                     material: mat_name.clone(),
                     net_length_mm: div_net,
@@ -1327,13 +1792,25 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                     miter_left_deg: 90.0,
                     miter_right_deg: 90.0,
                     quantity: 1,
-                    arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                    arc: None,
+                    profile_side: None,
+                    start_cope_radius_mm: None,
+                    end_cope_radius_mm: None,
+                    divider_start: None,
+                    divider_end: None,
+                    masonry_notches: Vec::new(),
                 });
             }
         }
 
         // Horizontal dividers (tussendorpels)
-        for (i, row) in kozijn.grid.rows.iter().enumerate().filter(|_| geometry.curved_frame.is_none()) {
+        for (i, row) in kozijn
+            .grid
+            .rows
+            .iter()
+            .enumerate()
+            .filter(|_| geometry.curved_frame.is_none())
+        {
             if i > 0 && (is_system || row.divider_profile.is_some()) {
                 let split = is_system && kozijn.grid.columns.len() > 1;
                 let widths: Vec<_> = if split {
@@ -1344,14 +1821,30 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                 for (segment, div_net) in widths.into_iter().enumerate() {
                     let id = format!("{mark}-TD{i}");
                     cut_list.push(CutListItem {
-                        piece_id: if split { format!("{id}.{}", segment + 1) } else { id },
+                        piece_id: if split {
+                            format!("{id}.{}", segment + 1)
+                        } else {
+                            id
+                        },
                         member_type: MemberType::DividerH,
-                        profile_name: row.divider_profile.as_ref().filter(|p| is_system && compatible_profile(&p.id, mat))
+                        profile_name: row
+                            .divider_profile
+                            .as_ref()
+                            .filter(|p| is_system && compatible_profile(&p.id, mat))
                             .map_or_else(|| profile_name.clone(), |p| p.name.clone()),
-                        material: mat_name.clone(), net_length_mm: div_net, gross_length_mm: divider_gross(div_net, mat),
-                        miter_left_deg: 90.0, miter_right_deg: 90.0, quantity: 1,
-                        arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None,
-                        divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                        material: mat_name.clone(),
+                        net_length_mm: div_net,
+                        gross_length_mm: divider_gross(div_net, mat),
+                        miter_left_deg: 90.0,
+                        miter_right_deg: 90.0,
+                        quantity: 1,
+                        arc: None,
+                        profile_side: None,
+                        start_cope_radius_mm: None,
+                        end_cope_radius_mm: None,
+                        divider_start: None,
+                        divider_end: None,
+                        masonry_notches: Vec::new(),
                     });
                 }
             }
@@ -1369,9 +1862,16 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             let cell_id = format!("{}-V{}", mark, i + 1);
 
             match cell.panel_type {
-                PanelType::FixedGlass | PanelType::TurnTilt | PanelType::Turn
-                | PanelType::Tilt | PanelType::Sliding | PanelType::Door
-                | PanelType::TopHung | PanelType::BottomHung | PanelType::LiftSlide | PanelType::Pivot => {}
+                PanelType::FixedGlass
+                | PanelType::TurnTilt
+                | PanelType::Turn
+                | PanelType::Tilt
+                | PanelType::Sliding
+                | PanelType::Door
+                | PanelType::TopHung
+                | PanelType::BottomHung
+                | PanelType::LiftSlide
+                | PanelType::Pivot => {}
                 PanelType::Panel => {
                     let panel_w = cell_w - 2.0 * GLASS_CLEARANCE_MM;
                     let panel_h = cell_h - 2.0 * GLASS_CLEARANCE_MM;
@@ -1404,30 +1904,41 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
                 }
             }
 
-
             // Hardware list from HardwareSet
             if let Some(hw) = cell.hardware_set.as_ref().filter(|_| !is_system) {
                 if let Some(ref hinges) = hw.hinges {
                     hardware_list.push(HardwareListItem {
-                        piece_id: None, cell_index: i,
+                        piece_id: None,
+                        cell_index: i,
                         component: "Scharnier".into(),
-                        description: format!("{:?} - draagkracht {:.0} kg", hinges.hinge_type, hinges.load_capacity_kg),
+                        description: format!(
+                            "{:?} - draagkracht {:.0} kg",
+                            hinges.hinge_type, hinges.load_capacity_kg
+                        ),
                         quantity: hinges.count as u32,
                     });
                 }
                 if let Some(ref handle) = hw.handle {
                     hardware_list.push(HardwareListItem {
-                        piece_id: None, cell_index: i,
+                        piece_id: None,
+                        cell_index: i,
                         component: "Greep".into(),
-                        description: format!("{:?} - hoogte {} mm", handle.handle_type, handle.height_mm),
+                        description: format!(
+                            "{:?} - hoogte {} mm",
+                            handle.handle_type, handle.height_mm
+                        ),
                         quantity: 1,
                     });
                 }
                 if let Some(ref locking) = hw.locking {
                     hardware_list.push(HardwareListItem {
-                        piece_id: None, cell_index: i,
+                        piece_id: None,
+                        cell_index: i,
                         component: "Sluiting".into(),
-                        description: format!("{:?} - {} sluitpunten", locking.lock_type, locking.locking_points),
+                        description: format!(
+                            "{:?} - {} sluitpunten",
+                            locking.lock_type, locking.locking_points
+                        ),
                         quantity: 1,
                     });
                 }
@@ -1440,44 +1951,79 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
     let default_glazing = crate::kozijn::Glazing::default();
     for cr in &geometry.cell_rects {
         let cell = kozijn.cells.get(cr.cell_index).filter(|_| cells_aligned);
-        if is_system { system::hardware(cr, cell, mark, &mut hardware_list); }
+        if is_system {
+            system::hardware(cr, cell, mark, &mut hardware_list);
+        }
         let glazing = cell.map(|c| &c.glazing).unwrap_or(&default_glazing);
         for (index, fit) in cr.fit.iter().chain(&cr.second_fit).enumerate() {
             let mut piece_id = format!("{}-V{}", mark, cr.cell_index + 1);
             if let Some(leaf) = fit.contours.as_ref().and_then(|c| c.sash_leaf.as_ref()) {
-                piece_id.push_str(match leaf { SashLeaf::Left => "-L", SashLeaf::Right => "-R" });
+                piece_id.push_str(match leaf {
+                    SashLeaf::Left => "-L",
+                    SashLeaf::Right => "-R",
+                });
             } else if cr.second_fit.is_some() {
                 piece_id.push_str(if index == 0 { "-L" } else { "-R" });
             }
             if let Some(outer) = &fit.sash_outer {
-                let sash_width = fit.contours.as_ref()
+                let sash_width = fit
+                    .contours
+                    .as_ref()
                     .map_or_else(|| (fit.day.x - outer.x).max(0.0), |c| c.sash_width);
                 let door = matches!(&cr.vulling, Some(Vakvulling::Deur { .. }))
-                    || (fit.contours.is_some() && cr.vulling.is_none() && cell.is_some_and(|c| c.panel_type == PanelType::Door));
+                    || (fit.contours.is_some()
+                        && cr.vulling.is_none()
+                        && cell.is_some_and(|c| c.panel_type == PanelType::Door));
                 let prefix = if door { "D" } else { "R" };
                 let stock = if door { "Deurhout" } else { "Raamhout" };
-                let profile = cell.and_then(|c| c.sash_profile.as_ref()).filter(|p| compatible_profile(&p.id, mat)).map(|p| p.name.clone())
+                let profile = cell
+                    .and_then(|c| c.sash_profile.as_ref())
+                    .filter(|p| compatible_profile(&p.id, mat))
+                    .map(|p| p.name.clone())
                     .unwrap_or_else(|| {
-                        if is_system { return format!("{profile_name} (vleugel)"); }
-                        if fit.contours.is_none() { return format!("{stock} {profile_name}"); }
-                        match cell.and_then(|c| c.sash_depth).filter(|d| d.is_finite() && *d > 0.0) {
+                        if is_system {
+                            return format!("{profile_name} (vleugel)");
+                        }
+                        if fit.contours.is_none() {
+                            return format!("{stock} {profile_name}");
+                        }
+                        match cell
+                            .and_then(|c| c.sash_depth)
+                            .filter(|d| d.is_finite() && *d > 0.0)
+                        {
                             Some(depth) => format!("{stock} {sash_width}x{depth} mm"),
                             None => format!("{stock} {sash_width} mm"),
                         }
                     });
                 if let Some(contours) = &fit.contours {
-                    cut_list.extend(contours.sash_timber.iter().map(|member|
-                        curved_sash_cut(member, &piece_id, prefix, &profile, mat)));
+                    cut_list.extend(
+                        contours.sash_timber.iter().map(|member| {
+                            curved_sash_cut(member, &piece_id, prefix, &profile, mat)
+                        }),
+                    );
                 } else {
                     push_sash_members(
-                        &mut cut_list, &piece_id, prefix, &profile, mat, &mat_name, is_miter,
-                        angle, outer.width, outer.height, sash_width,
+                        &mut cut_list,
+                        &piece_id,
+                        prefix,
+                        &profile,
+                        mat,
+                        &mat_name,
+                        is_miter,
+                        angle,
+                        outer.width,
+                        outer.height,
+                        sash_width,
                     );
                 }
                 if !is_system {
                     gasket_list.push(GasketListItem {
-                        reference: None, gasket_type: GasketType::SashSeal,
-                        length_mm: fit.contours.as_ref().and_then(|c| c.sash_outer.as_ref())
+                        reference: None,
+                        gasket_type: GasketType::SashSeal,
+                        length_mm: fit
+                            .contours
+                            .as_ref()
+                            .and_then(|c| c.sash_outer.as_ref())
                             .map_or_else(|| 2.0 * (outer.width + outer.height), Contour::perimeter)
                             + GASKET_OVERLAP_MM,
                         quantity: 1,
@@ -1487,47 +2033,87 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
             let (w, h) = (fit.glass.width, fit.glass.height);
             let outline = fit.contours.as_ref().map(|c| &c.glass);
             let glass_perimeter = outline.map_or(2.0 * (w + h), Contour::perimeter);
+            let production_issue = glass_production_issue(kozijn, cell, fit);
             glass_list.push(GlassListItem {
-                piece_id: piece_id.clone(), cell_index: cr.cell_index,
-                glass_type: glazing.glass_type.clone(), width_mm: w, height_mm: h,
-                thickness_mm: glazing.thickness_mm, ug_value: glazing.ug_value,
-                area_m2: outline.map_or(w * h, Contour::area) / 1_000_000.0, quantity: 1,
+                piece_id: piece_id.clone(),
+                cell_index: cr.cell_index,
+                glass_type: glazing.glass_type.clone(),
+                width_mm: w,
+                height_mm: h,
+                thickness_mm: glazing.thickness_mm,
+                ug_value: glazing.ug_value,
+                area_m2: outline.map_or(w * h, Contour::area) / 1_000_000.0,
+                quantity: 1,
+                production_ready: production_issue.is_none(),
+                production_issue,
                 cut_contour: outline.and_then(piece_cut_contour),
             });
             if is_system {
-                let carrier = cell.filter(|_| fit.sash_outer.is_some()).and_then(|c| c.sash_profile.as_ref())
-                    .filter(|p| compatible_profile(&p.id, mat)).map_or(profile_name.as_str(), |p| &p.name);
+                let carrier = cell
+                    .filter(|_| fit.sash_outer.is_some())
+                    .and_then(|c| c.sash_profile.as_ref())
+                    .filter(|p| compatible_profile(&p.id, mat))
+                    .map_or(profile_name.as_str(), |p| &p.name);
                 system::gaskets(fit, &piece_id, carrier, &mut gasket_list);
             } else {
                 for gasket_type in [GasketType::GlazingInner, GasketType::GlazingOuter] {
                     gasket_list.push(GasketListItem {
-                        reference: None, gasket_type, length_mm: glass_perimeter + GASKET_OVERLAP_MM, quantity: 1,
+                        reference: None,
+                        gasket_type,
+                        length_mm: glass_perimeter + GASKET_OVERLAP_MM,
+                        quantity: 1,
                     });
                 }
             }
-            let contour_runs = fit.contours.as_ref().map_or_else(Vec::new, |c| bead_runs(&c.rebate));
+            let contour_runs = fit
+                .contours
+                .as_ref()
+                .map_or_else(Vec::new, |c| bead_runs(&c.rebate));
             let (total_length_mm, quantity) = if contour_runs.is_empty() {
                 (glaslat_total_length(fit), 4)
             } else {
-                (contour_runs.iter().map(|r| r.length_mm).sum(), contour_runs.len() as u32)
+                (
+                    contour_runs.iter().map(|r| r.length_mm).sum(),
+                    contour_runs.len() as u32,
+                )
             };
             glaslat_list.push(GlaslatListItem {
-                piece_id, cell_index: cr.cell_index, position: fit.bead_position.label_nl().into(),
-                material: cell.and_then(|c| c.glaslat.as_ref()).map(|b| b.material.clone())
-                    .filter(|m| !is_system || !matches!(m.trim().to_ascii_lowercase().as_str(), "hout" | "wood" | "meranti"))
+                piece_id,
+                cell_index: cr.cell_index,
+                position: fit.bead_position.label_nl().into(),
+                material: cell
+                    .and_then(|c| c.glaslat.as_ref())
+                    .map(|b| b.material.clone())
+                    .filter(|m| {
+                        !is_system
+                            || !matches!(
+                                m.trim().to_ascii_lowercase().as_str(),
+                                "hout" | "wood" | "meranti"
+                            )
+                    })
                     .unwrap_or_else(|| mat_name.clone()),
-                width_mm: fit.bead_width, height_mm: fit.bead_height,
-                total_length_mm, mitered: fit.bead_mitered, quantity, contour_runs,
+                width_mm: fit.bead_width,
+                height_mm: fit.bead_height,
+                total_length_mm,
+                mitered: fit.bead_mitered,
+                quantity,
+                contour_runs,
             });
         }
     }
 
     // Frame seal gasket (around the full inner perimeter)
     if !is_system {
-        let frame_perimeter = geometry.curved_frame.as_ref()
-            .map_or(2.0 * (inner_w + inner_h), |f| f.day.perimeter()) + GASKET_OVERLAP_MM;
+        let frame_perimeter = geometry
+            .curved_frame
+            .as_ref()
+            .map_or(2.0 * (inner_w + inner_h), |f| f.day.perimeter())
+            + GASKET_OVERLAP_MM;
         gasket_list.push(GasketListItem {
-            reference: None, gasket_type: GasketType::FrameSeal, length_mm: frame_perimeter, quantity: 1,
+            reference: None,
+            gasket_type: GasketType::FrameSeal,
+            length_mm: frame_perimeter,
+            quantity: 1,
         });
     }
 
@@ -1539,82 +2125,120 @@ pub fn compute_production_data(kozijn: &Kozijn) -> ProductionData {
     let mut frame_stock_mm = 0.0;
     let mut other_stock_mm = std::collections::BTreeMap::<(&str, &str), f64>::new();
     for cut in &cut_list {
-        if arch_joints.iter().any(|j| j.piece_id == cut.piece_id && j.joint.issue.is_some()) {
+        if arch_joints
+            .iter()
+            .any(|j| j.piece_id == cut.piece_id && j.joint.issue.is_some())
+        {
             bom.push(BomItem {
                 category: "Profiel".into(),
                 description: format!("{} - brutomaat onbepaald", cut.piece_id),
-                unit: "stuk".into(), quantity: f64::from(cut.quantity),
+                unit: "stuk".into(),
+                quantity: f64::from(cut.quantity),
             });
             continue;
         }
         let stock_length = cut.gross_length_mm * cut.quantity as f64;
-        let sash = matches!(cut.member_type,
-            MemberType::SashArc | MemberType::SashTop | MemberType::SashBottom |
-            MemberType::SashLeft | MemberType::SashRight);
-        let custom_divider = cut.divider_start.is_some() && cut.profile_name != kozijn.frame.profile.name;
+        let sash = matches!(
+            cut.member_type,
+            MemberType::SashArc
+                | MemberType::SashTop
+                | MemberType::SashBottom
+                | MemberType::SashLeft
+                | MemberType::SashRight
+        );
+        let custom_divider =
+            cut.divider_start.is_some() && cut.profile_name != kozijn.frame.profile.name;
         let custom_ring = kozijn.frame.shape.shape_type == crate::kozijn::ShapeType::Round
             && cut.member_type == MemberType::FrameArc
             && (cut.profile_name != kozijn.frame.profile.name || cut.material != mat_name);
         if is_system || geometry.curved_frame.is_some() && (sash || custom_divider || custom_ring) {
-            *other_stock_mm.entry((&cut.profile_name, &cut.material)).or_default() += stock_length;
+            *other_stock_mm
+                .entry((&cut.profile_name, &cut.material))
+                .or_default() += stock_length;
         } else {
             frame_stock_mm += stock_length;
         }
     }
-    if frame_stock_mm > 0.0 { bom.push(BomItem {
-        category: "Profiel".into(),
-        description: format!("{} {} mm", mat_name, profile_name),
-        unit: "m".into(),
-        quantity: frame_stock_mm / 1000.0,
-    }); }
+    if frame_stock_mm > 0.0 {
+        bom.push(BomItem {
+            category: "Profiel".into(),
+            description: format!("{} {} mm", mat_name, profile_name),
+            unit: "m".into(),
+            quantity: frame_stock_mm / 1000.0,
+        });
+    }
     for ((profile, material), mm) in other_stock_mm {
         bom.push(BomItem {
-            category: "Profiel".into(), description: format!("{profile} ({material})"),
-            unit: "m".into(), quantity: mm / 1000.0,
+            category: "Profiel".into(),
+            description: format!("{profile} ({material})"),
+            unit: "m".into(),
+            quantity: mm / 1000.0,
         });
     }
 
     // Total glass area
-    let total_glass_m2: f64 = glass_list.iter().map(|g| g.area_m2 * g.quantity as f64).sum();
+    let total_glass_m2: f64 = glass_list
+        .iter()
+        .map(|g| g.area_m2 * g.quantity as f64)
+        .sum();
     if total_glass_m2 > 0.0 {
         bom.push(BomItem {
             category: "Glas".into(),
-            description: glass_list.first().map(|g| g.glass_type.clone()).unwrap_or_default(),
+            description: glass_list
+                .first()
+                .map(|g| g.glass_type.clone())
+                .unwrap_or_default(),
             unit: "m2".into(),
             quantity: total_glass_m2,
         });
     }
 
     // Total gasket length
-    let total_gasket_mm: f64 = gasket_list.iter().map(|g| g.length_mm * g.quantity as f64).sum();
+    let total_gasket_mm: f64 = gasket_list
+        .iter()
+        .map(|g| g.length_mm * g.quantity as f64)
+        .sum();
     if is_system {
         let mut seals = std::collections::BTreeMap::new();
         for gasket in &gasket_list {
             if let Some(reference) = gasket.reference.as_ref().filter(|_| gasket.quantity > 0) {
-                *seals.entry((&reference.profile_name, gasket.gasket_type.label_nl())).or_insert(0.0)
-                    += gasket.length_mm * f64::from(gasket.quantity);
+                *seals
+                    .entry((&reference.profile_name, gasket.gasket_type.label_nl()))
+                    .or_insert(0.0) += gasket.length_mm * f64::from(gasket.quantity);
             }
         }
         for ((profile, kind), length) in seals {
-            bom.push(BomItem { category: "Rubber".into(), description: format!("{profile} - {kind} (netto meetlijn)"),
-                unit: "m".into(), quantity: length / 1000.0 });
+            bom.push(BomItem {
+                category: "Rubber".into(),
+                description: format!("{profile} - {kind} (netto meetlijn)"),
+                unit: "m".into(),
+                quantity: length / 1000.0,
+            });
         }
-    } else { bom.push(BomItem {
-        category: "Rubber".into(),
-        description: "EPDM afdichting".into(),
-        unit: "m".into(),
-        quantity: total_gasket_mm / 1000.0,
-    }); }
+    } else {
+        bom.push(BomItem {
+            category: "Rubber".into(),
+            description: "EPDM afdichting".into(),
+            unit: "m".into(),
+            quantity: total_gasket_mm / 1000.0,
+        });
+    }
 
     // Hardware count
     if is_system {
         let mut components = std::collections::BTreeMap::new();
         for hardware in hardware_list.iter().filter(|h| h.quantity > 0) {
-            *components.entry((&hardware.component, &hardware.description)).or_insert(0) += hardware.quantity;
+            *components
+                .entry((&hardware.component, &hardware.description))
+                .or_insert(0) += hardware.quantity;
         }
         for ((name, detail), count) in components {
-            bom.push(BomItem { category: "Beslag".into(), description: format!("{name} - {detail}"),
-                unit: "stuks".into(), quantity: f64::from(count) });
+            bom.push(BomItem {
+                category: "Beslag".into(),
+                description: format!("{name} - {detail}"),
+                unit: "stuks".into(),
+                quantity: f64::from(count),
+            });
         }
     } else if !hardware_list.is_empty() {
         let total_hw: u32 = hardware_list.iter().map(|h| h.quantity).sum();
@@ -1679,13 +2303,144 @@ mod tests {
     }
 
     #[test]
+    fn material_switch_updates_divider_drawing_glass_and_cut_articles() {
+        let mut k = Kozijn::new("Wisseltest", "W01", 1200.0, 1500.0);
+        k.add_column(500.0);
+        let old_geometry = crate::geometry::compute_2d_geometry(&k);
+        assert_eq!(old_geometry.v_dividers[0].width, 67.0);
+        let old_glass_width = old_geometry.cell_rects[0].fit.as_ref().unwrap().glass.width;
+        k.frame.joints_configured = true;
+        let snapshot =
+            crate::glazing_fit::catalog_snapshot("veka-softline82", &Material::Pvc).unwrap();
+        let snapshot_json = serde_json::to_string(snapshot).unwrap();
+        k.apply_frame_profile(
+            crate::profile::ProfileRef {
+                id: "veka-softline82".into(),
+                name: "VEKA Softline 82 MD".into(),
+            },
+            Some(73.0),
+            Some(82.0),
+            Some(&snapshot_json),
+            Some("\"pvc\""),
+        )
+        .unwrap();
+
+        let geometry = crate::geometry::compute_2d_geometry(&k);
+        assert!(!k.frame.joints_configured);
+        assert_eq!(
+            geometry.corner_settings[0].joint_type,
+            crate::joint::JointType::Verstek
+        );
+        assert_eq!(geometry.v_dividers[0].width, 94.0);
+        let cells_total =
+            k.grid.columns.iter().map(|c| c.size).sum::<f64>() + geometry.v_dividers[0].width;
+        assert!((cells_total - k.inner_width()).abs() < 1e-6);
+
+        let production = compute_production_data(&k);
+        assert_eq!(production.glass_list.len(), 2);
+        for (index, glass) in production.glass_list.iter().enumerate() {
+            let fit = geometry.cell_rects[index].fit.as_ref().unwrap();
+            assert!((glass.width_mm - fit.glass.width).abs() < 1e-6);
+            assert!(glass.production_ready);
+        }
+        assert_ne!(production.glass_list[0].width_mm, old_glass_width);
+        let divider_cut = production
+            .cut_list
+            .iter()
+            .find(|c| c.member_type == MemberType::DividerV)
+            .unwrap();
+        assert_eq!(
+            divider_cut.profile_name,
+            k.grid.columns[1].divider_profile.as_ref().unwrap().name
+        );
+        let plan = crate::optimization::optimize_frame_cuts(std::slice::from_ref(&k), 5800.0);
+        assert!(plan
+            .allocations
+            .iter()
+            .all(|bar| bar.profile_id.as_deref() == Some("veka-softline82")));
+        let stock_articles: std::collections::BTreeSet<_> = plan
+            .allocations
+            .iter()
+            .map(|bar| bar.profile_name.as_str())
+            .collect();
+        assert!(stock_articles.len() >= 2, "kozijn- en tussenstijlartikelen moeten aparte staven krijgen");
+    }
+
+    #[test]
+    fn system_glass_limits_are_visible_in_the_glass_list_and_validation() {
+        let mut k = Kozijn::new("VEKA", "V80", 900.0, 1400.0);
+        let snapshot =
+            crate::glazing_fit::catalog_snapshot("veka-softline82", &Material::Pvc).unwrap();
+        let snapshot_json = serde_json::to_string(snapshot).unwrap();
+        k.apply_frame_profile(
+            crate::profile::ProfileRef {
+                id: "veka-softline82".into(),
+                name: "VEKA Softline 82 MD".into(),
+            },
+            Some(73.0),
+            Some(82.0),
+            Some(&snapshot_json),
+            Some("\"pvc\""),
+        )
+        .unwrap();
+        k.cells[0].glazing.thickness_mm = 80.0;
+        let glass = &compute_production_data(&k).glass_list[0];
+        assert!(!glass.production_ready);
+        assert!(glass.production_issue.as_deref().unwrap().contains("52"));
+        assert!(crate::validation::validate(&k).iter().any(|e| matches!(
+            e,
+            crate::validation::ValidationError::GlassTooThick(1, 80.0, 52.0)
+        )));
+    }
+
+    #[test]
+    fn mixed_system_sash_profile_is_rejected_without_mutating_the_cell() {
+        let mut k = Kozijn::new("VEKA", "V01", 900.0, 1400.0);
+        let veka = crate::glazing_fit::catalog_snapshot("veka-softline82", &Material::Pvc).unwrap();
+        let veka_json = serde_json::to_string(veka).unwrap();
+        k.apply_frame_profile(
+            crate::profile::ProfileRef {
+                id: "veka-softline82".into(),
+                name: "VEKA Softline 82 MD".into(),
+            },
+            Some(73.0),
+            Some(82.0),
+            Some(&veka_json),
+            Some("\"pvc\""),
+        )
+        .unwrap();
+        let result = k.update_cell_sash_profile(
+            0,
+            crate::profile::ProfileRef {
+                id: "kommerling-76ad".into(),
+                name: "Kömmerling 76 AD".into(),
+            },
+            70.0,
+            76.0,
+            crate::glazing_fit::catalog_snapshot("kommerling-76ad", &Material::Pvc).cloned(),
+        );
+        assert!(result.unwrap_err().contains("profielsysteem"));
+        assert!(k.cells[0].sash_profile.is_none());
+        k.cells[0].sash_profile = Some(crate::profile::ProfileRef {
+            id: "kommerling-76ad".into(),
+            name: "Kömmerling 76 AD".into(),
+        });
+        assert!(crate::validation::validate(&k).iter().any(|e| matches!(
+            e,
+            crate::validation::ValidationError::IncompatibleSashSystem(1, _, _)
+        )));
+    }
+
+    #[test]
     fn test_turn_tilt_with_hardware() {
         let mut k = Kozijn::new("Test", "T02", 900.0, 1400.0);
         k.cells[0].panel_type = PanelType::TurnTilt;
         k.cells[0].hardware_set = crate::hardware::default_hardware_set(
             PanelType::TurnTilt,
             Some(crate::kozijn::OpeningDirection::Left),
-            766.0, 1266.0, 24.0,
+            766.0,
+            1266.0,
+            24.0,
             &Material::Wood(crate::kozijn::WoodType::Meranti),
             crate::hardware::SecurityClass::None,
         );
@@ -1698,7 +2453,11 @@ mod tests {
         assert!(!prod.hardware_list.is_empty());
 
         // Check wood gross length includes pen allowance
-        let stile = prod.cut_list.iter().find(|c| c.member_type == MemberType::FrameLeft).unwrap();
+        let stile = prod
+            .cut_list
+            .iter()
+            .find(|c| c.member_type == MemberType::FrameLeft)
+            .unwrap();
         assert!(stile.gross_length_mm > stile.net_length_mm);
         let expected_gross = stile.net_length_mm + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM;
         assert!((stile.gross_length_mm - expected_gross).abs() < 0.01);
@@ -1731,22 +2490,38 @@ mod tests {
             assert!((cut.miter_left_deg - 90.0).abs() < 1e-8);
             assert!((cut.miter_right_deg - 90.0).abs() < 1e-8);
             let extensions = if i == 1 { 2.0 * ext } else { 0.0 };
-            assert!((cut.gross_length_mm - arc.outer_length_mm - SAW_KERF_MM - extensions).abs() < 1e-7);
+            assert!(
+                (cut.gross_length_mm - arc.outer_length_mm - SAW_KERF_MM - extensions).abs() < 1e-7
+            );
         }
         for (i, row) in p.arch_joints.iter().enumerate() {
-            assert_eq!(row.joint.kind, crate::curved_timber::ArchJointKind::RingSeam);
+            assert_eq!(
+                row.joint.kind,
+                crate::curved_timber::ArchJointKind::RingSeam
+            );
             assert_eq!(row.joint.corner, i);
             assert_eq!(row.piece_id, "R1-BO2");
             assert_eq!(row.receiver_piece_id, "R1-BO1");
             let t = row.joint.tenon.as_ref().unwrap();
             assert_eq!(t.z_from_inside_mm.len(), 2);
             assert!((t.blank_extension_mm - ext).abs() < 1e-7);
-            assert_eq!(row.end, if i == 0 { DividerJointEnd::End } else { DividerJointEnd::Start });
+            assert_eq!(
+                row.end,
+                if i == 0 {
+                    DividerJointEnd::End
+                } else {
+                    DividerJointEnd::Start
+                }
+            );
             assert_ne!(row.end, row.receiver_end);
         }
         assert_eq!(p.cut_list[0].profile_name, k.frame.profile.name);
         assert_eq!(p.cut_list[1].profile_name, "Onderste ringprofiel");
-        let stock = p.bom.iter().find(|r| r.description == "Onderste ringprofiel (Meranti)").unwrap();
+        let stock = p
+            .bom
+            .iter()
+            .find(|r| r.description == "Onderste ringprofiel (Meranti)")
+            .unwrap();
         assert!((stock.quantity * 1000. - p.cut_list[1].gross_length_mm).abs() < 1e-7);
     }
 
@@ -1794,9 +2569,17 @@ mod tests {
         k.frame.shape.shape_type = crate::kozijn::ShapeType::Round;
         k.cells[0].panel_type = PanelType::Turn;
         let prod = compute_production_data(&k);
-        let sash: Vec<_> = prod.cut_list.iter().filter(|i| i.piece_id.starts_with("R1-V1-")).collect();
+        let sash: Vec<_> = prod
+            .cut_list
+            .iter()
+            .filter(|i| i.piece_id.starts_with("R1-V1-"))
+            .collect();
         assert_eq!(sash.len(), 2);
-        let sash_stock = prod.bom.iter().find(|row| row.description == "Raamhout 69 mm (Meranti)").unwrap();
+        let sash_stock = prod
+            .bom
+            .iter()
+            .find(|row| row.description == "Raamhout 69 mm (Meranti)")
+            .unwrap();
         assert!((sash_stock.quantity - 2.0 * sash[0].gross_length_mm / 1000.0).abs() < 1e-8);
         for (i, row) in sash.iter().enumerate() {
             assert_eq!(row.member_type, MemberType::SashArc);
@@ -1820,7 +2603,8 @@ mod tests {
         k.frame.shape.arch_height = Some(300.0);
         k.cells[0].panel_type = PanelType::TurnTilt;
         k.cells[0].sash_profile = Some(crate::profile::ProfileRef {
-            id: "raamhout-69x90".into(), name: "Raamhout 69x90".into(),
+            id: "raamhout-69x90".into(),
+            name: "Raamhout 69x90".into(),
         });
         let prod = compute_production_data(&k);
         let head = find(&prod, MemberType::SashArc);
@@ -1829,7 +2613,7 @@ mod tests {
         let radius: f64 = 750.0 - 67.0 + 14.0;
         let half_width: f64 = 600.0 - 67.0 + 14.0;
         let half_sweep = (half_width / radius).asin();
-        let shoulder_y = |d: f64| 750.0 - ((radius-d).powi(2) - (half_width-d).powi(2)).sqrt();
+        let shoulder_y = |d: f64| 750.0 - ((radius - d).powi(2) - (half_width - d).powi(2)).sqrt();
         let shoulder_tilt = (shoulder_y(69.0) - shoulder_y(0.0)).atan2(69.0);
         assert_eq!(head.piece_id, "B1-V1-RBO1");
         assert_eq!(head.profile_name, "Raamhout 69x90");
@@ -1845,7 +2629,11 @@ mod tests {
         assert!((head.gross_length_mm - head.net_length_mm - 44.0).abs() < 1e-6);
         assert!((sill.gross_length_mm - sill.net_length_mm - 44.0).abs() < 1e-6);
         assert!((stile.gross_length_mm - stile.net_length_mm - 4.0).abs() < 1e-6);
-        let sash_stock = prod.bom.iter().find(|row| row.description == "Raamhout 69x90 (Meranti)").unwrap();
+        let sash_stock = prod
+            .bom
+            .iter()
+            .find(|row| row.description == "Raamhout 69x90 (Meranti)")
+            .unwrap();
         let gross_mm = head.gross_length_mm + 2.0 * stile.gross_length_mm + sill.gross_length_mm;
         assert!((sash_stock.quantity - gross_mm / 1000.0).abs() < 1e-8);
     }
@@ -1856,7 +2644,11 @@ mod tests {
         k.frame.shape.shape_type = crate::kozijn::ShapeType::Round;
         k.layout = Some(crate::layout::deur("dubbel"));
         let prod = compute_production_data(&k);
-        let arcs: Vec<_> = prod.cut_list.iter().filter(|cut| cut.member_type == MemberType::SashArc).collect();
+        let arcs: Vec<_> = prod
+            .cut_list
+            .iter()
+            .filter(|cut| cut.member_type == MemberType::SashArc)
+            .collect();
         assert_eq!(arcs.len(), 2);
         let radius = 547.0_f64;
         let sweep = 2.0 * (3.0 / radius).acos();
@@ -1866,7 +2658,13 @@ mod tests {
         }
         assert_eq!(arcs[0].profile_side, Some(TimberProfileSide::Left));
         assert_eq!(arcs[1].profile_side, Some(TimberProfileSide::Right));
-        assert_eq!(prod.glass_list.iter().map(|g| g.piece_id.as_str()).collect::<Vec<_>>(), ["P1-V1-L", "P1-V1-R"]);
+        assert_eq!(
+            prod.glass_list
+                .iter()
+                .map(|g| g.piece_id.as_str())
+                .collect::<Vec<_>>(),
+            ["P1-V1-L", "P1-V1-R"]
+        );
     }
 
     #[test]
@@ -1876,9 +2674,16 @@ mod tests {
         k.add_column(300.0);
         k.add_row(450.0);
         k.set_grid_sizes_fitted(&[273.0, 726.0], &[363.0, 636.0]);
-        k.grid.columns[1].divider_profile = Some(crate::profile::ProfileRef { id: "ts-profiel".into(), name: "Stijlprofiel".into() });
+        k.grid.columns[1].divider_profile = Some(crate::profile::ProfileRef {
+            id: "ts-profiel".into(),
+            name: "Stijlprofiel".into(),
+        });
         let p = compute_production_data(&k);
-        let heads: Vec<_> = p.cut_list.iter().filter(|i| i.divider_start.is_some()).collect();
+        let heads: Vec<_> = p
+            .cut_list
+            .iter()
+            .filter(|i| i.divider_start.is_some())
+            .collect();
         assert_eq!(heads.len(), 3);
         let by_id = |id| *heads.iter().find(|i| i.piece_id == id).unwrap();
         let upper = by_id("R1-TS1.1");
@@ -1903,26 +2708,52 @@ mod tests {
         }
         assert_eq!(upper.profile_name, "Stijlprofiel");
         assert_eq!(lower.profile_name, "Stijlprofiel");
-        let stock = p.bom.iter().find(|row| row.description == "Stijlprofiel (Meranti)").unwrap();
-        near(stock.quantity, (upper.gross_length_mm + lower.gross_length_mm) / 1000.0);
+        let stock = p
+            .bom
+            .iter()
+            .find(|row| row.description == "Stijlprofiel (Meranti)")
+            .unwrap();
+        near(
+            stock.quantity,
+            (upper.gross_length_mm + lower.gross_length_mm) / 1000.0,
+        );
         near(upper.miter_left_deg, angle);
         near(lower.miter_right_deg, angle);
-        for e in [upper.divider_start.as_ref().unwrap(), lower.divider_end.as_ref().unwrap()] {
+        for e in [
+            upper.divider_start.as_ref().unwrap(),
+            lower.divider_end.as_ref().unwrap(),
+        ] {
             near(e.edge_offsets_mm[0], h);
             near(e.edge_offsets_mm[1], 0.0);
             assert_eq!(e.radius_mm, Some(533.0));
         }
         near(upper.miter_right_deg, 90.0);
         near(lower.miter_left_deg, 90.0);
-        assert_eq!((upper.end_cope_radius_mm, lower.start_cope_radius_mm), (None, None));
+        assert_eq!(
+            (upper.end_cope_radius_mm, lower.start_cope_radius_mm),
+            (None, None)
+        );
         near(rail.net_length_mm, 2.0 * at(497.0));
         let angle = 67.0_f64.atan2(at(497.0) - at(430.0)).to_degrees();
         near(rail.miter_left_deg, angle);
         near(rail.miter_right_deg, angle);
-        assert_eq!((rail.start_cope_radius_mm, rail.end_cope_radius_mm), (Some(533.0), Some(533.0)));
+        assert_eq!(
+            (rail.start_cope_radius_mm, rail.end_cope_radius_mm),
+            (Some(533.0), Some(533.0))
+        );
         let preview = crate::cnc::generate_cnc_parts(&k);
-        assert!(preview.iter().find(|i| i.piece_id == rail.piece_id).unwrap().operations.is_empty());
-        assert!(preview.iter().find(|i| i.piece_id == upper.piece_id).unwrap().operations.is_empty());
+        assert!(preview
+            .iter()
+            .find(|i| i.piece_id == rail.piece_id)
+            .unwrap()
+            .operations
+            .is_empty());
+        assert!(preview
+            .iter()
+            .find(|i| i.piece_id == upper.piece_id)
+            .unwrap()
+            .operations
+            .is_empty());
     }
 
     #[test]
@@ -1937,18 +2768,42 @@ mod tests {
         let upper = &index["R-TS1.1"];
         let top = upper.ends[0].unwrap();
         assert_eq!(top.receiver_piece_id.as_deref(), Some("R-BO1"));
-        assert_eq!(upper.ends[1].unwrap().receiver_piece_id.as_deref(), Some("R-TD1"));
-        assert_eq!(index["R-TS1.2"].ends[1].unwrap().receiver_piece_id.as_deref(), Some("R-BO2"));
+        assert_eq!(
+            upper.ends[1].unwrap().receiver_piece_id.as_deref(),
+            Some("R-TD1")
+        );
+        assert_eq!(
+            index["R-TS1.2"].ends[1]
+                .unwrap()
+                .receiver_piece_id
+                .as_deref(),
+            Some("R-BO2")
+        );
         assert_eq!(index["R-TD1"].mortises.len(), 2);
-        assert!(index["R-BO1"].mortises.iter().any(|j| j.piece_id == "R-TS1.1"));
+        assert!(index["R-BO1"]
+            .mortises
+            .iter()
+            .any(|j| j.piece_id == "R-TS1.1"));
         let t = top.tenon.as_ref().unwrap();
         assert!(t.tenon_length_mm > t.blank_extension_mm + 0.1);
         assert!((t.mortise_depth_mm - t.tenon_length_mm - t.bottom_clearance_mm).abs() < 1e-7);
-        let cut = prod.cut_list.iter().find(|i| i.piece_id == "R-TS1.1").unwrap();
+        let cut = prod
+            .cut_list
+            .iter()
+            .find(|i| i.piece_id == "R-TS1.1")
+            .unwrap();
         let bottom = upper.ends[1].unwrap().tenon.as_ref().unwrap();
-        assert!((cut.gross_length_mm - bottom.tip_axis_mm + t.tip_axis_mm - SAW_KERF_MM).abs() < 1e-7);
+        assert!(
+            (cut.gross_length_mm - bottom.tip_axis_mm + t.tip_axis_mm - SAW_KERF_MM).abs() < 1e-7
+        );
         let gate = crate::cnc::generate_cnc_parts(&k);
-        assert!(gate.iter().find(|p| p.piece_id == "R-BO1").unwrap().divider_joints.iter().any(|j| j.piece_id == "R-TS1.1"));
+        assert!(gate
+            .iter()
+            .find(|p| p.piece_id == "R-BO1")
+            .unwrap()
+            .divider_joints
+            .iter()
+            .any(|j| j.piece_id == "R-TS1.1"));
     }
 
     #[test]
@@ -1964,7 +2819,10 @@ mod tests {
         k.frame.corner_joints[2].pen_length = 27.0;
         k.add_column(410.0);
         let p = compute_production_data(&k);
-        assert!(p.cut_list.iter().all(|c| c.member_type != MemberType::FrameTop));
+        assert!(p
+            .cut_list
+            .iter()
+            .all(|c| c.member_type != MemberType::FrameTop));
         let head = find(&p, MemberType::FrameArc);
         let arc = head.arc.as_ref().unwrap();
         assert_eq!(arc.outer_radius_mm, 750.0);
@@ -1977,7 +2835,12 @@ mod tests {
         assert!((jamb.miter_left_deg - 71.11711482).abs() < 1e-6);
         assert_eq!(jamb.miter_right_deg, 90.0);
         assert_eq!(jamb.net_length_mm, 1500.0 - 67.0 - 300.0);
-        let top = &p.arch_joints.iter().find(|j| j.piece_id == jamb.piece_id).unwrap().joint;
+        let top = &p
+            .arch_joints
+            .iter()
+            .find(|j| j.piece_id == jamb.piece_id)
+            .unwrap()
+            .joint;
         let t = top.tenon.as_ref().unwrap();
         assert_eq!(t.tenon_length_mm, 16.0);
         let upper_tip = t.tip[0][1].min(t.tip[1][1]);
@@ -1997,30 +2860,73 @@ mod tests {
         k.frame.shape.shape_type = ShapeType::Arched;
         k.frame.shape.arch_height = Some(300.);
         k.frame.joints_configured = true;
-        for j in &mut k.frame.corner_joints { j.through_member = ThroughMember::Dorpel; }
+        for j in &mut k.frame.corner_joints {
+            j.through_member = ThroughMember::Dorpel;
+        }
         k.frame.corner_joints[1].through_member = ThroughMember::Stijl;
         k.frame.corner_joints[1].pen_length = 24.;
         let p = compute_production_data(&k);
         assert_eq!(p.arch_joints.len(), 2);
         let (left, right) = (&p.arch_joints[0], &p.arch_joints[1]);
-        assert_eq!((&*left.piece_id, left.end, &*left.receiver_piece_id, left.receiver_end),
-            ("B1-SL", DividerJointEnd::Start, "B1-BO1", DividerJointEnd::Start));
-        assert_eq!((&*right.piece_id, right.end, &*right.receiver_piece_id, right.receiver_end),
-            ("B1-BO1", DividerJointEnd::End, "B1-SR", DividerJointEnd::Start));
+        assert_eq!(
+            (
+                &*left.piece_id,
+                left.end,
+                &*left.receiver_piece_id,
+                left.receiver_end
+            ),
+            (
+                "B1-SL",
+                DividerJointEnd::Start,
+                "B1-BO1",
+                DividerJointEnd::Start
+            )
+        );
+        assert_eq!(
+            (
+                &*right.piece_id,
+                right.end,
+                &*right.receiver_piece_id,
+                right.receiver_end
+            ),
+            (
+                "B1-BO1",
+                DividerJointEnd::End,
+                "B1-SR",
+                DividerJointEnd::Start
+            )
+        );
         let head = find(&p, MemberType::FrameArc);
         let extension = right.joint.tenon.as_ref().unwrap().blank_extension_mm;
         assert!((head.gross_length_mm - head.net_length_mm - extension - SAW_KERF_MM).abs() < 1e-7);
-        assert!(p.arch_joints.iter().all(|j| j.joint.tenon.as_ref().unwrap().z_from_inside_mm.len() == 2));
+        assert!(p.arch_joints.iter().all(|j| j
+            .joint
+            .tenon
+            .as_ref()
+            .unwrap()
+            .z_from_inside_mm
+            .len()
+            == 2));
         let plan = crate::optimization::optimize_frame_cuts(std::slice::from_ref(&k), 5800.);
         assert_eq!(plan.curved_piece_ids, ["B1-BO1"]);
-        let nested = plan.allocations.iter().flat_map(|a| &a.cuts).find(|i| i.piece_id == "B1-SL").unwrap();
-        assert_eq!(nested.length_mm, find(&p, MemberType::FrameLeft).gross_length_mm);
+        let nested = plan
+            .allocations
+            .iter()
+            .flat_map(|a| &a.cuts)
+            .find(|i| i.piece_id == "B1-SL")
+            .unwrap();
+        assert_eq!(
+            nested.length_mm,
+            find(&p, MemberType::FrameLeft).gross_length_mm
+        );
         let parts = crate::cnc::generate_cnc_parts(&k);
         let crown = parts.iter().find(|c| c.piece_id == "B1-BO1").unwrap();
         assert_eq!(crown.arch_joints.len(), 2);
         assert!(crown.operations.is_empty());
         let jamb = parts.iter().find(|c| c.piece_id == "B1-SL").unwrap();
-        assert!(matches!(jamb.operations.as_slice(), [crate::cnc::CncOperation::CrossCut { position_mm, .. }] if *position_mm > 0.));
+        assert!(
+            matches!(jamb.operations.as_slice(), [crate::cnc::CncOperation::CrossCut { position_mm, .. }] if *position_mm > 0.)
+        );
 
         k.frame.corner_joints[1].pen_length = 1000.;
         let p = compute_production_data(&k);
@@ -2036,7 +2942,10 @@ mod tests {
         let orders = crate::purchase_order::generate_purchase_orders(&project);
         let wood = orders.iter().find(|p| p.category == "Hout").unwrap();
         assert_eq!(wood.unresolved_piece_ids, ["B1-BO1"]);
-        assert!(wood.lines.iter().all(|l| !l.description.contains("Boogstuk")));
+        assert!(wood
+            .lines
+            .iter()
+            .all(|l| !l.description.contains("Boogstuk")));
     }
 
     #[test]
@@ -2066,8 +2975,12 @@ mod tests {
         let fw = k_empty.frame.frame_width;
         let stile = find(&prod_empty, MemberType::FrameLeft);
         assert!((stile.net_length_mm - (k_empty.frame.outer_height - 2.0 * fw)).abs() < 0.01);
-        assert!((stile.gross_length_mm
-            - (stile.net_length_mm + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM)).abs() < 0.01);
+        assert!(
+            (stile.gross_length_mm
+                - (stile.net_length_mm + 2.0 * WOOD_PEN_ALLOWANCE_MM + SAW_KERF_MM))
+                .abs()
+                < 0.01
+        );
         assert!((stile.miter_left_deg - 90.0).abs() < 0.01);
         let rail = find(&prod_empty, MemberType::FrameTop);
         assert!((rail.net_length_mm - k_empty.frame.outer_width).abs() < 0.01);
@@ -2105,8 +3018,10 @@ mod tests {
             let rail = find(&prod, mt);
             assert!(rail.net_length_mm < k.frame.outer_width);
             assert!((rail.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.01);
-            assert!((rail.gross_length_mm
-                - (rail.net_length_mm + 2.0 * 30.0 + SAW_KERF_MM)).abs() < 0.01);
+            assert!(
+                (rail.gross_length_mm - (rail.net_length_mm + 2.0 * 30.0 + SAW_KERF_MM)).abs()
+                    < 0.01
+            );
         }
     }
 
@@ -2129,8 +3044,10 @@ mod tests {
         let fw = k.frame.frame_width;
 
         for mt in [
-            MemberType::FrameLeft, MemberType::FrameRight,
-            MemberType::FrameTop, MemberType::FrameBottom,
+            MemberType::FrameLeft,
+            MemberType::FrameRight,
+            MemberType::FrameTop,
+            MemberType::FrameBottom,
         ] {
             let item = find(&prod, mt);
             assert!((item.miter_left_deg - 45.0).abs() < 0.01);
@@ -2141,8 +3058,9 @@ mod tests {
             };
             assert!((item.net_length_mm - (outer - 2.0 * fw)).abs() < 0.01);
             // Wood miter: long point (fw per end) + kerf, no weld overmeasure.
-            assert!((item.gross_length_mm
-                - (item.net_length_mm + 2.0 * fw + SAW_KERF_MM)).abs() < 0.01);
+            assert!(
+                (item.gross_length_mm - (item.net_length_mm + 2.0 * fw + SAW_KERF_MM)).abs() < 0.01
+            );
             // The physical piece covers at least the outer span + kerf.
             assert!(item.gross_length_mm >= outer + SAW_KERF_MM - 0.01);
         }
@@ -2166,7 +3084,11 @@ mod tests {
         let prod = compute_production_data(&k);
         let rail = find(&prod, MemberType::FrameTop);
         assert!((rail.net_length_mm - (1200.0 - 2.0 * 67.0)).abs() < 0.01);
-        assert!(rail.gross_length_mm >= 1200.0, "gross {} must cover the long point 1200", rail.gross_length_mm);
+        assert!(
+            rail.gross_length_mm >= 1200.0,
+            "gross {} must cover the long point 1200",
+            rail.gross_length_mm
+        );
         assert!((rail.gross_length_mm - (1200.0 + SAW_KERF_MM)).abs() < 0.01);
     }
 
@@ -2186,8 +3108,12 @@ mod tests {
         let fw = k.frame.frame_width;
         let stile = find(&prod, MemberType::FrameLeft);
         // Long point (fw) + weld overmeasure per end, + kerf.
-        assert!((stile.gross_length_mm
-            - (stile.net_length_mm + 2.0 * (fw + PVC_WELD_OVERMEASURE_MM) + SAW_KERF_MM)).abs() < 0.01);
+        assert!(
+            (stile.gross_length_mm
+                - (stile.net_length_mm + 2.0 * (fw + PVC_WELD_OVERMEASURE_MM) + SAW_KERF_MM))
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
@@ -2209,8 +3135,9 @@ mod tests {
         assert!((stile.net_length_mm - 1266.0).abs() < 0.01);
         assert!((stile.miter_left_deg - 45.0).abs() < 0.01);
         // Long point + kerf: identical to a configured verstek joint set.
-        assert!((stile.gross_length_mm
-            - (stile.net_length_mm + 2.0 * fw + SAW_KERF_MM)).abs() < 0.01);
+        assert!(
+            (stile.gross_length_mm - (stile.net_length_mm + 2.0 * fw + SAW_KERF_MM)).abs() < 0.01
+        );
         assert!((stile.gross_length_mm - 1404.0).abs() < 0.01);
         // The physical piece covers the outer span + kerf.
         assert!(stile.gross_length_mm >= k.frame.outer_height + SAW_KERF_MM - 0.01);
@@ -2236,15 +3163,21 @@ mod tests {
         let prod_a = compute_production_data(&k_default);
         let prod_b = compute_production_data(&k_configured);
         for mt in [
-            MemberType::FrameLeft, MemberType::FrameRight,
-            MemberType::FrameTop, MemberType::FrameBottom,
+            MemberType::FrameLeft,
+            MemberType::FrameRight,
+            MemberType::FrameTop,
+            MemberType::FrameBottom,
         ] {
             let a = find(&prod_a, mt);
             let b = find(&prod_b, mt);
             assert!((a.net_length_mm - b.net_length_mm).abs() < 0.01);
-            assert!((a.gross_length_mm - b.gross_length_mm).abs() < 0.01,
+            assert!(
+                (a.gross_length_mm - b.gross_length_mm).abs() < 0.01,
                 "{:?}: default gross {} != configured gross {}",
-                mt, a.gross_length_mm, b.gross_length_mm);
+                mt,
+                a.gross_length_mm,
+                b.gross_length_mm
+            );
         }
     }
 
@@ -2281,14 +3214,17 @@ mod tests {
         // Bovendorpel: between the stijlen, pens both ends.
         let top_rail = find(&prod, MemberType::FrameTop);
         assert!((top_rail.net_length_mm - (k.frame.outer_width - 2.0 * fw)).abs() < 0.01);
-        assert!((top_rail.gross_length_mm
-            - (top_rail.net_length_mm + 2.0 * 20.0 + SAW_KERF_MM)).abs() < 0.01);
+        assert!(
+            (top_rail.gross_length_mm - (top_rail.net_length_mm + 2.0 * 20.0 + SAW_KERF_MM)).abs()
+                < 0.01
+        );
 
         // Onderdorpel: runs through full width, no pen allowance.
         let bottom_rail = find(&prod, MemberType::FrameBottom);
         assert!((bottom_rail.net_length_mm - k.frame.outer_width).abs() < 0.01);
-        assert!((bottom_rail.gross_length_mm
-            - (bottom_rail.net_length_mm + SAW_KERF_MM)).abs() < 0.01);
+        assert!(
+            (bottom_rail.gross_length_mm - (bottom_rail.net_length_mm + SAW_KERF_MM)).abs() < 0.01
+        );
     }
 
     #[test]
@@ -2430,11 +3366,19 @@ mod tests {
 
         // Onderdorpel steps in: shorter than the full dagmaat width.
         assert!(bottom.net_length_mm > 0.0);
-        assert!(bottom.net_length_mm < k.inner_width() - 1.0,
-            "onderdorpel {} should be < dagmaat {}", bottom.net_length_mm, k.inner_width());
+        assert!(
+            bottom.net_length_mm < k.inner_width() - 1.0,
+            "onderdorpel {} should be < dagmaat {}",
+            bottom.net_length_mm,
+            k.inner_width()
+        );
         // Right stijl steps in: shorter than the full outer height.
-        assert!(right.net_length_mm < k.frame.outer_height - 1.0,
-            "right stijl {} should be < {}", right.net_length_mm, k.frame.outer_height);
+        assert!(
+            right.net_length_mm < k.frame.outer_height - 1.0,
+            "right stijl {} should be < {}",
+            right.net_length_mm,
+            k.frame.outer_height
+        );
         // Both vakken reach the top and the raam reaches the left: the
         // bovendorpel runs the full width and the left stijl fits between the
         // dorpels (dorpel-through wood default, KVT katern 15).
@@ -2472,40 +3416,71 @@ mod tests {
         let inner_w = k.inner_width(); // 1266
         let inner_h = k.inner_height(); // 1766
 
-        let stijlen: Vec<_> = prod.cut_list.iter()
+        let stijlen: Vec<_> = prod
+            .cut_list
+            .iter()
             .filter(|c| c.member_type == MemberType::DividerV)
             .collect();
-        assert_eq!(stijlen.len(), 1, "melkmeisje layout yields exactly one tussenstijl");
-        assert!((stijlen[0].net_length_mm - inner_h).abs() < 0.01,
+        assert_eq!(
+            stijlen.len(),
+            1,
+            "melkmeisje layout yields exactly one tussenstijl"
+        );
+        assert!(
+            (stijlen[0].net_length_mm - inner_h).abs() < 0.01,
             "tussenstijl {} must run the full binnenhoogte {}",
-            stijlen[0].net_length_mm, inner_h);
+            stijlen[0].net_length_mm,
+            inner_h
+        );
 
         // Exactly one borstweringdorpel (DividerH): the side-light zone width
         // (melkmeisje1 splits 900/500 over the available 1199 mm) extended by
         // fw on the right where the outer stijl stops op deze dorpel.
-        let dorpels: Vec<_> = prod.cut_list.iter()
+        let dorpels: Vec<_> = prod
+            .cut_list
+            .iter()
             .filter(|c| c.member_type == MemberType::DividerH)
             .collect();
-        assert_eq!(dorpels.len(), 1, "melkmeisje layout yields exactly one borstweringdorpel");
+        assert_eq!(
+            dorpels.len(),
+            1,
+            "melkmeisje layout yields exactly one borstweringdorpel"
+        );
         let zijlicht_w = (inner_w - fw) * 500.0 / 1400.0; // 428.214…
-        assert!((dorpels[0].net_length_mm - (zijlicht_w + fw)).abs() < 0.01,
+        assert!(
+            (dorpels[0].net_length_mm - (zijlicht_w + fw)).abs() < 0.01,
             "borstweringdorpel {} must be zijlicht width {} + fw {}",
-            dorpels[0].net_length_mm, zijlicht_w, fw);
+            dorpels[0].net_length_mm,
+            zijlicht_w,
+            fw
+        );
 
         // Sum of members covers the stepped bottom outline: onderdorpel
         // (under the deur, incl. corners) + borstweringdorpel = outer width.
         let bottom = find(&prod, MemberType::FrameBottom);
-        assert!((bottom.net_length_mm + dorpels[0].net_length_mm - k.frame.outer_width).abs() < 0.01,
+        assert!(
+            (bottom.net_length_mm + dorpels[0].net_length_mm - k.frame.outer_width).abs() < 0.01,
             "onderdorpel {} + borstweringdorpel {} must span the outer width {}",
-            bottom.net_length_mm, dorpels[0].net_length_mm, k.frame.outer_width);
+            bottom.net_length_mm,
+            dorpels[0].net_length_mm,
+            k.frame.outer_width
+        );
 
         // Two panes (deur + zijlicht), none at the full binnenmaat.
         assert_eq!(prod.glass_list.len(), 2);
         for g in &prod.glass_list {
-            assert!(g.width_mm < inner_w - 1.0,
-                "glas {} mag niet de volle binnenbreedte {} zijn", g.width_mm, inner_w);
-            assert!(g.height_mm < inner_h - 1.0,
-                "glas {} mag niet de volle binnenhoogte {} zijn", g.height_mm, inner_h);
+            assert!(
+                g.width_mm < inner_w - 1.0,
+                "glas {} mag niet de volle binnenbreedte {} zijn",
+                g.width_mm,
+                inner_w
+            );
+            assert!(
+                g.height_mm < inner_h - 1.0,
+                "glas {} mag niet de volle binnenhoogte {} zijn",
+                g.height_mm,
+                inner_h
+            );
         }
         // Buiten leaf yields nothing: no third pane, no panel.
         assert!(prod.panel_list.is_empty());
@@ -2519,21 +3494,34 @@ mod tests {
         use crate::layout::{deur, paneel, raam, split_row, VakChild};
         let mut k = Kozijn::new("Test", "LT1", 2400.0, 1500.0);
         k.layout = Some(split_row(vec![
-            VakChild { size: 1.0, node: raam("draaikiep") },
-            VakChild { size: 1.0, node: deur("enkel") },
-            VakChild { size: 1.0, node: paneel() },
+            VakChild {
+                size: 1.0,
+                node: raam("draaikiep"),
+            },
+            VakChild {
+                size: 1.0,
+                node: deur("enkel"),
+            },
+            VakChild {
+                size: 1.0,
+                node: paneel(),
+            },
         ]));
         let prod = compute_production_data(&k);
 
         // Raamhout members for the raam vak (leaf 0).
-        let raamhout: Vec<_> = prod.cut_list.iter()
+        let raamhout: Vec<_> = prod
+            .cut_list
+            .iter()
             .filter(|c| c.profile_name.starts_with("Raamhout"))
             .collect();
         assert_eq!(raamhout.len(), 4, "raam vak yields 4 raamhout members");
         assert!(raamhout.iter().any(|c| c.piece_id.ends_with("-RSL")));
 
         // Deurhout members for the deur vak (leaf 1) — the deur-item.
-        let deurhout: Vec<_> = prod.cut_list.iter()
+        let deurhout: Vec<_> = prod
+            .cut_list
+            .iter()
             .filter(|c| c.profile_name.starts_with("Deurhout"))
             .collect();
         assert_eq!(deurhout.len(), 4, "deur vak yields 4 deurhout members");
@@ -2611,9 +3599,12 @@ mod tests {
         assert_eq!(prod_grid.glaslat_list.len(), 1);
         let a = &prod_layout.glaslat_list[0];
         let b = &prod_grid.glaslat_list[0];
-        assert!((a.total_length_mm - b.total_length_mm).abs() < 0.01,
+        assert!(
+            (a.total_length_mm - b.total_length_mm).abs() < 0.01,
             "layout bead length {} must match grid path {}",
-            a.total_length_mm, b.total_length_mm);
+            a.total_length_mm,
+            b.total_length_mm
+        );
         assert_eq!(a.position, b.position);
         assert_eq!(a.mitered, b.mitered);
         assert_eq!(a.quantity, 4);
@@ -2628,8 +3619,12 @@ mod tests {
         k_snap_grid.layout = None;
         let prod_snap = compute_production_data(&k_snap);
         let prod_snap_grid = compute_production_data(&k_snap_grid);
-        assert!((prod_snap.glaslat_list[0].total_length_mm
-            - prod_snap_grid.glaslat_list[0].total_length_mm).abs() < 0.01);
+        assert!(
+            (prod_snap.glaslat_list[0].total_length_mm
+                - prod_snap_grid.glaslat_list[0].total_length_mm)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
@@ -2658,19 +3653,28 @@ mod tests {
         let mut k = Kozijn::new("Test", "LG1", 1200.0, 1500.0);
         k.cells[0].glazing.glass_type = "Testglas-misaligned".into();
         k.cells[0].glaslat = Some(crate::glaslat::Glaslat {
-            height_mm: 28.0, ..Default::default()
+            height_mm: 28.0,
+            ..Default::default()
         });
         // 2 glass leaves vs 1 cell → misaligned.
         k.layout = Some(split_row(vec![
-            VakChild { size: 1.0, node: glas() },
-            VakChild { size: 1.0, node: glas() },
+            VakChild {
+                size: 1.0,
+                node: glas(),
+            },
+            VakChild {
+                size: 1.0,
+                node: glas(),
+            },
         ]));
         let prod = compute_production_data(&k);
         let default_type = crate::kozijn::Glazing::default().glass_type;
         assert_eq!(prod.glass_list.len(), 2);
         for g in &prod.glass_list {
-            assert_eq!(g.glass_type, default_type,
-                "misaligned cell data must not leak into layout leaves");
+            assert_eq!(
+                g.glass_type, default_type,
+                "misaligned cell data must not leak into layout leaves"
+            );
         }
         // Both leaves use the profile default, not the unrelated 28 mm bead.
         assert_eq!(prod.glaslat_list.len(), 2);
@@ -2685,8 +3689,10 @@ mod tests {
         let mut k = Kozijn::new("Sponning", "S1", 1000.0, 1200.0);
         k.frame.material = Material::Pvc;
         k.frame.profile_snapshot = Some(ProfileSnapshot {
-            sponning_hoogte: Some(28.0), glasinval: Some(20.0),
-            sash_overlap: Some(6.0), ..Default::default()
+            sponning_hoogte: Some(28.0),
+            glasinval: Some(20.0),
+            sash_overlap: Some(6.0),
+            ..Default::default()
         });
         let prod = compute_production_data(&k);
         assert_eq!(prod.glass_list[0].width_mm, k.inner_width() + 40.0);
@@ -2696,12 +3702,18 @@ mod tests {
         k.cells[0].panel_type = PanelType::TurnTilt;
         k.cells[0].sash_width = Some(60.0);
         k.cells[0].sash_profile_snapshot = Some(ProfileSnapshot {
-            sponning_hoogte: Some(18.0), sponning_diepte: Some(52.0),
-            glaslat_hoogte: Some(22.0), glaslat_breedte: Some(16.0),
-            bead_position: Some(GlaslatPosition::Buiten), ..Default::default()
+            sponning_hoogte: Some(18.0),
+            sponning_diepte: Some(52.0),
+            glaslat_hoogte: Some(22.0),
+            glaslat_breedte: Some(16.0),
+            bead_position: Some(GlaslatPosition::Buiten),
+            ..Default::default()
         });
         let fit = compute_2d_geometry(&k).cell_rects.remove(0).fit.unwrap();
-        assert_eq!(fit.sash_outer.as_ref().unwrap().x, k.frame.frame_width - 6.0);
+        assert_eq!(
+            fit.sash_outer.as_ref().unwrap().x,
+            k.frame.frame_width - 6.0
+        );
         assert_eq!(fit.day.x - fit.glass.x, 13.0);
         assert_eq!(fit.glass.x - fit.rebate.x, 5.0);
         assert_eq!(fit.rebate_depth, Some(52.0));
@@ -2716,7 +3728,9 @@ mod tests {
     fn double_door_has_two_fitted_leaves_and_two_matching_panes() {
         let mut k = Kozijn::new("Stolp", "D1", 1800.0, 2100.0);
         k.layout = Some(crate::layout::deur("dubbel"));
-        let cr = crate::geometry::compute_2d_geometry(&k).cell_rects.remove(0);
+        let cr = crate::geometry::compute_2d_geometry(&k)
+            .cell_rects
+            .remove(0);
         let left = cr.fit.unwrap();
         let right = cr.second_fit.unwrap();
         let outer_left = left.sash_outer.unwrap();
@@ -2746,8 +3760,22 @@ mod tests {
         assert_eq!((bounds.x, bounds.y), (0.0, 0.0));
         let area = pi * 445.0_f64.powi(2) / 1e6;
         assert!((glass.area_m2 - area).abs() < 1e-9);
-        assert!((prod.bom.iter().find(|b| b.category == "Glas").unwrap().quantity - area).abs() < 1e-9);
-        let rubber = prod.gasket_list.iter().find(|g| g.gasket_type == GasketType::GlazingInner).unwrap();
+        assert!(
+            (prod
+                .bom
+                .iter()
+                .find(|b| b.category == "Glas")
+                .unwrap()
+                .quantity
+                - area)
+                .abs()
+                < 1e-9
+        );
+        let rubber = prod
+            .gasket_list
+            .iter()
+            .find(|g| g.gasket_type == GasketType::GlazingInner)
+            .unwrap();
         assert!((rubber.length_mm - (2.0 * pi * 445.0 + 20.0)).abs() < 1e-7);
         let bead = &prod.glaslat_list[0];
         assert_eq!(bead.quantity, 1);
@@ -2766,9 +3794,9 @@ mod tests {
         // Glass and bead terminate at their own intersection with the jamb.
         let r: f64 = 695.0;
         let half: f64 = 545.0;
-        let spring = 750.0 - (r*r - half*half).sqrt();
-        let angle = 2.0 * (half/r).asin();
-        let area = (1090.0 * (1445.0 - spring) + 0.5 * r*r * (angle - angle.sin())) / 1e6;
+        let spring = 750.0 - (r * r - half * half).sqrt();
+        let angle = 2.0 * (half / r).asin();
+        let area = (1090.0 * (1445.0 - spring) + 0.5 * r * r * (angle - angle.sin())) / 1e6;
         assert!((glass.width_mm - 1090.0).abs() < 1e-7);
         assert!((glass.height_mm - 1390.0).abs() < 1e-7);
         assert!((glass.area_m2 - area).abs() < 1e-9);
@@ -2778,7 +3806,13 @@ mod tests {
         let bead_spring = 750.0 - (700.0_f64.powi(2) - 550.0_f64.powi(2)).sqrt();
         let perimeter = 1100.0 + 2.0 * (1450.0 - bead_spring) + 700.0 * bead_angle;
         assert_eq!(bead.quantity, 4);
-        assert_eq!(bead.contour_runs.iter().filter(|run| run.radius_mm == Some(700.0)).count(), 1);
+        assert_eq!(
+            bead.contour_runs
+                .iter()
+                .filter(|run| run.radius_mm == Some(700.0))
+                .count(),
+            1
+        );
         assert!((bead.total_length_mm - perimeter).abs() < 1e-7);
     }
 
@@ -2795,8 +3829,8 @@ mod tests {
         // The divider begins at x=367. The glass reaches 12 mm behind it.
         let r: f64 = 445.0;
         let distance: f64 = 500.0 - 379.0;
-        let half_chord = (r*r - distance*distance).sqrt();
-        let segment_area = r*r * (distance/r).acos() - distance * half_chord;
+        let half_chord = (r * r - distance * distance).sqrt();
+        let segment_area = r * r * (distance / r).acos() - distance * half_chord;
         assert!((left.width_mm - 324.0).abs() < 1e-7);
         assert!((left.height_mm - 2.0 * half_chord).abs() < 1e-7);
         assert!((left.area_m2 - segment_area / 1e6).abs() < 1e-9);
@@ -2805,7 +3839,10 @@ mod tests {
         let outline = left.cut_contour.as_ref().unwrap();
         let bounds = outline.bounds();
         assert!(bounds.x.abs() < 1e-7 && bounds.y.abs() < 1e-7);
-        assert!(outline.segments.iter().any(|s| matches!(s, Segment::Line { from, to }
+        assert!(outline
+            .segments
+            .iter()
+            .any(|s| matches!(s, Segment::Line { from, to }
             if (from[0] - 324.0).abs() < 1e-7 && (to[0] - 324.0).abs() < 1e-7)));
     }
 
@@ -2816,7 +3853,11 @@ mod tests {
         let mut k = Kozijn::new_with_sjabloon("VEKA", "K1", 1200.0, 1000.0, &sj);
         k.cells[0].glazing.thickness_mm = 48.0;
         assert!(k.frame.profile_snapshot.is_none());
-        let fit = crate::geometry::compute_2d_geometry(&k).cell_rects.remove(0).fit.unwrap();
+        let fit = crate::geometry::compute_2d_geometry(&k)
+            .cell_rects
+            .remove(0)
+            .fit
+            .unwrap();
         assert_eq!(fit.day.x - fit.glass.x, 20.0);
         assert_eq!(fit.day.x - fit.rebate.x, 28.0);
         assert_eq!(fit.bead_width, 11.5);

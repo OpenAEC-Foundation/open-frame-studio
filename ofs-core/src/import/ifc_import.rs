@@ -107,13 +107,17 @@ pub fn parse_ifc_text(content: &str) -> Result<IfcImportResult, String> {
         let name = attr_string(entity, 2).unwrap_or_default();
         let object_props = properties.get(&id).cloned().unwrap_or_default();
         match entity.class.as_str() {
-            "IFCWINDOW" | "IFCWINDOWSTANDARDCASE" => result.windows.push(ImportedWindow {
+            "IFCWINDOW" | "IFCWINDOWSTANDARDCASE"
+                if object_props.get("CPset_31.Onderdeel").map(String::as_str) != Some("Ruit") =>
+            {
+                result.windows.push(ImportedWindow {
                 guid,
                 name,
                 height_mm: attr_length(entity, 8, length_to_mm),
                 width_mm: attr_length(entity, 9, length_to_mm),
                 properties: object_props,
-            }),
+                })
+            }
             "IFCDOOR" | "IFCDOORSTANDARDCASE" => result.doors.push(ImportedDoor {
                 guid,
                 name,
@@ -423,7 +427,10 @@ fn assembly_parts(
         .into_iter()
         .filter_map(|id| {
             let entity = entities.get(&id)?;
-            if entity.class != "IFCMEMBER" && entity.class != "IFCPLATE" {
+            if entity.class != "IFCMEMBER"
+                && entity.class != "IFCPLATE"
+                && entity.class != "IFCWINDOW"
+            {
                 return None;
             }
             Some(ImportedPart {
@@ -440,8 +447,11 @@ fn assembly_parts(
 /// Recover only OFS's own rectangular, fixed-glazing parts export as an
 /// editable basic project. Unsupported or missing fields fail closed.
 /// Manufacturer profile snapshots, joints and machine details are not in IFC.
-pub fn reconstruct_own_parts_project_file(filepath: &str) -> Result<crate::kozijn::Project, String> {
-    let content = std::fs::read_to_string(filepath).map_err(|e| format!("Kan IFC niet lezen: {e}"))?;
+pub fn reconstruct_own_parts_project_file(
+    filepath: &str,
+) -> Result<crate::kozijn::Project, String> {
+    let content =
+        std::fs::read_to_string(filepath).map_err(|e| format!("Kan IFC niet lezen: {e}"))?;
     reconstruct_own_parts_project(&content)
 }
 
@@ -450,12 +460,18 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
     use crate::profile::ProfileRef;
 
     let imported = parse_ifc_text(content)?;
-    if imported.assemblies.is_empty() || !imported.windows.is_empty() || !imported.doors.is_empty() {
-        return Err("IFC-herstel ondersteunt alleen een OFS-onderdelenproject met vaste beglazing".into());
+    if imported.assemblies.is_empty() || !imported.windows.is_empty() || !imported.doors.is_empty()
+    {
+        return Err(
+            "IFC-herstel ondersteunt alleen een OFS-onderdelenproject met vaste beglazing".into(),
+        );
     }
     let entities = parse_entities(content)?;
     let to_mm = length_unit_to_mm(&entities)?;
-    let projects: Vec<_> = entities.iter().filter(|(_, e)| e.class == "IFCPROJECT").collect();
+    let projects: Vec<_> = entities
+        .iter()
+        .filter(|(_, e)| e.class == "IFCPROJECT")
+        .collect();
     if projects.len() != 1 {
         return Err("IFC-herstel verwacht precies één IfcProject".into());
     }
@@ -468,7 +484,9 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
         .get(source_project_id)
         .and_then(|p| p.get("OFS_Project.ProjectUUID"))
     {
-        project.id = id.parse().map_err(|_| "IFC-herstel: ongeldig OFS-project-ID")?;
+        project.id = id
+            .parse()
+            .map_err(|_| "IFC-herstel: ongeldig OFS-project-ID")?;
     }
     for assembly in imported.assemblies {
         let p = &assembly.properties;
@@ -505,35 +523,56 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
         k.frame.color_inside = required_text(p, "OFS_KozijnMateriaal.KleurBinnenzijde")?.into();
         k.frame.color_outside = required_text(p, "OFS_KozijnMateriaal.KleurBuitenzijde")?.into();
         let profile_id = required_text(p, "OFS_KozijnAlgemeen.ProfielSysteem")?;
-        let profile_name = p.get("OFS_KozijnAlgemeen.ProfielSysteemNaam")
-            .map(String::as_str).unwrap_or(profile_id);
-        k.frame.profile = ProfileRef { id: profile_id.into(), name: profile_name.into() };
+        let profile_name = p
+            .get("OFS_KozijnAlgemeen.ProfielSysteemNaam")
+            .map(String::as_str)
+            .unwrap_or(profile_id);
+        k.frame.profile = ProfileRef {
+            id: profile_id.into(),
+            name: profile_name.into(),
+        };
         // The IFC only carries the sill's display name, not a reliable
         // supplier profile ID; leave it unresolved instead of inventing one.
         k.frame.sill_profile = None;
         k.series_id = p.get("Pset_OFS_Kozijn.SeriesId").cloned();
-        k.grid.columns = (0..cols).map(|i| {
-            Ok(GridDivision {
-                size: required_positive(p, &format!("OFS_KozijnAfmetingen.KolomBreedte_{}_mm", i + 1))?,
-                divider_profile: (i > 0).then(|| ProfileRef {
-                    id: "OFS-ONBEKEND-TUSSENPROFIEL".into(),
-                    name: "Tussenprofiel controleren".into(),
-                }),
+        k.grid.columns = (0..cols)
+            .map(|i| {
+                Ok(GridDivision {
+                    size: required_positive(
+                        p,
+                        &format!("OFS_KozijnAfmetingen.KolomBreedte_{}_mm", i + 1),
+                    )?,
+                    divider_profile: (i > 0).then(|| ProfileRef {
+                        id: "OFS-ONBEKEND-TUSSENPROFIEL".into(),
+                        name: "Tussenprofiel controleren".into(),
+                    }),
+                    divider_width: None,
+                    divider_depth: None,
+                })
             })
-        }).collect::<Result<Vec<_>, String>>()?;
-        k.grid.rows = (0..rows).map(|i| {
-            Ok(GridDivision {
-                size: required_positive(p, &format!("OFS_KozijnAfmetingen.RijHoogte_{}_mm", i + 1))?,
-                divider_profile: (i > 0).then(|| ProfileRef {
-                    id: "OFS-ONBEKEND-TUSSENPROFIEL".into(),
-                    name: "Tussenprofiel controleren".into(),
-                }),
+            .collect::<Result<Vec<_>, String>>()?;
+        k.grid.rows = (0..rows)
+            .map(|i| {
+                Ok(GridDivision {
+                    size: required_positive(
+                        p,
+                        &format!("OFS_KozijnAfmetingen.RijHoogte_{}_mm", i + 1),
+                    )?,
+                    divider_profile: (i > 0).then(|| ProfileRef {
+                        id: "OFS-ONBEKEND-TUSSENPROFIEL".into(),
+                        name: "Tussenprofiel controleren".into(),
+                    }),
+                    divider_width: None,
+                    divider_depth: None,
+                })
             })
-        }).collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, String>>()?;
         let width_sum: f64 = k.grid.columns.iter().map(|d| d.size).sum::<f64>()
-            + (cols - 1) as f64 * frame_width + 2.0 * frame_width;
+            + (cols - 1) as f64 * frame_width
+            + 2.0 * frame_width;
         let height_sum: f64 = k.grid.rows.iter().map(|d| d.size).sum::<f64>()
-            + (rows - 1) as f64 * frame_width + 2.0 * frame_width;
+            + (rows - 1) as f64 * frame_width
+            + 2.0 * frame_width;
         if (width_sum - width).abs() > 1.0 || (height_sum - height).abs() > 1.0 {
             return Err("IFC-herstel: vakmaten sluiten niet aan op buitenmaat".into());
         }
@@ -544,15 +583,22 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
                 return Err("IFC-herstel: beweegbaar of niet-beglaasd vak".into());
             }
             let cell: &mut Cell = &mut k.cells[index];
-            cell.glazing.glass_type = required_text(p, &format!("OFS_KozijnBeglazing.Cel_{n}_GlasType"))?.into();
-            cell.glazing.thickness_mm = required_positive(p, &format!("OFS_KozijnBeglazing.Cel_{n}_GlasDikte_mm"))?;
-            cell.glazing.ug_value = required_positive(p, &format!("OFS_KozijnBeglazing.Cel_{n}_UgWaarde"))?;
+            cell.glazing.glass_type =
+                required_text(p, &format!("OFS_KozijnBeglazing.Cel_{n}_GlasType"))?.into();
+            cell.glazing.thickness_mm =
+                required_positive(p, &format!("OFS_KozijnBeglazing.Cel_{n}_GlasDikte_mm"))?;
+            cell.glazing.ug_value =
+                required_positive(p, &format!("OFS_KozijnBeglazing.Cel_{n}_UgWaarde"))?;
             cell.glazing.panes.clear();
             cell.glazing.spacer_type = "onbekend".into();
         }
-        let source_entity = entities.values().find(|e| {
-            e.class == "IFCELEMENTASSEMBLY" && attr_string(e, 0).as_deref() == Some(&assembly.guid)
-        }).ok_or("IFC-herstel: samenstelling ontbreekt")?;
+        let source_entity = entities
+            .values()
+            .find(|e| {
+                e.class == "IFCELEMENTASSEMBLY"
+                    && attr_string(e, 0).as_deref() == Some(&assembly.guid)
+            })
+            .ok_or("IFC-herstel: samenstelling ontbreekt")?;
         k.placement = own_placement(source_entity, &entities, to_mm)?;
         let mut vertical = vec![None; cols - 1];
         let mut horizontal = vec![None; rows - 1];
@@ -563,9 +609,13 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
                 .ok_or("IFC-herstel: ongeldige onderdeel-GlobalId")?;
             let role = required_text(&part.properties, "OFS_Onderdeel.Onderdeel")?;
             let frame_index = ["Bovenregel", "Onderregel", "Linkerstijl", "Rechterstijl"]
-                .iter().position(|name| *name == role);
+                .iter()
+                .position(|name| *name == role);
             if let Some(index) = frame_index {
-                if part.entity_type != "IFCMEMBER" || frame_seen[index] || part_id != k.frame_part_id(index) {
+                if part.entity_type != "IFCMEMBER"
+                    || frame_seen[index]
+                    || part_id != k.frame_part_id(index)
+                {
                     return Err("IFC-herstel: ongeldig buitenkaderonderdeel".into());
                 }
                 frame_seen[index] = true;
@@ -578,7 +628,9 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
                     return Err("IFC-herstel: dubbele of ongeldige tussenregel".into());
                 }
             } else if let Some(index) = role_index(role, "Ruit vak ", glass.len()) {
-                if part.entity_type != "IFCPLATE" || glass[index].replace(part_id).is_some() {
+                if !matches!(part.entity_type.as_str(), "IFCWINDOW" | "IFCPLATE")
+                    || glass[index].replace(part_id).is_some()
+                {
                     return Err("IFC-herstel: dubbele of ongeldige ruit".into());
                 }
             } else {
@@ -598,12 +650,15 @@ pub fn reconstruct_own_parts_project(content: &str) -> Result<crate::kozijn::Pro
 }
 
 fn required_text<'a>(p: &'a HashMap<String, String>, key: &str) -> Result<&'a str, String> {
-    p.get(key).map(String::as_str).filter(|v| !v.is_empty())
+    p.get(key)
+        .map(String::as_str)
+        .filter(|v| !v.is_empty())
         .ok_or_else(|| format!("IFC-herstel: eigenschap {key} ontbreekt"))
 }
 
 fn required_positive(p: &HashMap<String, String>, key: &str) -> Result<f64, String> {
-    let value = required_text(p, key)?.parse::<f64>()
+    let value = required_text(p, key)?
+        .parse::<f64>()
         .map_err(|_| format!("IFC-herstel: ongeldige waarde voor {key}"))?;
     if !value.is_finite() || value <= 0.0 {
         return Err(format!("IFC-herstel: ongeldige waarde voor {key}"));
@@ -612,9 +667,12 @@ fn required_positive(p: &HashMap<String, String>, key: &str) -> Result<f64, Stri
 }
 
 fn required_count(p: &HashMap<String, String>, key: &str) -> Result<usize, String> {
-    let count = required_text(p, key)?.parse::<usize>()
+    let count = required_text(p, key)?
+        .parse::<usize>()
         .map_err(|_| format!("IFC-herstel: ongeldige waarde voor {key}"))?;
-    if count == 0 { return Err(format!("IFC-herstel: ongeldige waarde voor {key}")); }
+    if count == 0 {
+        return Err(format!("IFC-herstel: ongeldige waarde voor {key}"));
+    }
     Ok(count)
 }
 
@@ -624,7 +682,10 @@ fn role_index(role: &str, prefix: &str, max: usize) -> Option<usize> {
 }
 
 fn require_all_ids(values: Vec<Option<uuid::Uuid>>) -> Result<Vec<uuid::Uuid>, String> {
-    values.into_iter().map(|v| v.ok_or_else(|| "IFC-herstel: onderdeel ontbreekt".into())).collect()
+    values
+        .into_iter()
+        .map(|v| v.ok_or_else(|| "IFC-herstel: onderdeel ontbreekt".into()))
+        .collect()
 }
 
 fn own_placement(
@@ -632,22 +693,41 @@ fn own_placement(
     entities: &HashMap<u32, StepEntity>,
     to_mm: f64,
 ) -> Result<crate::kozijn::Placement, String> {
-    let local_id = entity.attrs.get(5).and_then(|v| entity_ref(v))
+    let local_id = entity
+        .attrs
+        .get(5)
+        .and_then(|v| entity_ref(v))
         .ok_or("IFC-herstel: plaatsing ontbreekt")?;
-    let local = entities.get(&local_id).filter(|e| e.class == "IFCLOCALPLACEMENT")
+    let local = entities
+        .get(&local_id)
+        .filter(|e| e.class == "IFCLOCALPLACEMENT")
         .ok_or("IFC-herstel: ongeldige plaatsing")?;
     if local.attrs.first().map(String::as_str) != Some("$") {
         return Err("IFC-herstel: geneste plaatsing wordt niet ondersteund".into());
     }
-    let axis_id = local.attrs.get(1).and_then(|v| entity_ref(v)).ok_or("IFC-herstel: as ontbreekt")?;
-    let axis = entities.get(&axis_id).filter(|e| e.class == "IFCAXIS2PLACEMENT3D")
+    let axis_id = local
+        .attrs
+        .get(1)
+        .and_then(|v| entity_ref(v))
+        .ok_or("IFC-herstel: as ontbreekt")?;
+    let axis = entities
+        .get(&axis_id)
+        .filter(|e| e.class == "IFCAXIS2PLACEMENT3D")
         .ok_or("IFC-herstel: ongeldige as")?;
-    let point_id = axis.attrs.first().and_then(|v| entity_ref(v)).ok_or("IFC-herstel: oorsprong ontbreekt")?;
-    let point = entities.get(&point_id).filter(|e| e.class == "IFCCARTESIANPOINT")
+    let point_id = axis
+        .attrs
+        .first()
+        .and_then(|v| entity_ref(v))
+        .ok_or("IFC-herstel: oorsprong ontbreekt")?;
+    let point = entities
+        .get(&point_id)
+        .filter(|e| e.class == "IFCCARTESIANPOINT")
         .ok_or("IFC-herstel: ongeldige oorsprong")?;
     let xyz = numeric_tuple(point, 3)?;
     if let Some(up_id) = axis.attrs.get(1).and_then(|v| entity_ref(v)) {
-        let up = entities.get(&up_id).filter(|e| e.class == "IFCDIRECTION")
+        let up = entities
+            .get(&up_id)
+            .filter(|e| e.class == "IFCDIRECTION")
             .ok_or("IFC-herstel: ongeldige hoogte-as")?;
         let v = numeric_tuple(up, 3)?;
         if v[0].abs() > 1e-6 || v[1].abs() > 1e-6 || (v[2] - 1.0).abs() > 1e-6 {
@@ -655,33 +735,57 @@ fn own_placement(
         }
     }
     let orientation = if let Some(dir_id) = axis.attrs.get(2).and_then(|v| entity_ref(v)) {
-        let dir = entities.get(&dir_id).filter(|e| e.class == "IFCDIRECTION")
+        let dir = entities
+            .get(&dir_id)
+            .filter(|e| e.class == "IFCDIRECTION")
             .ok_or("IFC-herstel: ongeldige richting")?;
         let values = numeric_tuple(dir, 3)?;
         if values[2].abs() > 1e-6 || values[0].hypot(values[1]) < 1e-9 {
             return Err("IFC-herstel: ongeldige breedte-as".into());
         }
         values[1].atan2(values[0]).to_degrees()
-    } else { 0.0 };
+    } else {
+        0.0
+    };
     let [x, y, z] = [xyz[0] * to_mm, xyz[1] * to_mm, xyz[2] * to_mm];
     if !x.is_finite() || !y.is_finite() || !z.is_finite() {
         return Err("IFC-herstel: ongeldige projectcoördinaten".into());
     }
     Ok(crate::kozijn::Placement {
-        wall_id: None, x, y, z, orientation,
+        wall_id: None,
+        x,
+        y,
+        z,
+        orientation,
     })
 }
 
 fn numeric_tuple(entity: &StepEntity, len: usize) -> Result<Vec<f64>, String> {
-    let raw = entity.attrs.first().ok_or("IFC-herstel: coördinaten ontbreken")?;
-    let values = split_attrs(raw.trim().strip_prefix('(').and_then(|v| v.strip_suffix(')'))
-        .ok_or("IFC-herstel: ongeldige coördinaten")?);
-    if values.len() != len { return Err("IFC-herstel: onjuist aantal coördinaten".into()); }
-    values.iter().map(|v| {
-        let n = v.parse::<f64>().map_err(|_| "IFC-herstel: ongeldige coördinaat")?;
-        if !n.is_finite() { return Err("IFC-herstel: ongeldige coördinaat".into()); }
-        Ok(n)
-    }).collect()
+    let raw = entity
+        .attrs
+        .first()
+        .ok_or("IFC-herstel: coördinaten ontbreken")?;
+    let values = split_attrs(
+        raw.trim()
+            .strip_prefix('(')
+            .and_then(|v| v.strip_suffix(')'))
+            .ok_or("IFC-herstel: ongeldige coördinaten")?,
+    );
+    if values.len() != len {
+        return Err("IFC-herstel: onjuist aantal coördinaten".into());
+    }
+    values
+        .iter()
+        .map(|v| {
+            let n = v
+                .parse::<f64>()
+                .map_err(|_| "IFC-herstel: ongeldige coördinaat")?;
+            if !n.is_finite() {
+                return Err("IFC-herstel: ongeldige coördinaat".into());
+            }
+            Ok(n)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -705,11 +809,14 @@ mod tests {
         let expected_ids = [first.glass_part_id(0), first.glass_part_id(1)];
         let original_id = first.id;
         project.kozijnen.push(first);
-        project.kozijnen.push(Kozijn::new("Achtergevel", "K-02", 900.0, 1200.0));
+        project
+            .kozijnen
+            .push(Kozijn::new("Achtergevel", "K-02", 900.0, 1200.0));
         let path = std::env::temp_dir().join(format!("ofs_restore_{}.ifc", project.id));
         generate_ifc_parts_project(&project, &path.to_string_lossy()).unwrap();
         let restored = reconstruct_own_parts_project_file(&path.to_string_lossy()).unwrap();
-        let replay_path = std::env::temp_dir().join(format!("ofs_restore_replay_{}.ifc", project.id));
+        let replay_path =
+            std::env::temp_dir().join(format!("ofs_restore_replay_{}.ifc", project.id));
         generate_ifc_parts_project(&restored, &replay_path.to_string_lossy()).unwrap();
         let replay = parse_ifc_file(&replay_path.to_string_lossy()).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -718,7 +825,11 @@ mod tests {
         assert_eq!(restored.id, project.id);
         assert_eq!(restored.project_info.number, "QA-1");
         assert_eq!(restored.kozijnen.len(), 2);
-        let k = restored.kozijnen.iter().find(|k| k.id == original_id).unwrap();
+        let k = restored
+            .kozijnen
+            .iter()
+            .find(|k| k.id == original_id)
+            .unwrap();
         assert!(k.recovered_from_ifc);
         assert_eq!(k.grid.columns.len(), 2);
         assert_eq!(k.cells[1].glazing.glass_type, "Triple");
@@ -730,23 +841,51 @@ mod tests {
         assert!((k.placement.orientation - 30.0).abs() < 0.001);
         assert_eq!([k.glass_part_id(0), k.glass_part_id(1)], expected_ids);
         assert_eq!(replay.assemblies.len(), 2);
-        assert_eq!(replay.assemblies.iter().map(|a| a.parts.len()).sum::<usize>(), 12);
-        assert!(replay.assemblies.iter().flat_map(|a| &a.parts).any(|p| p.guid == crate::ifc_guid::uuid_to_ifc_guid(&expected_ids[1])));
-        let reopened: Project = serde_json::from_str(&serde_json::to_string(&restored).unwrap()).unwrap();
-        assert_eq!(reopened.kozijnen.iter().find(|k| k.id == original_id).unwrap().glass_part_id(1), expected_ids[1]);
+        assert_eq!(
+            replay
+                .assemblies
+                .iter()
+                .map(|a| a.parts.len())
+                .sum::<usize>(),
+            12
+        );
+        assert!(replay
+            .assemblies
+            .iter()
+            .flat_map(|a| &a.parts)
+            .any(|p| p.guid == crate::ifc_guid::uuid_to_ifc_guid(&expected_ids[1])));
+        let reopened: Project =
+            serde_json::from_str(&serde_json::to_string(&restored).unwrap()).unwrap();
+        assert_eq!(
+            reopened
+                .kozijnen
+                .iter()
+                .find(|k| k.id == original_id)
+                .unwrap()
+                .glass_part_id(1),
+            expected_ids[1]
+        );
     }
 
     #[test]
     fn editable_recovery_rejects_ordinary_window_and_missing_ofs_metadata() {
         let mut project = Project::new("Proef", "P-1");
-        project.kozijnen.push(Kozijn::new("Raam", "K-1", 900.0, 1200.0));
+        project
+            .kozijnen
+            .push(Kozijn::new("Raam", "K-1", 900.0, 1200.0));
         let path = std::env::temp_dir().join(format!("ofs_recovery_reject_{}.ifc", project.id));
         generate_project_ifc_with_lod(&project, &path.to_string_lossy(), LodLevel::Lod300).unwrap();
         let window_text = std::fs::read_to_string(&path).unwrap();
-        assert!(reconstruct_own_parts_project(&window_text).unwrap_err().contains("onderdelenproject"));
+        assert!(reconstruct_own_parts_project(&window_text)
+            .unwrap_err()
+            .contains("onderdelenproject"));
         generate_ifc_parts_project(&project, &path.to_string_lossy()).unwrap();
-        let parts_text = std::fs::read_to_string(&path).unwrap().replace("'OFS_KozijnAfmetingen'", "'VerkeerdeEigenschappen'");
-        assert!(reconstruct_own_parts_project(&parts_text).unwrap_err().contains("eigenschap"));
+        let parts_text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("'OFS_KozijnAfmetingen'", "'VerkeerdeEigenschappen'");
+        assert!(reconstruct_own_parts_project(&parts_text)
+            .unwrap_err()
+            .contains("eigenschap"));
         let _ = std::fs::remove_file(&path);
     }
 
@@ -786,7 +925,7 @@ mod tests {
             parts.assemblies[0]
                 .parts
                 .iter()
-                .filter(|p| p.entity_type == "IFCPLATE")
+                .filter(|p| p.entity_type == "IFCWINDOW")
                 .count(),
             2
         );
@@ -794,14 +933,35 @@ mod tests {
             .parts
             .iter()
             .all(|p| p.properties.contains_key("OFS_Onderdeel.Onderdeel")));
-        let top = parts.assemblies[0].parts.iter()
-            .find(|p| p.name == "Bovenregel").unwrap();
-        assert_eq!(top.properties["OFS_CalculatieIndicatief.ZaaglijstID"], "K-É-DB");
-        assert!(top.properties.contains_key("OFS_CalculatieIndicatief.NettoLengte_mm"));
-        let first_glass = parts.assemblies[0].parts.iter()
-            .find(|p| p.name == "Ruit vak 1").unwrap();
-        assert_eq!(first_glass.properties["OFS_CalculatieIndicatief.GlaslijstID"], "K-É-V1");
-        assert!(first_glass.properties.contains_key("OFS_CalculatieIndicatief.BestelbreedteIndicatief_mm"));
+        assert!(parts.assemblies[0]
+            .parts
+            .iter()
+            .filter(|p| p.entity_type == "IFCWINDOW")
+            .all(|p| p.properties.get("CPset_31.Onderdeel").map(String::as_str) == Some("Ruit")));
+        let top = parts.assemblies[0]
+            .parts
+            .iter()
+            .find(|p| p.name == "Bovenregel")
+            .unwrap();
+        assert_eq!(
+            top.properties["OFS_CalculatieIndicatief.ZaaglijstID"],
+            "K-É-DB"
+        );
+        assert!(top
+            .properties
+            .contains_key("OFS_CalculatieIndicatief.NettoLengte_mm"));
+        let first_glass = parts.assemblies[0]
+            .parts
+            .iter()
+            .find(|p| p.name == "Ruit vak 1")
+            .unwrap();
+        assert_eq!(
+            first_glass.properties["OFS_CalculatieIndicatief.GlaslijstID"],
+            "K-É-V1"
+        );
+        assert!(first_glass
+            .properties
+            .contains_key("OFS_CalculatieIndicatief.BestelbreedteIndicatief_mm"));
     }
 
     #[test]

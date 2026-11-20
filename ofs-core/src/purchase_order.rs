@@ -40,6 +40,8 @@ pub struct PurchaseOrder {
     pub lines: Vec<PurchaseOrderLine>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unresolved_piece_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_piece_ids: Vec<String>,
     pub line_count: usize,
     pub subtotal_excl_btw: f64,
     pub btw_pct: f64,
@@ -62,6 +64,7 @@ pub fn generate_purchase_orders(project: &Project) -> Vec<PurchaseOrder> {
 
     generate_purchase_proposals(project)
         .into_iter()
+        .filter(|proposal| !proposal.items.is_empty() || !proposal.unresolved_piece_ids.is_empty())
         .map(|proposal| {
             let category = proposal.category;
             let lines: Vec<PurchaseOrderLine> = proposal
@@ -89,6 +92,7 @@ pub fn generate_purchase_orders(project: &Project) -> Vec<PurchaseOrder> {
                 delivery_address: info.address.clone(),
                 line_count: lines.len(),
                 unresolved_piece_ids: proposal.unresolved_piece_ids,
+                blocked_piece_ids: proposal.blocked_piece_ids,
                 lines,
                 subtotal_excl_btw: subtotal,
                 btw_pct: DEFAULT_BTW_PCT,

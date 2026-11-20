@@ -702,6 +702,7 @@
   "procurement.noResults": "Keine Bestellpositionen gefunden. Fügen Sie dem Projekt zuerst Fenster hinzu.",
   "procurement.generated": "Bestellvorschlag erstellt",
   "procurement.generateError": "Fehler beim Erstellen des Bestellvorschlags",
+  "procurement.blockedItems": "Abgelehnte Glaspositionen sind nicht bestellbar",
   "procurement.totalExclBtw": "Summe exkl. MwSt.",
   "procurement.colDescription": "Beschreibung",
   "procurement.colArticle": "Artikelnr.",

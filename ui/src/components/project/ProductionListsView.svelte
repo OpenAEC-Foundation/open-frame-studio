@@ -211,10 +211,15 @@
         </tr></thead>
         <tbody>
           {#each allGlass as item}
-            <tr>
+            <tr class:invalid-glass={item.productionReady === false}>
               <td>{item.mark}</td>
               <td>{item.pieceId}</td>
-              <td>{item.glassType}</td>
+              <td>
+                {item.glassType}
+                {#if item.productionReady === false}
+                  <span class="glass-warning" title={item.productionIssue}> ⚠ {item.productionIssue}</span>
+                {/if}
+              </td>
               <td class="num">{item.cutContour ? mm.format(item.widthMm) : Math.round(item.widthMm)}</td>
               <td class="num">{item.cutContour ? mm.format(item.heightMm) : Math.round(item.heightMm)}</td>
               <td class="num">{item.thicknessMm}</td>
@@ -614,6 +619,9 @@
   tbody tr:nth-child(even) {
     background: var(--bg-surface-alt);
   }
+
+  tbody tr.invalid-glass { background: color-mix(in srgb, #dc2626 9%, var(--bg-surface)); }
+  .glass-warning { color: #b91c1c; font-size: 11px; white-space: normal; }
 
   td {
     padding: var(--sp-2) var(--sp-3);

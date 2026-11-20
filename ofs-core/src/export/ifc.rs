@@ -133,7 +133,7 @@ pub fn generate_ifc_type_library(project: &Project, output_path: &str) -> Result
         "IFCAXIS2PLACEMENT3D({},{},{})",
         origin, axis_z, axis_x,
     ));
-    let north = ifc.add_entity("IFCDIRECTION((0.0,1.0,0.0))");
+    let north = ifc.add_entity("IFCDIRECTION((0.0,1.0))");
     let context = ifc.add_entity(&format!(
         "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,{},{})",
         mapping_origin, north,
@@ -282,7 +282,7 @@ fn generate_ifc_collection(
         origin_3d, axis_z, axis_x
     ));
 
-    let true_north = ifc.add_entity("IFCDIRECTION((0.0,1.0,0.0))");
+    let true_north = ifc.add_entity("IFCDIRECTION((0.0,1.0))");
     let context = ifc.add_entity(&format!(
         "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,{},{})",
         placement_3d, true_north
@@ -466,7 +466,20 @@ fn validate_parts_calculation(kozijn: &Kozijn) -> Result<(), String> {
         !item.net_length_mm.is_finite() || item.net_length_mm <= 0.0
         || !item.gross_length_mm.is_finite() || item.gross_length_mm <= 0.0
         || !item.miter_left_deg.is_finite() || !item.miter_right_deg.is_finite()
-    }) || production.glass_list.iter().any(|item| {
+    }) {
+        return Err("IFC-onderdelen: ongeldige indicatieve zaagmaat".into());
+    }
+    if let Some(item) = production.glass_list.iter().find(|item| !item.production_ready) {
+        let reason = item
+            .production_issue
+            .as_deref()
+            .unwrap_or("glascombinatie voldoet niet aan de productieregels");
+        return Err(format!(
+            "IFC-onderdelen: ruit {} is afgekeurd: {}",
+            item.piece_id, reason
+        ));
+    }
+    if production.glass_list.iter().any(|item| {
         !item.width_mm.is_finite() || item.width_mm <= 0.0
         || !item.height_mm.is_finite() || item.height_mm <= 0.0
         || !item.thickness_mm.is_finite() || item.thickness_mm <= 0.0
@@ -528,10 +541,11 @@ fn validate_ifc_export(kozijn: &Kozijn, lod: LodLevel) -> Result<(), String> {
     }
     let expected_width = frame.outer_width - 2.0 * frame.frame_width;
     let expected_height = frame.outer_height - 2.0 * frame.frame_width;
+    let geometry = compute_2d_geometry(kozijn);
     let columns = kozijn.grid.columns.iter().map(|c| c.size).sum::<f64>()
-        + frame.frame_width * (kozijn.grid.columns.len() - 1) as f64;
+        + geometry.v_dividers.iter().map(|d| d.width).sum::<f64>();
     let rows = kozijn.grid.rows.iter().map(|r| r.size).sum::<f64>()
-        + frame.frame_width * (kozijn.grid.rows.len() - 1) as f64;
+        + geometry.h_dividers.iter().map(|d| d.height).sum::<f64>();
     if kozijn
         .grid
         .columns
@@ -680,7 +694,7 @@ fn add_parts_assembly(
         let solid = add_rect_solid(ifc, &cell_rect.rect, height_m,
             (depth_m - thickness) / 2.0, thickness, "Glazing");
         plates.push(add_parts_element(ifc, owner_history, body_context, kozijn, &part_placement,
-            "IFCPLATE", &format!("Ruit vak {}", cell_rect.cell_index + 1), ordinal,
+            "IFCWINDOW", &format!("Ruit vak {}", cell_rect.cell_index + 1), ordinal,
             kozijn.glass_part_id(cell_rect.cell_index), &solid,
             Some((cell_rect.rect.width, cell_rect.rect.height, cell.glazing.thickness_mm))));
         ordinal += 1;
@@ -768,11 +782,26 @@ fn add_parts_element(
     let product_shape = ifc.add_entity(&format!("IFCPRODUCTDEFINITIONSHAPE($,$,({}))", shape));
     let part_guid = crate::ifc_guid::uuid_to_ifc_guid(&part_uuid);
     let tag = format!("{}-{:03}", kozijn.mark, ordinal);
-    // IfcMember and IfcPlate each add one optional PredefinedType to IfcElement.
-    let element = ifc.add_entity(&format!(
-        "{}('{}',{},'{}',$,$,{},{},'{}',$)",
-        class, part_guid, owner_history, step_str(role), placement, product_shape, step_str(&tag),
-    ));
+    let element = if class == "IFCWINDOW" {
+        let (width, height, _) = glazing_mm.expect("IfcWindow glass needs opening dimensions");
+        ifc.add_entity(&format!(
+            "IFCWINDOW('{}',{},'{}',$,$,{},{},'{}',{:.6},{:.6},.WINDOW.,$,$)",
+            part_guid,
+            owner_history,
+            step_str(role),
+            placement,
+            product_shape,
+            step_str(&tag),
+            height / 1000.0,
+            width / 1000.0,
+        ))
+    } else {
+        // IfcMember and IfcPlate each add one optional PredefinedType to IfcElement.
+        ifc.add_entity(&format!(
+            "{}('{}',{},'{}',$,$,{},{},'{}',$)",
+            class, part_guid, owner_history, step_str(role), placement, product_shape, step_str(&tag),
+        ))
+    };
     let mut props = vec![
         ifc.add_prop_label("KozijncombinatieID", &kozijn.id.to_string()),
         ifc.add_prop_label("Onderdeel", role),
@@ -784,6 +813,11 @@ fn add_parts_element(
         props.push(ifc.add_prop_real("Glasdikte_mm", thickness));
     }
     ifc.add_property_set(owner_history, "OFS_Onderdeel", &element, &props);
+    let ils_props = vec![
+        ifc.add_prop_label("KozijncombinatieID", &kozijn.id.to_string()),
+        ifc.add_prop_label("Onderdeel", if glazing_mm.is_some() { "Ruit" } else { role }),
+    ];
+    ifc.add_property_set(owner_history, "CPset_31", &element, &ils_props);
     element
 }
 
@@ -943,6 +977,12 @@ fn add_ils_psets(ifc: &mut IfcWriter, oh: &str, element: &str, kozijn: &Kozijn) 
     let oh_mm = frame.outer_height;
     let fw = frame.frame_width;
     let fd = frame.frame_depth;
+
+    let identity = vec![
+        ifc.add_prop_label("KozijncombinatieID", &kozijn.id.to_string()),
+        ifc.add_prop_label("Onderdeel", "Kozijnsamenstelling"),
+    ];
+    ifc.add_property_set(oh, "CPset_31", element, &identity);
 
     // OFS_KozijnAlgemeen
     {
@@ -2003,21 +2043,32 @@ mod tests {
         let content = export_parts_to_string(&project);
         assert_eq!(content.matches("=IFCELEMENTASSEMBLY(").count(), 2);
         assert_eq!(content.matches("=IFCMEMBER(").count(), 9);
-        assert_eq!(content.matches("=IFCPLATE(").count(), 3);
+        assert_eq!(content.matches("=IFCWINDOW(").count(), 3);
+        let fixed_pane = content.lines()
+            .find(|line| line.contains("=IFCWINDOW(") && line.contains("'K-02-005'"))
+            .expect("ruit van het houten kozijn van 900 × 1200 mm");
+        // In IFC4 OverallHeight precedes OverallWidth. The visible opening
+        // excludes the 67 mm timber frame on both sides of each dimension.
+        let attrs = parse_step_attrs(fixed_pane);
+        assert_eq!(attrs[8].parse::<f64>().unwrap(), 1.066);
+        assert_eq!(attrs[9].parse::<f64>().unwrap(), 0.766);
+        assert!(!content.contains("=IFCPLATE("));
         assert_eq!(content.matches("=IFCRELASSOCIATESMATERIAL(").count(), 4);
         assert_eq!(content.matches("=IFCRELCONTAINEDINSPATIALSTRUCTURE(").count(), 1);
         assert_eq!(content.matches("'OFS_Onderdeel'").count(), 12);
-        assert!(!content.contains("=IFCWINDOW("));
         assert!(content.contains("'Glasdikte_mm'"));
 
         let mut part_guids = std::collections::HashSet::new();
         for line in content.lines().filter(|line| {
-            line.contains("=IFCMEMBER(") || line.contains("=IFCPLATE(")
+            line.contains("=IFCMEMBER(") || line.contains("=IFCWINDOW(")
         }) {
             let attrs = parse_step_attrs(line);
-            assert_eq!(attrs.len(), 9);
+            assert_eq!(attrs.len(), if line.contains("=IFCWINDOW(") { 13 } else { 9 });
             assert!(part_guids.insert(attrs[0].clone()));
         }
+        assert_eq!(content.matches("'CPset_31'").count(), 14);
+        assert!(content.contains("IFCDIRECTION((0.0,1.0))"));
+        assert!(!content.contains("IFCDIRECTION((0.0,1.0,0.0))"));
         let mut reversed = project.clone();
         reversed.kozijnen.reverse();
         assert_eq!(content, export_parts_to_string(&reversed));
@@ -2039,6 +2090,193 @@ mod tests {
         assert!(after.assemblies[0].parts.iter().any(|p| p.guid == old_divider_guid));
         assert!(after.assemblies[0].parts.iter().any(|p| p.guid == old_right_glass_guid));
         assert_eq!(after.assemblies[0].parts.len(), before.assemblies[0].parts.len() + 2);
+    }
+
+    #[test]
+    fn pvc_revision_keeps_ifc_glass_cutlist_and_sawlist_dimensions_in_step() {
+        let mut kozijn = Kozijn::new("VEKA", "V-01", 1200.0, 1500.0);
+        kozijn.add_column(500.0);
+        let snapshot =
+            crate::glazing_fit::catalog_snapshot("veka-softline82", &Material::Pvc).unwrap();
+        let snapshot_json = serde_json::to_string(snapshot).unwrap();
+        kozijn
+            .apply_frame_profile(
+                crate::profile::ProfileRef {
+                    id: "veka-softline82".into(),
+                    name: "VEKA Softline 82 MD".into(),
+                },
+                Some(73.0),
+                Some(82.0),
+                Some(&snapshot_json),
+                Some("\"pvc\""),
+            )
+            .unwrap();
+        let mut project = Project::new("Profielrevisie", "V-01");
+        project.kozijnen.push(kozijn);
+
+        let before = export_parts_to_string(&project);
+        let before_import = crate::import::ifc_import::parse_ifc_text(&before).unwrap();
+        let old_glass_ids: std::collections::HashSet<_> = before_import.assemblies[0]
+            .parts
+            .iter()
+            .filter(|part| part.entity_type == "IFCWINDOW")
+            .map(|part| part.guid.clone())
+            .collect();
+        assert_eq!(old_glass_ids.len(), 2);
+
+        let grid = &mut project.kozijnen[0].grid.columns;
+        grid[0].size -= 20.0;
+        grid[1].size += 20.0;
+        let revised_geometry = compute_2d_geometry(&project.kozijnen[0]);
+        assert!((revised_geometry.v_dividers[0].width - 94.0).abs() < 0.001);
+        let production = compute_production_data(&project.kozijnen[0]);
+        assert!(production.glass_list.iter().all(|glass| glass.production_ready));
+        assert_eq!(production.glass_list.len(), 2);
+        let list_dir = std::env::temp_dir().join(format!("ofs_pvc_revision_{}", project.id));
+        crate::export::csv_production::generate_production_csv(
+            std::slice::from_ref(&production),
+            &list_dir.to_string_lossy(),
+        )
+        .unwrap();
+        let glass_csv = std::fs::read_to_string(list_dir.join("glaslijst.csv")).unwrap();
+        let saw_csv = std::fs::read_to_string(list_dir.join("kortlijst.csv")).unwrap();
+        for glass in &production.glass_list {
+            let row = glass_csv
+                .lines()
+                .find(|line| line.contains(&glass.piece_id))
+                .expect("gereviseerde ruit staat in de CSV-glaslijst");
+            let fields: Vec<_> = row.trim_start_matches('\u{feff}').split(';').collect();
+            assert_eq!(fields[1], glass.piece_id);
+            assert_eq!(fields[3], glass.dimension_text(glass.width_mm));
+            assert_eq!(fields[4], glass.dimension_text(glass.height_mm));
+            assert_eq!(fields[5], format!("{:.0}", glass.thickness_mm));
+        }
+        for cut in &production.cut_list {
+            let row = saw_csv
+                .lines()
+                .find(|line| line.contains(&cut.piece_id))
+                .expect("gereviseerd profiel staat in de CSV-zaaglijst");
+            let fields: Vec<_> = row.trim_start_matches('\u{feff}').split(';').collect();
+            assert_eq!(fields[1], cut.piece_id);
+            assert_eq!(fields[5], cut.net_length_mm.round().to_string());
+            assert_eq!(fields[7], cut.miter_left_deg.round().to_string());
+            assert_eq!(fields[8], cut.miter_right_deg.round().to_string());
+        }
+
+        let after = export_parts_to_string(&project);
+        let imported = crate::import::ifc_import::parse_ifc_text(&after).unwrap();
+        let parts = &imported.assemblies[0].parts;
+        let revised_glass_ids: std::collections::HashSet<_> = parts
+            .iter()
+            .filter(|part| part.entity_type == "IFCWINDOW")
+            .map(|part| part.guid.clone())
+            .collect();
+        assert_eq!(revised_glass_ids, old_glass_ids);
+        let assert_measure = |actual: &str, expected: f64| {
+            let actual = actual.parse::<f64>().unwrap();
+            assert!(
+                (actual - expected).abs() < 0.001,
+                "IFC maat {actual} wijkt af van de lijstmaat {expected}"
+            );
+        };
+
+        for glass in &production.glass_list {
+            let part = parts
+                .iter()
+                .find(|part| {
+                    part.properties.get("OFS_CalculatieIndicatief.GlaslijstID")
+                        == Some(&glass.piece_id)
+                })
+                .expect("elke glaslijstregel hoort bij een IFC-ruit");
+            assert_eq!(part.properties["CPset_31.Onderdeel"], "Ruit");
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.BestelbreedteIndicatief_mm"]
+                    .as_str(),
+                glass.width_mm
+            );
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.BestelhoogteIndicatief_mm"]
+                    .as_str(),
+                glass.height_mm
+            );
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.Dikte_mm"]
+                    .as_str(),
+                glass.thickness_mm
+            );
+        }
+
+        for cut in &production.cut_list {
+            let part = parts
+                .iter()
+                .find(|part| {
+                    part.properties.get("OFS_CalculatieIndicatief.ZaaglijstID")
+                        == Some(&cut.piece_id)
+                })
+                .expect("elke zaaglijstregel hoort bij een IFC-profiel");
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.NettoLengte_mm"]
+                    .as_str(),
+                cut.net_length_mm
+            );
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.BrutoLengte_mm"]
+                    .as_str(),
+                cut.gross_length_mm
+            );
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.VerstekBegin_graad"]
+                    .as_str(),
+                cut.miter_left_deg
+            );
+            assert_measure(
+                part.properties["OFS_CalculatieIndicatief.VerstekEind_graad"]
+                    .as_str(),
+                cut.miter_right_deg
+            );
+        }
+        std::fs::remove_dir_all(list_dir).unwrap();
+    }
+
+    #[test]
+    fn rejected_glass_blocks_parts_and_manufacturer_handoff() {
+        let mut kozijn = Kozijn::new("VEKA", "V-80", 900.0, 1400.0);
+        kozijn.frame.material = Material::Pvc;
+        let snapshot =
+            crate::glazing_fit::catalog_snapshot("veka-softline82", &Material::Pvc).unwrap();
+        let snapshot_json = serde_json::to_string(snapshot).unwrap();
+        kozijn
+            .apply_frame_profile(
+                crate::profile::ProfileRef {
+                    id: "veka-softline82".into(),
+                    name: "VEKA Softline 82 MD".into(),
+                },
+                Some(73.0),
+                Some(82.0),
+                Some(&snapshot_json),
+                None,
+            )
+            .unwrap();
+        kozijn.cells[0].glazing.thickness_mm = 80.0;
+        let mut project = Project::new("Afgekeurd glas", "V-80");
+        project.kozijnen.push(kozijn);
+        let path = std::env::temp_dir().join(format!("ofs_rejected_glass_{}.ifc", project.id));
+
+        let error =
+            generate_ifc_parts_project(&project, &path.to_string_lossy()).unwrap_err();
+        assert!(error.contains("afgekeurd"));
+        assert!(error.contains("80 mm"));
+        assert!(!path.exists());
+
+        let directory = std::env::temp_dir().join(format!("ofs_rejected_handoff_{}", project.id));
+        std::fs::create_dir_all(&directory).unwrap();
+        let error = crate::export::manufacturer_handoff::generate_manufacturer_handoff(
+            &project, &directory,
+        )
+        .unwrap_err();
+        assert!(error.contains("afgekeurd"));
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 0);
+        std::fs::remove_dir(&directory).unwrap();
     }
 
     #[test]

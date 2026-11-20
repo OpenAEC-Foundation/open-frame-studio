@@ -42,6 +42,16 @@ impl ProfileRef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileSnapshot {
+    /// Stable manufacturer and series key used to reject mixed-system sash/frame combinations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_glass_thickness: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_glass_thickness: Option<f64>,
+    /// Visible face width of the system's standard mullion/transom article.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divider_face_width: Option<f64>,
     /// Number of closing seal circuits on a hinged system sash (AD / MD).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sealing_levels: Option<u8>,
@@ -428,7 +438,10 @@ mod tests {
             glasinval: Some(18.0),
             ..Default::default()
         };
-        assert_eq!(only_glasinval.resolved_sponning_hoogte(&Material::Pvc), 18.0);
+        assert_eq!(
+            only_glasinval.resolved_sponning_hoogte(&Material::Pvc),
+            18.0
+        );
         assert_eq!(
             ProfileSnapshot::default().resolved_sponning_hoogte(&WOOD),
             17.0
@@ -438,7 +451,10 @@ mod tests {
     #[test]
     fn resolved_glaslat_hoogte_wood_follows_kvt_12_3_2() {
         // Fabrieksstandaard 17x17 on the 17 mm sponning.
-        assert_eq!(ProfileSnapshot::default().resolved_glaslat_hoogte(&WOOD), 17.0);
+        assert_eq!(
+            ProfileSnapshot::default().resolved_glaslat_hoogte(&WOOD),
+            17.0
+        );
         // KVT 12.3.2: bead height >= sponninghoogte — a 20 mm sponning
         // (KVT-alternatief) lifts the fallback bead to 20.
         let deep = ProfileSnapshot {

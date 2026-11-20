@@ -96,6 +96,60 @@ mod tests {
     }
 
     #[test]
+    fn rejected_system_glass_is_marked_in_csv_xlsx_and_pdf() {
+        let mut frame = Kozijn::new("VEKA", "V80", 900.0, 1400.0);
+        frame.frame.material = crate::kozijn::Material::Pvc;
+        let snapshot = crate::glazing_fit::catalog_snapshot(
+            "veka-softline82",
+            &crate::kozijn::Material::Pvc,
+        )
+        .unwrap();
+        let snapshot_json = serde_json::to_string(snapshot).unwrap();
+        frame
+            .apply_frame_profile(
+                crate::profile::ProfileRef {
+                    id: "veka-softline82".into(),
+                    name: "VEKA Softline 82 MD".into(),
+                },
+                Some(73.0),
+                Some(82.0),
+                Some(&snapshot_json),
+                None,
+            )
+            .unwrap();
+        frame.cells[0].glazing.thickness_mm = 80.0;
+        let production = [compute_production_data(&frame)];
+        let glass = &production[0].glass_list[0];
+        assert!(!glass.production_ready);
+
+        let dir = std::env::temp_dir().join(format!("ofs-rejected-glass-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&production, dir.to_str().unwrap()).unwrap();
+        let csv = fs::read_to_string(dir.join("glaslijst.csv")).unwrap();
+        let row = csv
+            .lines()
+            .find(|line| line.contains(&glass.piece_id))
+            .expect("afgekeurde ruit blijft herkenbaar in de glaslijst");
+        assert!(row.contains(";Nee;"));
+        assert!(row.contains("52"));
+
+        let xlsx_path = dir.join("productie.xlsx");
+        xlsx::generate_production_xlsx(&production, xlsx_path.to_str().unwrap()).unwrap();
+        let mut workbook = open_workbook_auto(&xlsx_path).unwrap();
+        let sheet = workbook.worksheet_range("Glaslijst").unwrap();
+        assert_eq!(sheet[(1, 9)].to_string(), "Nee");
+        assert!(sheet[(1, 10)].to_string().contains("52"));
+
+        let pdf_path = dir.join("productie.pdf");
+        pdf::generate_production_pdf(&production, pdf_path.to_str().unwrap()).unwrap();
+        let document = lopdf::Document::load(&pdf_path).unwrap();
+        let text = document
+            .extract_text(&document.get_pages().into_keys().collect::<Vec<_>>())
+            .unwrap();
+        assert!(text.contains("AFGEKEURD"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn arch_spring_exports_the_flat_shoulder_and_the_cope_with_its_chord_angle() {
         let mut frame = Kozijn::new("Toog met hoge tussendorpel", "B1", 1200.0, 1500.0);
         frame.frame.shape.shape_type = ShapeType::Arched;

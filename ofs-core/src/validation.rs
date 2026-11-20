@@ -27,9 +27,17 @@ pub enum ValidationError {
     BeadBearingTooSmall(usize, f64, f64),
     #[error("Cel {0}: sponningbreedte {1}mm, benodigd {2}mm voor glas, afdichtingen en oplegging")]
     GlazingPocketTooNarrow(usize, f64, f64),
+    #[error("Cel {0}: glasdikte {1:.1} mm is kleiner dan het systeemminimum {2:.1} mm")]
+    GlassTooThin(usize, f64, f64),
+    #[error("Cel {0}: glasdikte {1:.1} mm overschrijdt het systeemmaximum {2:.1} mm")]
+    GlassTooThick(usize, f64, f64),
+    #[error("Cel {0}: vleugelprofiel '{1}' hoort niet bij kozijnsysteem '{2}'")]
+    IncompatibleSashSystem(usize, String, String),
     #[error("De opgegeven boogpijl van {0:.1} mm valt buiten de maakbare booghoogte (groter dan 0 en maximaal {1:.1} mm).")]
     InvalidArchRise(f64, f64),
-    #[error("De boog en de stijlen kunnen bij deze afmetingen geen gesloten buitencontour vormen.")]
+    #[error(
+        "De boog en de stijlen kunnen bij deze afmetingen geen gesloten buitencontour vormen."
+    )]
     CurvedFrameNoOutline,
     #[error("Binnen het gebogen kozijn blijft geen dagopening over. Controleer de profielbreedte en de vakverdeling.")]
     CurvedFrameNoOpening,
@@ -38,9 +46,17 @@ pub enum ValidationError {
     #[error("Vak {0}: voor {1} van de opgegeven ruiten blijft geen glasopening over binnen de gebogen contour.")]
     CurvedGlassMissing(usize, usize),
     #[error("{piece}, kop {end}: {reason}.")]
-    DividerJoint { piece: String, end: &'static str, reason: crate::curved_timber::TenonIssue },
+    DividerJoint {
+        piece: String,
+        end: &'static str,
+        reason: crate::curved_timber::TenonIssue,
+    },
     #[error("{location}, gevraagde pen {length:.1} mm: {reason}.")]
-    ArchJoint { location: &'static str, length: f64, reason: crate::curved_timber::TenonIssue },
+    ArchJoint {
+        location: &'static str,
+        length: f64,
+        reason: crate::curved_timber::TenonIssue,
+    },
     #[error("Cel {0}: vluchtraam moet beweegbaar (te openen) zijn")]
     EscapeWindowNotOperable(usize),
     #[error("Cel {0}: vluchtraam vrije opening {1:.0}x{2:.0}mm is kleiner dan minimum {3:.0}mm")]
@@ -62,10 +78,19 @@ const MAX_WIDTH: f64 = 6000.0;
 const MAX_HEIGHT: f64 = 4000.0;
 const MIN_CELL_SIZE: f64 = 100.0;
 
-fn validate_curved_frame(k: &Kozijn, geometry: &crate::geometry::KozijnGeometry2D, errors: &mut Vec<ValidationError>) {
+fn validate_curved_frame(
+    k: &Kozijn,
+    geometry: &crate::geometry::KozijnGeometry2D,
+    errors: &mut Vec<ValidationError>,
+) {
     use crate::curved_contour::FrameCurve;
-    let Some(frame) = &geometry.curved_frame else { return };
-    if matches!(k.frame.shape.shape_type, ShapeType::Arched | ShapeType::ArchedTrapezoid) {
+    let Some(frame) = &geometry.curved_frame else {
+        return;
+    };
+    if matches!(
+        k.frame.shape.shape_type,
+        ShapeType::Arched | ShapeType::ArchedTrapezoid
+    ) {
         let maximum = FrameCurve::max_rise(&k.frame);
         if let Some(rise) = k.frame.shape.arch_height {
             if !rise.is_finite() || rise <= 0.0 || rise > maximum + 1e-7 {
@@ -73,7 +98,8 @@ fn validate_curved_frame(k: &Kozijn, geometry: &crate::geometry::KozijnGeometry2
             }
         }
         if k.layout.is_none() && !k.grid.rows_from_day && k.grid.rows.len() > 1 {
-            let available = (k.frame.outer_height - k.frame.frame_width - FrameCurve::rise(&k.frame)).max(0.0);
+            let available =
+                (k.frame.outer_height - k.frame.frame_width - FrameCurve::rise(&k.frame)).max(0.0);
             let dividers = (k.grid.rows.len() - 1) as f64 * k.frame.frame_width;
             if available <= dividers {
                 errors.push(ValidationError::ArchRowsDoNotFit(available, dividers));
@@ -97,26 +123,42 @@ fn validate_curved_frame(k: &Kozijn, geometry: &crate::geometry::KozijnGeometry2
         }
     }
     for part in &geometry.curved_divider_timber {
-        let (name, start, end) = if part.vertical { ("Tussenstijl", "boven", "onder") } else { ("Tussendorpel", "links", "rechts") };
+        let (name, start, end) = if part.vertical {
+            ("Tussenstijl", "boven", "onder")
+        } else {
+            ("Tussendorpel", "links", "rechts")
+        };
         for (profile, location) in [(&part.start, start), (&part.end, end)] {
             if let Some(reason) = profile.tenon_issue {
                 errors.push(ValidationError::DividerJoint {
-                    piece: format!("{name} {}, deel {}", part.source_index + 1, part.piece_index + 1),
-                    end: location, reason,
+                    piece: format!(
+                        "{name} {}, deel {}",
+                        part.source_index + 1,
+                        part.piece_index + 1
+                    ),
+                    end: location,
+                    reason,
                 });
             }
         }
     }
     if frame.outer.segments.is_empty() {
         errors.push(ValidationError::CurvedFrameNoOutline);
-    } else if frame.day.segments.is_empty() || geometry.cell_rects.iter().all(|cr| {
-        cr.opening_contour.as_ref().map_or(true, |p| p.segments.is_empty())
-    }) {
+    } else if frame.day.segments.is_empty()
+        || geometry.cell_rects.iter().all(|cr| {
+            cr.opening_contour
+                .as_ref()
+                .map_or(true, |p| p.segments.is_empty())
+        })
+    {
         errors.push(ValidationError::CurvedFrameNoOpening);
     } else {
         for cr in &geometry.cell_rects {
             if cr.missing_glass_panes > 0 {
-                errors.push(ValidationError::CurvedGlassMissing(cr.cell_index + 1, cr.missing_glass_panes));
+                errors.push(ValidationError::CurvedGlassMissing(
+                    cr.cell_index + 1,
+                    cr.missing_glass_panes,
+                ));
             }
         }
     }
@@ -141,33 +183,107 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
         errors.push(ValidationError::HeightTooLarge(h, MAX_HEIGHT));
     }
 
-    let timber = matches!(kozijn.frame.material, Material::Wood(_) | Material::WoodAluminum);
-    let curved = matches!(kozijn.frame.shape.shape_type, ShapeType::Round | ShapeType::Arched | ShapeType::ArchedTrapezoid);
+    let timber = matches!(
+        kozijn.frame.material,
+        Material::Wood(_) | Material::WoodAluminum
+    );
+    let curved = matches!(
+        kozijn.frame.shape.shape_type,
+        ShapeType::Round | ShapeType::Arched | ShapeType::ArchedTrapezoid
+    );
     if timber || curved {
         let geometry = crate::geometry::compute_2d_geometry(kozijn);
         validate_curved_frame(kozijn, &geometry, &mut errors);
         for cr in geometry.cell_rects.iter().filter(|_| timber) {
             // Paired door leaves use the same section and glazing specification.
             let Some(fit) = &cr.fit else { continue };
-            let height = fit.contours.as_ref().map_or(fit.day.x - fit.rebate.x, |c| c.rebate_height);
+            let height = fit
+                .contours
+                .as_ref()
+                .map_or(fit.day.x - fit.rebate.x, |c| c.rebate_height);
             let min_height = MIN_REBATE_HEIGHT_WOOD.max(height);
             if height + 1e-6 < MIN_REBATE_HEIGHT_WOOD {
-                errors.push(ValidationError::GlasinvalTooSmall(height, MIN_REBATE_HEIGHT_WOOD));
+                errors.push(ValidationError::GlasinvalTooSmall(
+                    height,
+                    MIN_REBATE_HEIGHT_WOOD,
+                ));
             }
             if fit.bead_height + 1e-6 < min_height {
-                errors.push(ValidationError::GlaslatTooShallow(cr.cell_index, fit.bead_height, min_height));
+                errors.push(ValidationError::GlaslatTooShallow(
+                    cr.cell_index,
+                    fit.bead_height,
+                    min_height,
+                ));
             }
             let min_bearing = match fit.bead_position {
                 crate::glaslat::GlaslatPosition::Binnen => 13.0,
                 crate::glaslat::GlaslatPosition::Buiten => 15.0,
             };
             if fit.bead_width < min_bearing {
-                errors.push(ValidationError::BeadBearingTooSmall(cr.cell_index, fit.bead_width, min_bearing));
+                errors.push(ValidationError::BeadBearingTooSmall(
+                    cr.cell_index,
+                    fit.bead_width,
+                    min_bearing,
+                ));
             }
             if let Some(depth) = fit.rebate_depth {
                 let needed = fit.glass_thickness + 2.0 * fit.seal_thickness + min_bearing;
                 if depth + 1e-6 < needed {
-                    errors.push(ValidationError::GlazingPocketTooNarrow(cr.cell_index, depth, needed));
+                    errors.push(ValidationError::GlazingPocketTooNarrow(
+                        cr.cell_index,
+                        depth,
+                        needed,
+                    ));
+                }
+            }
+        }
+    }
+
+    if kozijn.frame.material.is_profile_system() {
+        let geometry = crate::geometry::compute_2d_geometry(kozijn);
+        for (index, cell) in kozijn.cells.iter().enumerate() {
+            if let Some(sash) = &cell.sash_profile {
+                let frame_snapshot = kozijn.frame.profile_snapshot.as_ref().or_else(|| {
+                    crate::glazing_fit::catalog_snapshot(
+                        &kozijn.frame.profile.id,
+                        &kozijn.frame.material,
+                    )
+                });
+                if !crate::glazing_fit::system_profile_pair_compatible(
+                    &kozijn.frame.material,
+                    &kozijn.frame.profile.id,
+                    frame_snapshot,
+                    &sash.id,
+                    cell.sash_profile_snapshot.as_ref(),
+                ) {
+                    errors.push(ValidationError::IncompatibleSashSystem(
+                        index + 1,
+                        sash.name.clone(),
+                        kozijn.frame.profile.name.clone(),
+                    ));
+                }
+            }
+        }
+        for cr in &geometry.cell_rects {
+            let cell_no = cr.cell_index + 1;
+            for fit in [&cr.fit, &cr.second_fit].into_iter().flatten() {
+                if let Some(minimum) = fit.min_glass_thickness {
+                    if fit.glass_thickness + 1e-6 < minimum {
+                        errors.push(ValidationError::GlassTooThin(
+                            cell_no,
+                            fit.glass_thickness,
+                            minimum,
+                        ));
+                    }
+                }
+                if let Some(maximum) = fit.max_glass_thickness {
+                    if fit.glass_thickness > maximum + 1e-6 {
+                        errors.push(ValidationError::GlassTooThick(
+                            cell_no,
+                            fit.glass_thickness,
+                            maximum,
+                        ));
+                    }
                 }
             }
         }
@@ -185,12 +301,22 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
 
     for (i, col) in kozijn.grid.columns.iter().enumerate() {
         if col.size < MIN_CELL_SIZE {
-            errors.push(ValidationError::CellTooSmall(i, col.size, 0.0, MIN_CELL_SIZE));
+            errors.push(ValidationError::CellTooSmall(
+                i,
+                col.size,
+                0.0,
+                MIN_CELL_SIZE,
+            ));
         }
     }
     for (i, row) in kozijn.grid.rows.iter().enumerate() {
         if row.size < MIN_CELL_SIZE {
-            errors.push(ValidationError::CellTooSmall(i, 0.0, row.size, MIN_CELL_SIZE));
+            errors.push(ValidationError::CellTooSmall(
+                i,
+                0.0,
+                row.size,
+                MIN_CELL_SIZE,
+            ));
         }
     }
 
@@ -205,8 +331,18 @@ pub fn validate(kozijn: &Kozijn) -> Vec<ValidationError> {
                 errors.push(ValidationError::EscapeWindowNotOperable(i));
             } else {
                 let cols = kozijn.grid.columns.len().max(1);
-                let cw = kozijn.grid.columns.get(i % cols).map(|c| c.size).unwrap_or(0.0);
-                let ch = kozijn.grid.rows.get(i / cols).map(|r| r.size).unwrap_or(0.0);
+                let cw = kozijn
+                    .grid
+                    .columns
+                    .get(i % cols)
+                    .map(|c| c.size)
+                    .unwrap_or(0.0);
+                let ch = kozijn
+                    .grid
+                    .rows
+                    .get(i / cols)
+                    .map(|r| r.size)
+                    .unwrap_or(0.0);
                 let sw = cell.sash_width.unwrap_or(69.0);
                 let free_w = cw - 2.0 * sw;
                 let free_h = ch - 2.0 * sw;
@@ -243,12 +379,20 @@ mod tests {
         k.frame.shape.shape_type = ShapeType::Arched;
         k.frame.shape.arch_height = Some(300.);
         k.frame.left_profile = Some(crate::profile::ProfileRef {
-            id: "onbekende-stijl".into(), name: "Eigen stijl".into(),
+            id: "onbekende-stijl".into(),
+            name: "Eigen stijl".into(),
         });
-        let feet: Vec<_> = validate(&k).into_iter().filter_map(|error| match error {
-            ValidationError::ArchJoint { location, reason: crate::curved_timber::TenonIssue::UnknownProfile, .. } => Some(location),
-            _ => None,
-        }).collect();
+        let feet: Vec<_> = validate(&k)
+            .into_iter()
+            .filter_map(|error| match error {
+                ValidationError::ArchJoint {
+                    location,
+                    reason: crate::curved_timber::TenonIssue::UnknownProfile,
+                    ..
+                } => Some(location),
+                _ => None,
+            })
+            .collect();
         assert_eq!(feet, ["Linker boogvoet"]);
     }
 
@@ -257,12 +401,20 @@ mod tests {
         let mut k = Kozijn::new("Rond", "R1", 1000., 1000.);
         k.frame.shape.shape_type = ShapeType::Round;
         k.frame.top_profile = Some(crate::profile::ProfileRef {
-            id: "onbekende-bovenboog".into(), name: "Eigen bovenboog".into(),
+            id: "onbekende-bovenboog".into(),
+            name: "Eigen bovenboog".into(),
         });
-        let locations: Vec<_> = validate(&k).into_iter().filter_map(|error| match error {
-            ValidationError::ArchJoint { location, reason: crate::curved_timber::TenonIssue::UnknownProfile, .. } => Some(location),
-            _ => None,
-        }).collect();
+        let locations: Vec<_> = validate(&k)
+            .into_iter()
+            .filter_map(|error| match error {
+                ValidationError::ArchJoint {
+                    location,
+                    reason: crate::curved_timber::TenonIssue::UnknownProfile,
+                    ..
+                } => Some(location),
+                _ => None,
+            })
+            .collect();
         assert_eq!(locations, ["Linker ringnaad", "Rechter ringnaad"]);
     }
 
@@ -272,12 +424,20 @@ mod tests {
         k.frame.shape.shape_type = ShapeType::Round;
         k.add_divider_in_elevation(false, 450.);
         k.grid.columns[1].divider_profile = Some(crate::profile::ProfileRef {
-            id: "onbekend-profiel".into(), name: "Onbekend".into(),
+            id: "onbekend-profiel".into(),
+            name: "Onbekend".into(),
         });
-        let locations: Vec<_> = validate(&k).into_iter().filter_map(|error| match error {
-            ValidationError::DividerJoint { end, reason: crate::curved_timber::TenonIssue::UnknownProfile, .. } => Some(end),
-            _ => None,
-        }).collect();
+        let locations: Vec<_> = validate(&k)
+            .into_iter()
+            .filter_map(|error| match error {
+                ValidationError::DividerJoint {
+                    end,
+                    reason: crate::curved_timber::TenonIssue::UnknownProfile,
+                    ..
+                } => Some(end),
+                _ => None,
+            })
+            .collect();
         assert_eq!(locations, ["boven", "onder"]);
     }
 
@@ -289,14 +449,20 @@ mod tests {
         k.frame.shape.shape_type = ShapeType::Round;
         assert!(validate(&k).is_empty());
         k.cells[0].panel_type = PanelType::TurnTilt;
-        assert!(validate(&k).iter().any(|e| matches!(e, ValidationError::CurvedGlassMissing(1, 1))));
+        assert!(validate(&k)
+            .iter()
+            .any(|e| matches!(e, ValidationError::CurvedGlassMissing(1, 1))));
 
         k.frame.frame_width = 125.0;
-        assert!(validate(&k).iter().any(|e| matches!(e, ValidationError::CurvedFrameNoOpening)));
+        assert!(validate(&k)
+            .iter()
+            .any(|e| matches!(e, ValidationError::CurvedFrameNoOpening)));
         k.frame.shape.shape_type = ShapeType::ArchedTrapezoid;
         k.frame.shape.left_angle = Some(45.0);
         k.frame.shape.right_angle = Some(45.0);
-        assert!(validate(&k).iter().any(|e| matches!(e, ValidationError::CurvedFrameNoOutline)));
+        assert!(validate(&k)
+            .iter()
+            .any(|e| matches!(e, ValidationError::CurvedFrameNoOutline)));
     }
 
     #[test]
@@ -311,11 +477,20 @@ mod tests {
         assert!(g.cell_rects[0].fit.is_some());
         assert!(g.curved_dividers[0].segments.is_empty());
         assert!(g.cell_rects[1].fit.is_none());
-        assert!(g.cell_rects.iter().all(|cr| cr.rect.y + cr.rect.height <= sill_top));
+        assert!(g
+            .cell_rects
+            .iter()
+            .all(|cr| cr.rect.y + cr.rect.height <= sill_top));
         let issues = validate(&k);
-        assert!(issues.iter().any(|e| matches!(e, ValidationError::InvalidArchRise(900.0, 333.0))));
-        assert!(issues.iter().any(|e| matches!(e, ValidationError::ArchRowsDoNotFit(0.0, 67.0))));
-        assert!(issues.iter().any(|e| matches!(e, ValidationError::CurvedGlassMissing(2, 1))));
+        assert!(issues
+            .iter()
+            .any(|e| matches!(e, ValidationError::InvalidArchRise(900.0, 333.0))));
+        assert!(issues
+            .iter()
+            .any(|e| matches!(e, ValidationError::ArchRowsDoNotFit(0.0, 67.0))));
+        assert!(issues
+            .iter()
+            .any(|e| matches!(e, ValidationError::CurvedGlassMissing(2, 1))));
     }
 
     #[test]
@@ -365,14 +540,21 @@ mod tests {
             ..Default::default()
         });
         k.cells[0].glaslat = Some(crate::glaslat::Glaslat {
-            position: crate::glaslat::GlaslatPosition::Buiten, width_mm: 13.0,
+            position: crate::glaslat::GlaslatPosition::Buiten,
+            width_mm: 13.0,
             ..Default::default()
         });
         k.cells[0].glazing.thickness_mm = 44.0;
         let errors = validate(&k);
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::GlaslatTooShallow(0, _, _))));
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::BeadBearingTooSmall(0, _, _))));
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::GlazingPocketTooNarrow(0, _, _))));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::GlaslatTooShallow(0, _, _))));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::BeadBearingTooSmall(0, _, _))));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::GlazingPocketTooNarrow(0, _, _))));
     }
 
     #[test]

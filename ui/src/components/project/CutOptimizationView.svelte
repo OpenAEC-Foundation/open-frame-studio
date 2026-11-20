@@ -26,6 +26,7 @@
   $: totalWasteMm = result?.totalWasteMm || 0;
   $: curvedPieceIds = result?.curvedPieceIds ?? [];
   $: unresolvedPieceIds = result?.unresolvedPieceIds ?? [];
+  $: oversizePieceIds = result?.oversizePieceIds ?? [];
 
   function cutColor(i) {
     const colors = ["#3b82f6", "#f59e0b", "#22c55e", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316", "#14b8a6"];
@@ -69,9 +70,12 @@
   {#if unresolvedPieceIds.length}
     <p class="curved-pieces"><strong>{$_("archJoint.unresolvedPieces")}</strong> · {unresolvedPieceIds.join(", ")}</p>
   {/if}
+  {#if oversizePieceIds.length}
+    <p class="oversize-pieces"><strong>Te lang voor één handelsstaaf</strong> · {oversizePieceIds.join(", ")}</p>
+  {/if}
   {#if loading}
     <p class="hint">Optimaliseren...</p>
-  {:else if bars.length === 0 && curvedPieceIds.length === 0 && unresolvedPieceIds.length === 0}
+  {:else if bars.length === 0 && curvedPieceIds.length === 0 && unresolvedPieceIds.length === 0 && oversizePieceIds.length === 0}
     <p class="hint">Geen zaaggegevens beschikbaar. Voeg kozijnen toe aan het project.</p>
   {:else}
     <div class="bars-container">
@@ -79,7 +83,7 @@
         {@const length = bar.stockLengthMm ?? stockLength}
         {@const waste = bar.remainingMm ?? bar.waste ?? 0}
         <div class="bar-row">
-          <span class="bar-label">Staaf {barIndex + 1}</span>
+          <span class="bar-label">Staaf {barIndex + 1}<small>{bar.profileName || 'Profiel'} · {bar.material || 'materiaal'}</small></span>
           <div class="bar-visual">
             {#each (bar.cuts || []) as cut, cutIndex}
               {@const cutLength = cut.lengthMm ?? cut.length}
@@ -126,10 +130,12 @@
   .waste-poor { color: #ef4444; }
   .hint { color: var(--text-muted); font-size: 13px; font-style: italic; }
   .curved-pieces { margin: 0 0 var(--sp-3); font-size: 12px; color: var(--text-secondary); }
+  .oversize-pieces { margin: 0 0 var(--sp-3); font-size: 12px; color: #b91c1c; }
 
   .bars-container { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
   .bar-row { display: flex; align-items: center; gap: var(--sp-2); }
-  .bar-label { font-size: 11px; font-weight: 600; color: var(--text-muted); min-width: 56px; }
+  .bar-label { font-size: 11px; font-weight: 600; color: var(--text-muted); width: 180px; flex-shrink: 0; }
+  .bar-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 400; }
   .bar-visual { flex: 1; display: flex; height: 28px; border-radius: 3px; overflow: hidden; background: var(--bg-surface-alt); border: 1px solid var(--border-color, #333); }
   .cut-block { display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .waste-block { display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.05) 3px, rgba(255,255,255,0.05) 6px); overflow: hidden; }

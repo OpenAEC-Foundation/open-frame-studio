@@ -47,7 +47,9 @@ struct PartIds {
     cells: Vec<Uuid>,
 }
 
-fn is_false(value: &bool) -> bool { !*value }
+fn is_false(value: &bool) -> bool {
+    !*value
+}
 
 impl PartIds {
     fn new(columns: usize, rows: usize) -> Self {
@@ -85,7 +87,9 @@ pub struct FrameExtension {
     pub connects_to: Vec<String>,
 }
 
-fn default_ext_width() -> f64 { 67.0 }
+fn default_ext_width() -> f64 {
+    67.0
+}
 
 /// Extension member type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,8 +110,7 @@ pub enum ExtensionType {
 impl Kozijn {
     fn legacy_part_id(&self, ordinal: u128) -> Uuid {
         Uuid::from_u128(
-            (self.id.as_u128() ^ 0x4f46535f50415254535f474c4f42414c_u128)
-                .wrapping_add(ordinal),
+            (self.id.as_u128() ^ 0x4f46535f50415254535f474c4f42414c_u128).wrapping_add(ordinal),
         )
     }
 
@@ -116,23 +119,36 @@ impl Kozijn {
     }
 
     pub(crate) fn vertical_part_id(&self, index: usize) -> Uuid {
-        self.part_ids.columns.get(index + 1).copied()
+        self.part_ids
+            .columns
+            .get(index + 1)
+            .copied()
             .unwrap_or_else(|| self.legacy_part_id(index as u128 + 5))
     }
 
     pub(crate) fn horizontal_part_id(&self, index: usize) -> Uuid {
-        self.part_ids.rows.get(index + 1).copied().unwrap_or_else(|| {
-            self.legacy_part_id(self.grid.columns.len() as u128 + index as u128 + 4)
-        })
+        self.part_ids
+            .rows
+            .get(index + 1)
+            .copied()
+            .unwrap_or_else(|| {
+                self.legacy_part_id(self.grid.columns.len() as u128 + index as u128 + 4)
+            })
     }
 
     pub(crate) fn glass_part_id(&self, cell_index: usize) -> Uuid {
-        self.part_ids.cells.get(cell_index).copied().unwrap_or_else(|| {
-            self.legacy_part_id(
-                self.grid.columns.len() as u128 + self.grid.rows.len() as u128
-                    + cell_index as u128 + 3,
-            )
-        })
+        self.part_ids
+            .cells
+            .get(cell_index)
+            .copied()
+            .unwrap_or_else(|| {
+                self.legacy_part_id(
+                    self.grid.columns.len() as u128
+                        + self.grid.rows.len() as u128
+                        + cell_index as u128
+                        + 3,
+                )
+            })
     }
 
     pub(crate) fn restore_grid_part_ids(
@@ -151,7 +167,11 @@ impl Kozijn {
         columns.extend(vertical);
         let mut rows = vec![Uuid::new_v4()];
         rows.extend(horizontal);
-        self.part_ids = PartIds { columns, rows, cells: glass };
+        self.part_ids = PartIds {
+            columns,
+            rows,
+            cells: glass,
+        };
         Ok(())
     }
 
@@ -161,17 +181,21 @@ impl Kozijn {
         let rows = self.grid.rows.len();
         while self.part_ids.columns.len() < cols {
             let index = self.part_ids.columns.len();
-            self.part_ids.columns.push(self.legacy_part_id(index as u128 + 4));
+            self.part_ids
+                .columns
+                .push(self.legacy_part_id(index as u128 + 4));
         }
         while self.part_ids.rows.len() < rows {
             let index = self.part_ids.rows.len();
-            self.part_ids.rows.push(self.legacy_part_id(cols as u128 + index as u128 + 3));
+            self.part_ids
+                .rows
+                .push(self.legacy_part_id(cols as u128 + index as u128 + 3));
         }
         while self.part_ids.cells.len() < cols * rows {
             let index = self.part_ids.cells.len();
-            self.part_ids.cells.push(self.legacy_part_id(
-                cols as u128 + rows as u128 + index as u128 + 3,
-            ));
+            self.part_ids
+                .cells
+                .push(self.legacy_part_id(cols as u128 + rows as u128 + index as u128 + 3));
         }
         self.part_ids.columns.truncate(cols);
         self.part_ids.rows.truncate(rows);
@@ -222,10 +246,14 @@ impl Kozijn {
                 columns: vec![GridDivision {
                     size: width - 2.0 * 67.0,
                     divider_profile: None,
+                    divider_width: None,
+                    divider_depth: None,
                 }],
                 rows: vec![GridDivision {
                     size: height - 2.0 * 67.0,
                     divider_profile: None,
+                    divider_width: None,
+                    divider_depth: None,
                 }],
             },
             cells: vec![Cell::default()],
@@ -239,7 +267,13 @@ impl Kozijn {
     }
 
     /// Create a new kozijn using a sjabloon (template) for automatic profile assignment
-    pub fn new_with_sjabloon(name: &str, mark: &str, width: f64, height: f64, sj: &crate::template::KozijnSjabloon) -> Self {
+    pub fn new_with_sjabloon(
+        name: &str,
+        mark: &str,
+        width: f64,
+        height: f64,
+        sj: &crate::template::KozijnSjabloon,
+    ) -> Self {
         let fw = sj.frame_width;
         let id = Uuid::new_v4();
         Self {
@@ -283,10 +317,14 @@ impl Kozijn {
                 columns: vec![GridDivision {
                     size: width - 2.0 * fw,
                     divider_profile: None,
+                    divider_width: None,
+                    divider_depth: None,
                 }],
                 rows: vec![GridDivision {
                     size: height - 2.0 * fw,
                     divider_profile: None,
+                    divider_width: None,
+                    divider_depth: None,
                 }],
             },
             cells: vec![Cell::default_with_glazing(&sj.default_glazing)],
@@ -313,8 +351,12 @@ impl Kozijn {
     pub fn rebuild_cells(&mut self) {
         let num_cells = self.grid.columns.len() * self.grid.rows.len();
         self.cells.resize_with(num_cells, Cell::default);
-        self.part_ids.columns.resize_with(self.grid.columns.len(), Uuid::new_v4);
-        self.part_ids.rows.resize_with(self.grid.rows.len(), Uuid::new_v4);
+        self.part_ids
+            .columns
+            .resize_with(self.grid.columns.len(), Uuid::new_v4);
+        self.part_ids
+            .rows
+            .resize_with(self.grid.rows.len(), Uuid::new_v4);
         self.part_ids.cells.resize_with(num_cells, Uuid::new_v4);
     }
 
@@ -339,63 +381,252 @@ impl Kozijn {
         material_json: Option<&str>,
     ) -> Result<(), String> {
         // Older clients omit the snapshot; an explicit null/empty clears it.
-        let snapshot = snapshot_json.map(|s| {
-            if s.trim().is_empty() { Ok(None) } else { serde_json::from_str(s) }
-        }).transpose().map_err(|e| format!("Ongeldig profielsnapshot JSON: {e}"))?;
-        let material = material_json.filter(|s| !s.trim().is_empty())
-            .map(serde_json::from_str::<Option<Material>>).transpose()
-            .map_err(|e| format!("Ongeldig profielmateriaal: {e}"))?.flatten();
+        let snapshot = snapshot_json
+            .map(|s| {
+                if s.trim().is_empty() {
+                    Ok(None)
+                } else {
+                    serde_json::from_str(s)
+                }
+            })
+            .transpose()
+            .map_err(|e| format!("Ongeldig profielsnapshot JSON: {e}"))?;
+        let material = material_json
+            .filter(|s| !s.trim().is_empty())
+            .map(serde_json::from_str::<Option<Material>>)
+            .transpose()
+            .map_err(|e| format!("Ongeldig profielmateriaal: {e}"))?
+            .flatten();
 
         let previous = std::mem::replace(&mut self.frame.profile, profile);
         let previous_material = self.frame.material;
-        if let Some(value) = material { self.frame.material = value; }
+        if let Some(value) = material {
+            self.frame.material = value;
+        }
+        let material_changed = previous_material != self.frame.material;
+        if material_changed {
+            self.frame.corner_joints = vec![
+                crate::joint::Joint::default(),
+                crate::joint::Joint::default(),
+                crate::joint::Joint::default(),
+                crate::joint::Joint::default(),
+            ];
+            self.frame.joints_configured = false;
+        }
         if let Some(value) = snapshot {
             self.frame.profile_snapshot = value;
         } else if previous.id != self.frame.profile.id {
             self.frame.profile_snapshot = None;
         }
-        if let Some(value) = depth { self.frame.frame_depth = value; }
+        if let Some(value) = depth {
+            self.frame.frame_depth = value;
+        }
         if let Some(value) = width {
             self.frame.frame_width = value;
-            self.fit_grid_to_frame();
         }
-        if (self.frame.material.is_profile_system() || previous_material.is_profile_system())
-            && (previous.id != self.frame.profile.id || previous_material != self.frame.material)
-        {
+        let system_profile_changed = (self.frame.material.is_profile_system()
+            || previous_material.is_profile_system())
+            && (previous.id != self.frame.profile.id || previous_material != self.frame.material);
+        if system_profile_changed {
             self.update_inherited_profiles(&previous, &previous_material);
+        }
+        // Update inherited divider articles first, then re-fit the cells using
+        // their new face widths. Otherwise the first material/profile switch
+        // leaves the grid sized for the previous article.
+        if width.is_some() || system_profile_changed {
+            self.fit_grid_to_frame();
         }
         Ok(())
     }
 
+    pub fn update_member_profile(
+        &mut self,
+        member_type: &str,
+        member_index: Option<usize>,
+        profile: ProfileRef,
+        profile_width: Option<f64>,
+        profile_depth: Option<f64>,
+    ) -> Result<(), String> {
+        let width = profile_width.filter(|v| v.is_finite() && *v > 0.0);
+        let depth = profile_depth.filter(|v| v.is_finite() && *v > 0.0);
+        match member_type {
+            "frame_top" => self.frame.top_profile = Some(profile),
+            "frame_bottom" => self.frame.bottom_profile = Some(profile),
+            "frame_left" => self.frame.left_profile = Some(profile),
+            "frame_right" => self.frame.right_profile = Some(profile),
+            "divider_v" | "divider_h" => {
+                let index = member_index.ok_or("Tussenstijl of tussendorpel mist een index")? + 1;
+                let divisions = if member_type == "divider_v" {
+                    &mut self.grid.columns
+                } else {
+                    &mut self.grid.rows
+                };
+                let divider = divisions
+                    .get_mut(index)
+                    .ok_or("Tussenprofiel niet gevonden")?;
+                divider.divider_profile = Some(profile);
+                divider.divider_width =
+                    width.filter(|v| (*v - self.frame.frame_width).abs() > 1e-6);
+                divider.divider_depth = depth;
+                self.fit_grid_to_frame();
+            }
+            _ => return Err(format!("Onbekend member type: {member_type}")),
+        }
+        Ok(())
+    }
+
+    pub fn update_cell_sash_profile(
+        &mut self,
+        cell_index: usize,
+        profile: ProfileRef,
+        sash_width: f64,
+        sash_depth: f64,
+        snapshot: Option<crate::profile::ProfileSnapshot>,
+    ) -> Result<(), String> {
+        self.cells.get(cell_index).ok_or("Cel niet gevonden")?;
+        let frame_snapshot = self.frame.profile_snapshot.as_ref().or_else(|| {
+            crate::glazing_fit::catalog_snapshot(&self.frame.profile.id, &self.frame.material)
+        });
+        if !crate::glazing_fit::system_profile_pair_compatible(
+            &self.frame.material,
+            &self.frame.profile.id,
+            frame_snapshot,
+            &profile.id,
+            snapshot.as_ref(),
+        ) {
+            return Err(format!(
+                "Vleugelprofiel '{}' hoort niet bij profielsysteem '{}'",
+                profile.name, self.frame.profile.name,
+            ));
+        }
+        let cell = &mut self.cells[cell_index];
+        cell.sash_profile = Some(profile);
+        cell.sash_profile_snapshot = snapshot;
+        if sash_width.is_finite() && sash_width > 0.0 {
+            cell.sash_width = Some(sash_width);
+        }
+        if sash_depth.is_finite() && sash_depth > 0.0 {
+            cell.sash_depth = Some(sash_depth);
+        }
+        Ok(())
+    }
+
+    pub fn divider_face_width(&self, vertical: bool, index: usize) -> f64 {
+        let divisions = if vertical {
+            &self.grid.columns
+        } else {
+            &self.grid.rows
+        };
+        divisions
+            .get(index + 1)
+            .and_then(|d| d.divider_width)
+            .unwrap_or(self.frame.frame_width)
+    }
+
     fn update_inherited_profiles(&mut self, previous: &ProfileRef, previous_material: &Material) {
         let presets = crate::template::builtin_sjablonen();
-        let old = presets.iter().find(|s| s.stijl_profile.id == previous.id && s.material == *previous_material);
-        let new = presets.iter().find(|s| s.stijl_profile.id == self.frame.profile.id && s.material == self.frame.material);
+        let old = presets
+            .iter()
+            .find(|s| s.stijl_profile.id == previous.id && s.material == *previous_material);
+        let new = presets.iter().find(|s| {
+            s.stijl_profile.id == self.frame.profile.id && s.material == self.frame.material
+        });
         let frame = &self.frame.profile;
-        let replace = |slot: &mut Option<ProfileRef>, before: Option<&ProfileRef>, after: Option<&ProfileRef>| {
-            if slot.as_ref().is_some_and(|p| p.id == previous.id || before.is_some_and(|b| p.id == b.id)) {
+        let replace = |slot: &mut Option<ProfileRef>,
+                       before: Option<&ProfileRef>,
+                       after: Option<&ProfileRef>| {
+            if slot
+                .as_ref()
+                .is_some_and(|p| p.id == previous.id || before.is_some_and(|b| p.id == b.id))
+            {
                 *slot = Some(after.unwrap_or(frame).clone());
             }
         };
         if self.frame.top_material.is_none() {
-            replace(&mut self.frame.top_profile, old.map(|s| &s.bovendorpel_profile), new.map(|s| &s.bovendorpel_profile));
+            replace(
+                &mut self.frame.top_profile,
+                old.map(|s| &s.bovendorpel_profile),
+                new.map(|s| &s.bovendorpel_profile),
+            );
         }
         if self.frame.bottom_material.is_none() {
-            replace(&mut self.frame.sill_profile, old.map(|s| &s.onderdorpel_profile), new.map(|s| &s.onderdorpel_profile));
-            replace(&mut self.frame.bottom_profile, old.map(|s| &s.onderdorpel_profile), new.map(|s| &s.onderdorpel_profile));
+            replace(
+                &mut self.frame.sill_profile,
+                old.map(|s| &s.onderdorpel_profile),
+                new.map(|s| &s.onderdorpel_profile),
+            );
+            replace(
+                &mut self.frame.bottom_profile,
+                old.map(|s| &s.onderdorpel_profile),
+                new.map(|s| &s.onderdorpel_profile),
+            );
         }
-        if self.frame.left_material.is_none() { replace(&mut self.frame.left_profile, None, None); }
-        if self.frame.right_material.is_none() { replace(&mut self.frame.right_profile, None, None); }
+        if self.frame.left_material.is_none() {
+            replace(&mut self.frame.left_profile, None, None);
+        }
+        if self.frame.right_material.is_none() {
+            replace(&mut self.frame.right_profile, None, None);
+        }
         for column in &mut self.grid.columns {
-            replace(&mut column.divider_profile, old.map(|s| &s.tussenstijl_profile), new.map(|s| &s.tussenstijl_profile));
+            let was_inherited = column.divider_profile.as_ref().is_some_and(|p| {
+                p.id == previous.id || old.is_some_and(|s| p.id == s.tussenstijl_profile.id)
+            });
+            replace(
+                &mut column.divider_profile,
+                old.map(|s| &s.tussenstijl_profile),
+                new.map(|s| &s.tussenstijl_profile),
+            );
+            if was_inherited {
+                let width = new
+                    .and_then(|s| {
+                        crate::glazing_fit::catalog_snapshot(&s.tussenstijl_profile.id, &s.material)
+                    })
+                    .and_then(|p| p.divider_face_width)
+                    .unwrap_or(self.frame.frame_width);
+                column.divider_width =
+                    ((width - self.frame.frame_width).abs() > 1e-6).then_some(width);
+            }
         }
         for row in &mut self.grid.rows {
-            replace(&mut row.divider_profile, old.map(|s| &s.tussendorpel_profile), new.map(|s| &s.tussendorpel_profile));
+            let was_inherited = row.divider_profile.as_ref().is_some_and(|p| {
+                p.id == previous.id || old.is_some_and(|s| p.id == s.tussendorpel_profile.id)
+            });
+            replace(
+                &mut row.divider_profile,
+                old.map(|s| &s.tussendorpel_profile),
+                new.map(|s| &s.tussendorpel_profile),
+            );
+            if was_inherited {
+                let width = new
+                    .and_then(|s| {
+                        crate::glazing_fit::catalog_snapshot(
+                            &s.tussendorpel_profile.id,
+                            &s.material,
+                        )
+                    })
+                    .and_then(|p| p.divider_face_width)
+                    .unwrap_or(self.frame.frame_width);
+                row.divider_width =
+                    ((width - self.frame.frame_width).abs() > 1e-6).then_some(width);
+            }
         }
-        for cell in self.cells.iter_mut().filter(|cell| cell.panel_type.is_operable()) {
-            let old_sash = old.map(|s| if cell.panel_type == PanelType::Door { &s.deurhout_profile } else { &s.raamhout_profile });
-            if cell.sash_profile_snapshot.is_none() && cell.sash_profile.as_ref().is_none_or(|p|
-                p.id == previous.id || old_sash.is_some_and(|s| s.id == p.id))
+        for cell in self
+            .cells
+            .iter_mut()
+            .filter(|cell| cell.panel_type.is_operable())
+        {
+            let old_sash = old.map(|s| {
+                if cell.panel_type == PanelType::Door {
+                    &s.deurhout_profile
+                } else {
+                    &s.raamhout_profile
+                }
+            });
+            if cell.sash_profile_snapshot.is_none()
+                && cell
+                    .sash_profile
+                    .as_ref()
+                    .is_none_or(|p| p.id == previous.id || old_sash.is_some_and(|s| s.id == p.id))
             {
                 cell.assign_default_sash(&self.frame, new);
             }
@@ -410,8 +641,22 @@ impl Kozijn {
     /// 1210 mm is already 0,63 mm off), which the IFC preflight rejects.
     pub fn fit_grid_to_frame(&mut self) {
         let fw = self.frame.frame_width;
-        let cols_target = self.inner_width() - fw * self.grid.columns.len().saturating_sub(1) as f64;
-        let rows_target = self.inner_height() - fw * self.grid.rows.len().saturating_sub(1) as f64;
+        let cols_target = self.inner_width()
+            - self
+                .grid
+                .columns
+                .iter()
+                .skip(1)
+                .map(|c| c.divider_width.unwrap_or(fw))
+                .sum::<f64>();
+        let rows_target = self.inner_height()
+            - self
+                .grid
+                .rows
+                .iter()
+                .skip(1)
+                .map(|r| r.divider_width.unwrap_or(fw))
+                .sum::<f64>();
         let mut cols: Vec<f64> = self.grid.columns.iter().map(|c| c.size).collect();
         let mut rows: Vec<f64> = self.grid.rows.iter().map(|r| r.size).collect();
         fit_sizes(&mut cols, cols_target, &[]);
@@ -429,8 +674,22 @@ impl Kozijn {
     /// difference, so a typed value stays exactly as typed.
     pub fn set_grid_sizes_fitted(&mut self, column_sizes: &[f64], row_sizes: &[f64]) {
         let fw = self.frame.frame_width;
-        let cols_target = self.inner_width() - fw * self.grid.columns.len().saturating_sub(1) as f64;
-        let rows_target = self.inner_height() - fw * self.grid.rows.len().saturating_sub(1) as f64;
+        let cols_target = self.inner_width()
+            - self
+                .grid
+                .columns
+                .iter()
+                .skip(1)
+                .map(|d| d.divider_width.unwrap_or(fw))
+                .sum::<f64>();
+        let rows_target = self.inner_height()
+            - self
+                .grid
+                .rows
+                .iter()
+                .skip(1)
+                .map(|d| d.divider_width.unwrap_or(fw))
+                .sum::<f64>();
         let apply = |current: Vec<f64>, wanted: &[f64], target: f64| -> Vec<f64> {
             let mut sizes = current.clone();
             let mut pinned = vec![false; sizes.len()];
@@ -446,8 +705,16 @@ impl Kozijn {
             fit_sizes(&mut sizes, target, &pinned);
             sizes
         };
-        let cols = apply(self.grid.columns.iter().map(|c| c.size).collect(), column_sizes, cols_target);
-        let rows = apply(self.grid.rows.iter().map(|r| r.size).collect(), row_sizes, rows_target);
+        let cols = apply(
+            self.grid.columns.iter().map(|c| c.size).collect(),
+            column_sizes,
+            cols_target,
+        );
+        let rows = apply(
+            self.grid.rows.iter().map(|r| r.size).collect(),
+            row_sizes,
+            rows_target,
+        );
         for (c, s) in self.grid.columns.iter_mut().zip(cols) {
             c.size = s;
         }
@@ -460,15 +727,27 @@ impl Kozijn {
     /// Retain the displayed edges of every existing bay, including old grids
     /// whose row weights were distributed below the spring line.
     pub fn add_divider_in_elevation(&mut self, horizontal: bool, position: f64) {
-        if !position.is_finite() || self.layout.is_some() { return; }
+        if !position.is_finite() || self.layout.is_some() {
+            return;
+        }
         let geometry = crate::geometry::compute_2d_geometry(self);
         let width = self.frame.frame_width;
         let (bars, sizes, end) = if horizontal {
-            (&geometry.h_dividers, &self.grid.rows, self.frame.outer_height - width)
+            (
+                &geometry.h_dividers,
+                &self.grid.rows,
+                self.frame.outer_height - width,
+            )
         } else {
-            (&geometry.v_dividers, &self.grid.columns, self.frame.outer_width - width)
+            (
+                &geometry.v_dividers,
+                &self.grid.columns,
+                self.frame.outer_width - width,
+            )
         };
-        if sizes.len() != bars.len() + 1 || sizes.iter().any(|s| !s.size.is_finite() || s.size <= 0.0) {
+        if sizes.len() != bars.len() + 1
+            || sizes.iter().any(|s| !s.size.is_finite() || s.size <= 0.0)
+        {
             return;
         }
         let mut cursor = width;
@@ -476,7 +755,11 @@ impl Kozijn {
         let mut spans = Vec::with_capacity(sizes.len() + 1);
         for i in 0..=bars.len() {
             let (next, thickness) = bars.get(i).map_or((end, 0.0), |r| {
-                if horizontal { (r.y, r.height) } else { (r.x, r.width) }
+                if horizontal {
+                    (r.y, r.height)
+                } else {
+                    (r.x, r.width)
+                }
             });
             let before = position - width / 2.0 - cursor;
             let after = next - position - width / 2.0;
@@ -488,7 +771,9 @@ impl Kozijn {
             }
             cursor = next + thickness;
         }
-        let Some(i) = split else { return; };
+        let Some(i) = split else {
+            return;
+        };
         // Let the existing split preserve cell data, part IDs and profile references.
         let split_at = sizes[..i].iter().map(|s| s.size).sum::<f64>() + sizes[i].size / 2.0;
         let divisions = if horizontal {
@@ -499,7 +784,9 @@ impl Kozijn {
             self.add_column(split_at);
             &mut self.grid.columns
         };
-        for (division, span) in divisions.iter_mut().zip(spans) { division.size = span; }
+        for (division, span) in divisions.iter_mut().zip(spans) {
+            division.size = span;
+        }
     }
 
     /// Add a vertical divider (creates a new column). The new tussenstijl
@@ -537,6 +824,8 @@ impl Kozijn {
                         GridDivision {
                             size: right,
                             divider_profile: Some(ProfileRef::default_divider()),
+                            divider_width: None,
+                            divider_depth: None,
                         },
                     );
                     self.part_ids.columns.insert(i + 1, Uuid::new_v4());
@@ -589,6 +878,8 @@ impl Kozijn {
                         GridDivision {
                             size: bottom,
                             divider_profile: Some(ProfileRef::default_divider()),
+                            divider_width: None,
+                            divider_depth: None,
                         },
                     );
                     self.part_ids.rows.insert(i + 1, Uuid::new_v4());
@@ -623,8 +914,18 @@ fn fit_sizes(sizes: &mut [f64], target: f64, pinned: &[bool]) {
         return;
     }
     let is_pinned = |i: usize| pinned.get(i).copied().unwrap_or(false);
-    let pinned_sum: f64 = sizes.iter().enumerate().filter(|(i, _)| is_pinned(*i)).map(|(_, s)| *s).sum();
-    let free_sum: f64 = sizes.iter().enumerate().filter(|(i, _)| !is_pinned(*i)).map(|(_, s)| *s).sum();
+    let pinned_sum: f64 = sizes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| is_pinned(*i))
+        .map(|(_, s)| *s)
+        .sum();
+    let free_sum: f64 = sizes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !is_pinned(*i))
+        .map(|(_, s)| *s)
+        .sum();
     let free_target = target - pinned_sum;
     if free_sum > 0.0 && free_target > 0.0 {
         let scale = free_target / free_sum;
@@ -651,7 +952,8 @@ pub struct Frame {
     /// Project-defined sections, shared by all frames and rebuilt on load.
     /// Their single persisted source is Project::custom_profiles.
     #[serde(skip)]
-    pub member_profiles: std::sync::Arc<std::collections::BTreeMap<String, crate::profile::ProfileDefinition>>,
+    pub member_profiles:
+        std::sync::Arc<std::collections::BTreeMap<String, crate::profile::ProfileDefinition>>,
     /// Overall outer width in mm
     pub outer_width: f64,
     /// Overall outer height in mm
@@ -753,13 +1055,13 @@ pub struct FrameShape {
 pub enum ShapeType {
     #[default]
     Rectangular,
-    Arched,         // getoogde bovendorpel (segmentboog)
-    Round,          // volledig rond (cirkel)
+    Arched, // getoogde bovendorpel (segmentboog)
+    Round,  // volledig rond (cirkel)
     Elliptical,
-    Trapezoid,      // schuine stijl(en) of dorpel
+    Trapezoid,       // schuine stijl(en) of dorpel
     ArchedTrapezoid, // boog + schuine stijlen gecombineerd (CNCware-stijl)
-    Triangle,       // driehoekig kozijn
-    Polygon,        // vrije veelhoek
+    Triangle,        // driehoekig kozijn
+    Polygon,         // vrije veelhoek
 }
 
 /// Grid subdivision — columns (vertical) and rows (horizontal)
@@ -781,6 +1083,12 @@ pub struct GridDivision {
     pub size: f64,
     /// Divider profile (None for first column/row since there's no divider before it)
     pub divider_profile: Option<ProfileRef>,
+    /// Face width of the selected divider article, in mm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divider_width: Option<f64>,
+    /// Build depth of the selected divider article, in mm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divider_depth: Option<f64>,
 }
 
 /// A single cell (vak) in the kozijn grid
@@ -855,8 +1163,10 @@ impl Cell {
     /// Resolve the same sash stock when changing a cell in the desktop or web editor.
     pub fn change_panel_type(&mut self, panel_type: PanelType, frame: &Frame) {
         let change_stock = (self.panel_type == PanelType::Door) != (panel_type == PanelType::Door);
-        let has_stock = self.sash_profile.is_some() || self.sash_profile_snapshot.is_some()
-            || self.sash_width.is_some() || self.sash_depth.is_some();
+        let has_stock = self.sash_profile.is_some()
+            || self.sash_profile_snapshot.is_some()
+            || self.sash_width.is_some()
+            || self.sash_depth.is_some();
         self.panel_type = panel_type;
         if !panel_type.is_operable() {
             self.sash_profile = None;
@@ -865,29 +1175,53 @@ impl Cell {
             self.sash_depth = None;
         } else if change_stock || !has_stock {
             let templates = crate::template::builtin_sjablonen();
-            let stock = templates.iter().find(|s| s.stijl_profile.id == frame.profile.id && s.material == frame.material);
+            let stock = templates
+                .iter()
+                .find(|s| s.stijl_profile.id == frame.profile.id && s.material == frame.material);
             self.assign_default_sash(frame, stock);
         }
     }
 
-    fn assign_default_sash(&mut self, frame: &Frame, preset: Option<&crate::template::KozijnSjabloon>) {
+    fn assign_default_sash(
+        &mut self,
+        frame: &Frame,
+        preset: Option<&crate::template::KozijnSjabloon>,
+    ) {
         if frame.material.is_profile_system() {
             let stored = frame.profile_snapshot.as_ref();
             let catalog = crate::glazing_fit::catalog_snapshot(&frame.profile.id, &frame.material);
-            self.sash_profile = Some(preset.map_or(&frame.profile, |s| if self.panel_type == PanelType::Door {
-                &s.deurhout_profile
-            } else { &s.raamhout_profile }).clone());
+            self.sash_profile = Some(
+                preset
+                    .map_or(&frame.profile, |s| {
+                        if self.panel_type == PanelType::Door {
+                            &s.deurhout_profile
+                        } else {
+                            &s.raamhout_profile
+                        }
+                    })
+                    .clone(),
+            );
             self.sash_profile_snapshot = None;
-            self.sash_width = Some(stored.and_then(|s| s.sash_face_width)
-                .or_else(|| catalog.and_then(|s| s.sash_face_width)).filter(|v| *v > 0.)
-                .unwrap_or_else(|| preset.map_or(frame.frame_width, |s| s.sash_width)));
-            self.sash_depth = Some(stored.and_then(|s| s.sash_build_depth)
-                .or_else(|| catalog.and_then(|s| s.sash_build_depth)).filter(|v| *v > 0.)
-                .unwrap_or_else(|| preset.map_or(frame.frame_depth, |s| s.sash_depth)));
+            self.sash_width = Some(
+                stored
+                    .and_then(|s| s.sash_face_width)
+                    .or_else(|| catalog.and_then(|s| s.sash_face_width))
+                    .filter(|v| *v > 0.)
+                    .unwrap_or_else(|| preset.map_or(frame.frame_width, |s| s.sash_width)),
+            );
+            self.sash_depth = Some(
+                stored
+                    .and_then(|s| s.sash_build_depth)
+                    .or_else(|| catalog.and_then(|s| s.sash_build_depth))
+                    .filter(|v| *v > 0.)
+                    .unwrap_or_else(|| preset.map_or(frame.frame_depth, |s| s.sash_depth)),
+            );
         } else if let Some(preset) = preset {
             self.assign_sash_from_sjabloon(preset);
         } else {
-            let stock = crate::template::builtin_sjablonen().into_iter().find(|s| s.material == frame.material)
+            let stock = crate::template::builtin_sjablonen()
+                .into_iter()
+                .find(|s| s.material == frame.material)
                 .unwrap_or_else(crate::template::default_sjabloon);
             self.assign_sash_from_sjabloon(&stock);
         }
@@ -897,16 +1231,30 @@ impl Cell {
     pub fn assign_sash_from_sjabloon(&mut self, sj: &crate::template::KozijnSjabloon) {
         self.sash_profile_snapshot = None;
         match self.panel_type {
-            PanelType::TurnTilt | PanelType::Turn | PanelType::Tilt | PanelType::Sliding
-            | PanelType::TopHung | PanelType::BottomHung | PanelType::LiftSlide | PanelType::Pivot => {
+            PanelType::TurnTilt
+            | PanelType::Turn
+            | PanelType::Tilt
+            | PanelType::Sliding
+            | PanelType::TopHung
+            | PanelType::BottomHung
+            | PanelType::LiftSlide
+            | PanelType::Pivot => {
                 self.sash_profile = Some(sj.raamhout_profile.clone());
                 self.sash_width = Some(sj.sash_width);
                 self.sash_depth = Some(sj.sash_depth);
             }
             PanelType::Door => {
                 self.sash_profile = Some(sj.deurhout_profile.clone());
-                self.sash_width = Some(if sj.material.is_profile_system() { sj.sash_width } else { sj.frame_width });
-                self.sash_depth = Some(if sj.material.is_profile_system() { sj.sash_depth } else { sj.frame_depth });
+                self.sash_width = Some(if sj.material.is_profile_system() {
+                    sj.sash_width
+                } else {
+                    sj.frame_width
+                });
+                self.sash_depth = Some(if sj.material.is_profile_system() {
+                    sj.sash_depth
+                } else {
+                    sj.frame_depth
+                });
             }
             _ => {
                 self.sash_profile = None;
@@ -955,8 +1303,15 @@ impl PanelType {
     pub fn is_operable(&self) -> bool {
         matches!(
             self,
-            Self::TurnTilt | Self::Turn | Self::Tilt | Self::Sliding | Self::Door
-            | Self::TopHung | Self::BottomHung | Self::LiftSlide | Self::Pivot
+            Self::TurnTilt
+                | Self::Turn
+                | Self::Tilt
+                | Self::Sliding
+                | Self::Door
+                | Self::TopHung
+                | Self::BottomHung
+                | Self::LiftSlide
+                | Self::Pivot
         )
     }
 }
@@ -1004,8 +1359,14 @@ impl Default for Glazing {
             thickness_mm: 24.0,
             ug_value: 1.0,
             panes: vec![
-                Pane { thickness_mm: 4.0, pane_type: "float".into() },
-                Pane { thickness_mm: 4.0, pane_type: "low-e".into() },
+                Pane {
+                    thickness_mm: 4.0,
+                    pane_type: "float".into(),
+                },
+                Pane {
+                    thickness_mm: 4.0,
+                    pane_type: "low-e".into(),
+                },
             ],
             spacer_type: "warm-edge".into(),
         }
@@ -1118,10 +1479,18 @@ impl<'de> Deserialize<'de> for Project {
 
 impl Project {
     fn refresh_member_profiles(&mut self) {
-        if self.kozijnen.is_empty() { return; }
-        let library = std::sync::Arc::new(self.custom_profiles.iter()
-            .map(|p| (p.id.clone(), p.clone())).collect());
-        for k in &mut self.kozijnen { k.frame.member_profiles = std::sync::Arc::clone(&library); }
+        if self.kozijnen.is_empty() {
+            return;
+        }
+        let library = std::sync::Arc::new(
+            self.custom_profiles
+                .iter()
+                .map(|p| (p.id.clone(), p.clone()))
+                .collect(),
+        );
+        for k in &mut self.kozijnen {
+            k.frame.member_profiles = std::sync::Arc::clone(&library);
+        }
     }
 
     pub fn set_custom_profile(&mut self, profile: crate::profile::ProfileDefinition) {
@@ -1193,38 +1562,87 @@ mod tests {
     #[test]
     fn selecting_a_pvc_frame_changes_material_and_rejects_partial_updates() {
         let mut k = Kozijn::new("Selectie", "K1", 1000.0, 1200.0);
-        let profile = ProfileRef { id: "veka-softline82".into(), name: "VEKA".into() };
+        let profile = ProfileRef {
+            id: "veka-softline82".into(),
+            name: "VEKA".into(),
+        };
         let before = serde_json::to_value(&k).unwrap();
         for (snapshot, material) in [("{}", "unknown"), ("broken", r#""pvc""#)] {
-            assert!(k.apply_frame_profile(
-                profile.clone(), Some(73.0), Some(82.0), Some(snapshot), Some(material),
-            ).is_err());
+            assert!(k
+                .apply_frame_profile(
+                    profile.clone(),
+                    Some(73.0),
+                    Some(82.0),
+                    Some(snapshot),
+                    Some(material),
+                )
+                .is_err());
             assert_eq!(serde_json::to_value(&k).unwrap(), before);
         }
         k.apply_frame_profile(
-            profile, Some(73.0), Some(82.0), Some("null"), Some(r#""pvc""#),
-        ).unwrap();
+            profile,
+            Some(73.0),
+            Some(82.0),
+            Some("null"),
+            Some(r#""pvc""#),
+        )
+        .unwrap();
         assert_eq!(k.frame.material, Material::Pvc);
         assert_eq!(k.grid.columns[0].size, 854.0);
-        let fit = crate::geometry::compute_2d_geometry(&k).cell_rects.remove(0).fit.unwrap();
+        let fit = crate::geometry::compute_2d_geometry(&k)
+            .cell_rects
+            .remove(0)
+            .fit
+            .unwrap();
         assert_eq!(fit.day.x - fit.glass.x, 20.0);
     }
 
     #[test]
     fn frame_system_change_updates_inherited_profiles_and_preserves_explicit_parts() {
         let mut k = crate::grid::template_double_turn_tilt_sj(
-            1600., 1300., &crate::template::default_sjabloon());
-        k.frame.right_profile = Some(ProfileRef { id: "eigen-stijl".into(), name: "Eigen stijl".into() });
-        k.cells[1].sash_profile = Some(ProfileRef { id: "eigen-vleugel".into(), name: "Eigen vleugel".into() });
-        let profile = ProfileRef { id: "reynaers-masterline8".into(), name: "MasterLine 8".into() };
-        k.apply_frame_profile(profile.clone(), Some(53.), Some(77.), None, Some(r#""aluminum""#)).unwrap();
-        for p in [&k.frame.top_profile, &k.frame.sill_profile, &k.frame.bottom_profile,
-                  &k.frame.left_profile, &k.grid.columns[1].divider_profile, &k.cells[0].sash_profile] {
+            1600.,
+            1300.,
+            &crate::template::default_sjabloon(),
+        );
+        k.frame.right_profile = Some(ProfileRef {
+            id: "eigen-stijl".into(),
+            name: "Eigen stijl".into(),
+        });
+        k.cells[1].sash_profile = Some(ProfileRef {
+            id: "eigen-vleugel".into(),
+            name: "Eigen vleugel".into(),
+        });
+        let profile = ProfileRef {
+            id: "reynaers-masterline8".into(),
+            name: "MasterLine 8".into(),
+        };
+        k.apply_frame_profile(
+            profile.clone(),
+            Some(53.),
+            Some(77.),
+            None,
+            Some(r#""aluminum""#),
+        )
+        .unwrap();
+        for p in [
+            &k.frame.top_profile,
+            &k.frame.sill_profile,
+            &k.frame.bottom_profile,
+            &k.frame.left_profile,
+            &k.grid.columns[1].divider_profile,
+            &k.cells[0].sash_profile,
+        ] {
             assert_eq!(p.as_ref().unwrap().id, profile.id);
         }
         assert_eq!(k.frame.right_profile.as_ref().unwrap().id, "eigen-stijl");
-        assert_eq!(k.cells[1].sash_profile.as_ref().unwrap().id, "eigen-vleugel");
-        assert_eq!((k.cells[0].sash_width, k.cells[0].sash_depth), (Some(50.), Some(87.)));
+        assert_eq!(
+            k.cells[1].sash_profile.as_ref().unwrap().id,
+            "eigen-vleugel"
+        );
+        assert_eq!(
+            (k.cells[0].sash_width, k.cells[0].sash_depth),
+            (Some(50.), Some(87.))
+        );
         k.cells[0].change_panel_type(PanelType::FixedGlass, &k.frame);
         k.cells[0].change_panel_type(PanelType::TurnTilt, &k.frame);
         assert_eq!(k.cells[0].sash_profile.as_ref().unwrap().id, profile.id);
@@ -1258,8 +1676,14 @@ mod tests {
         let json = serde_json::to_string(&project).unwrap();
         assert!(!json.contains("memberProfiles"));
         let opened: Project = serde_json::from_str(&json).unwrap();
-        assert_eq!(opened.kozijnen[0].frame.member_profiles["eigen-tussenhout"].depth, 86.);
-        assert!(std::sync::Arc::ptr_eq(&opened.kozijnen[0].frame.member_profiles, &opened.kozijnen[1].frame.member_profiles));
+        assert_eq!(
+            opened.kozijnen[0].frame.member_profiles["eigen-tussenhout"].depth,
+            86.
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            &opened.kozijnen[0].frame.member_profiles,
+            &opened.kozijnen[1].frame.member_profiles
+        ));
     }
 
     #[test]
@@ -1281,8 +1705,15 @@ mod tests {
         assert!((g.h_dividers[0].y + 33.5 - 185.0).abs() < 1e-6);
         assert!((g.h_dividers[1].y - original_y).abs() < 1e-6);
         assert!((g.v_dividers[0].x - 340.0).abs() < 1e-6);
-        let head = g.curved_divider_timber.iter().find(|p| !p.vertical && p.source_index == 0).unwrap();
-        assert_eq!((head.start.radius_mm, head.end.radius_mm), (Some(683.0), Some(683.0)));
+        let head = g
+            .curved_divider_timber
+            .iter()
+            .find(|p| !p.vertical && p.source_index == 0)
+            .unwrap();
+        assert_eq!(
+            (head.start.radius_mm, head.end.radius_mm),
+            (Some(683.0), Some(683.0))
+        );
         k.add_divider_in_elevation(true, 187.0); // Already inside the transom
         assert_eq!(k.grid.rows.len(), 3);
     }
@@ -1297,7 +1728,10 @@ mod tests {
         cell.change_panel_type(PanelType::Turn, &k.frame);
         assert_eq!(cell.sash_width, Some(78.0));
         cell.change_panel_type(PanelType::Door, &k.frame);
-        assert_eq!(cell.sash_profile.as_ref().unwrap().id, "deur-meranti-67x114");
+        assert_eq!(
+            cell.sash_profile.as_ref().unwrap().id,
+            "deur-meranti-67x114"
+        );
         cell.change_panel_type(PanelType::FixedGlass, &k.frame);
         assert!(cell.sash_profile.is_none() && cell.sash_width.is_none());
     }
@@ -1377,7 +1811,13 @@ mod tests {
         assert_eq!(k.cells.len(), 2);
         let sum: f64 = k.grid.columns.iter().map(|c| c.size).sum();
         // Σ kolommen + tussenstijl = binnenmaat: the dimension chain closes.
-        assert!((sum + fw - inner_w).abs() < 1e-6, "sum {} + fw {} != inner {}", sum, fw, inner_w);
+        assert!(
+            (sum + fw - inner_w).abs() < 1e-6,
+            "sum {} + fw {} != inner {}",
+            sum,
+            fw,
+            inner_w
+        );
         // The divider space is taken proportionally: the 400:666 ratio holds.
         let ratio = k.grid.columns[0].size / k.grid.columns[1].size;
         assert!((ratio - 400.0 / 666.0).abs() < 1e-6);
@@ -1391,8 +1831,18 @@ mod tests {
         let rows: f64 = k.grid.rows.iter().map(|r| r.size).sum();
         let cols_total = cols + fw * (k.grid.columns.len() - 1) as f64;
         let rows_total = rows + fw * (k.grid.rows.len() - 1) as f64;
-        assert!((cols_total - k.inner_width()).abs() < 1e-6, "cols {} != inner {}", cols_total, k.inner_width());
-        assert!((rows_total - k.inner_height()).abs() < 1e-6, "rows {} != inner {}", rows_total, k.inner_height());
+        assert!(
+            (cols_total - k.inner_width()).abs() < 1e-6,
+            "cols {} != inner {}",
+            cols_total,
+            k.inner_width()
+        );
+        assert!(
+            (rows_total - k.inner_height()).abs() < 1e-6,
+            "rows {} != inner {}",
+            rows_total,
+            k.inner_height()
+        );
     }
 
     #[test]
@@ -1427,7 +1877,10 @@ mod tests {
         let mut wanted = before.clone();
         wanted[0] = 300.0;
         k.set_grid_sizes_fitted(&wanted, &rows);
-        assert!((k.grid.columns[0].size - 300.0).abs() < 1e-9, "typed value must stay exact");
+        assert!(
+            (k.grid.columns[0].size - 300.0).abs() < 1e-9,
+            "typed value must stay exact"
+        );
         grid_closes(&k);
         // The untouched vakken kept their mutual ratio.
         let r_before = before[1] / before[2];
@@ -1444,7 +1897,13 @@ mod tests {
 
         assert_eq!(k.grid.rows.len(), 2);
         let sum: f64 = k.grid.rows.iter().map(|r| r.size).sum();
-        assert!((sum + fw - inner_h).abs() < 1e-6, "sum {} + fw {} != inner {}", sum, fw, inner_h);
+        assert!(
+            (sum + fw - inner_h).abs() < 1e-6,
+            "sum {} + fw {} != inner {}",
+            sum,
+            fw,
+            inner_h
+        );
         let ratio = k.grid.rows[0].size / k.grid.rows[1].size;
         assert!((ratio - 500.0 / 866.0).abs() < 1e-6);
     }

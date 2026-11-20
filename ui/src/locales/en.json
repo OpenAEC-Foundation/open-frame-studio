@@ -702,6 +702,7 @@
   "procurement.noResults": "No purchase items found. Add frames to the project first.",
   "procurement.generated": "Purchase proposal generated",
   "procurement.generateError": "Error generating purchase proposal",
+  "procurement.blockedItems": "Rejected glass items cannot be ordered",
   "procurement.totalExclBtw": "Total excl. VAT",
   "procurement.colDescription": "Description",
   "procurement.colArticle": "Article no.",

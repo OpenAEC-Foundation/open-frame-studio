@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::production::{BomItem, CutListItem, GasketListItem, GasketType, GlassListItem, MemberType};
+use crate::production::{
+    BomItem, CutListItem, GasketListItem, GasketType, GlassListItem, MemberType,
+};
 use crate::vliesgevel::Vliesgevel;
 
 const SAW_KERF_MM: f64 = 4.0;
@@ -32,7 +34,9 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
         mullion_list.push(CutListItem {
             piece_id: format!("{}-M{}", mark, i + 1),
             member_type: MemberType::DividerV,
-            profile_name: m.profile.as_ref()
+            profile_name: m
+                .profile
+                .as_ref()
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| vg.mullion_profile.name.clone()),
             material: "Aluminium".into(),
@@ -41,12 +45,21 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
             miter_left_deg: 90.0,
             miter_right_deg: 90.0,
             quantity: 1,
-            arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+            arc: None,
+            profile_side: None,
+            start_cope_radius_mm: None,
+            end_cope_radius_mm: None,
+            divider_start: None,
+            divider_end: None,
+            masonry_notches: Vec::new(),
         });
     }
 
     // Edge mullions (left + right border)
-    for (id_suffix, member_type) in [("ML", MemberType::FrameLeft), ("MR", MemberType::FrameRight)] {
+    for (id_suffix, member_type) in [
+        ("ML", MemberType::FrameLeft),
+        ("MR", MemberType::FrameRight),
+    ] {
         let net = vg.overall_height;
         mullion_list.push(CutListItem {
             piece_id: format!("{}-{}", mark, id_suffix),
@@ -58,7 +71,13 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
             miter_left_deg: 90.0,
             miter_right_deg: 90.0,
             quantity: 1,
-            arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+            arc: None,
+            profile_side: None,
+            start_cope_radius_mm: None,
+            end_cope_radius_mm: None,
+            divider_start: None,
+            divider_end: None,
+            masonry_notches: Vec::new(),
         });
     }
 
@@ -71,7 +90,9 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                 transom_list.push(CutListItem {
                     piece_id: format!("{}-T{}-{}", mark, i + 1, col + 1),
                     member_type: MemberType::DividerH,
-                    profile_name: t.profile.as_ref()
+                    profile_name: t
+                        .profile
+                        .as_ref()
                         .map(|p| p.name.clone())
                         .unwrap_or_else(|| vg.transom_profile.name.clone()),
                     material: "Aluminium".into(),
@@ -80,14 +101,23 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                     miter_left_deg: 90.0,
                     miter_right_deg: 90.0,
                     quantity: 1,
-                    arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                    arc: None,
+                    profile_side: None,
+                    start_cope_radius_mm: None,
+                    end_cope_radius_mm: None,
+                    divider_start: None,
+                    divider_end: None,
+                    masonry_notches: Vec::new(),
                 });
             }
         }
     }
 
     // Top + bottom transoms (edge transoms)
-    for (id_suffix, member_type) in [("TB", MemberType::FrameBottom), ("TT", MemberType::FrameTop)] {
+    for (id_suffix, member_type) in [
+        ("TB", MemberType::FrameBottom),
+        ("TT", MemberType::FrameTop),
+    ] {
         for (col, (x1, x2)) in col_zones.iter().enumerate() {
             let net = x2 - x1;
             if net > 0.0 {
@@ -101,7 +131,13 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                     miter_left_deg: 90.0,
                     miter_right_deg: 90.0,
                     quantity: 1,
-                    arc: None, profile_side: None, start_cope_radius_mm: None, end_cope_radius_mm: None, divider_start: None, divider_end: None, masonry_notches: Vec::new(),
+                    arc: None,
+                    profile_side: None,
+                    start_cope_radius_mm: None,
+                    end_cope_radius_mm: None,
+                    divider_start: None,
+                    divider_end: None,
+                    masonry_notches: Vec::new(),
                 });
             }
         }
@@ -127,24 +163,30 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
                     cut_contour: None,
                     piece_id: format!("{}-G{}-{}", vg.mark, panel.row + 1, panel.col + 1),
                     cell_index: panel.row * vg.num_cols() + panel.col,
-                    glass_type: glazing.map(|g| g.glass_type.clone()).unwrap_or("HR++".into()),
+                    glass_type: glazing
+                        .map(|g| g.glass_type.clone())
+                        .unwrap_or("HR++".into()),
                     width_mm: gw,
                     height_mm: gh,
                     thickness_mm: glazing.map(|g| g.thickness_mm).unwrap_or(24.0),
                     ug_value: glazing.map(|g| g.ug_value).unwrap_or(1.0),
                     area_m2: (gw * gh) / 1e6,
                     quantity: 1,
+                    production_ready: true,
+                    production_issue: None,
                 });
 
                 // Glazing gaskets per panel
                 let perimeter = 2.0 * (gw + gh) + GASKET_OVERLAP_MM;
                 gasket_list.push(GasketListItem {
-                    reference: None, gasket_type: GasketType::GlazingInner,
+                    reference: None,
+                    gasket_type: GasketType::GlazingInner,
                     length_mm: perimeter,
                     quantity: 1,
                 });
                 gasket_list.push(GasketListItem {
-                    reference: None, gasket_type: GasketType::GlazingOuter,
+                    reference: None,
+                    gasket_type: GasketType::GlazingOuter,
                     length_mm: perimeter,
                     quantity: 1,
                 });
@@ -154,8 +196,14 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
 
     // BOM
     let mut bom = Vec::new();
-    let total_mullion_m: f64 = mullion_list.iter().map(|c| c.gross_length_mm / 1000.0).sum();
-    let total_transom_m: f64 = transom_list.iter().map(|c| c.gross_length_mm / 1000.0).sum();
+    let total_mullion_m: f64 = mullion_list
+        .iter()
+        .map(|c| c.gross_length_mm / 1000.0)
+        .sum();
+    let total_transom_m: f64 = transom_list
+        .iter()
+        .map(|c| c.gross_length_mm / 1000.0)
+        .sum();
     bom.push(BomItem {
         category: "Stijlprofiel".into(),
         description: vg.mullion_profile.name.clone(),
@@ -173,7 +221,10 @@ pub fn compute_vliesgevel_production(vg: &Vliesgevel) -> VliesgevelProductionDat
     if total_glass_m2 > 0.0 {
         bom.push(BomItem {
             category: "Glas".into(),
-            description: glass_list.first().map(|g| g.glass_type.clone()).unwrap_or_default(),
+            description: glass_list
+                .first()
+                .map(|g| g.glass_type.clone())
+                .unwrap_or_default(),
             unit: "m2".into(),
             quantity: total_glass_m2,
         });

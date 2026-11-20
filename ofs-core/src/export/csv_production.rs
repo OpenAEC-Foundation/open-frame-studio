@@ -179,6 +179,7 @@ fn write_glaslijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
     let with_contours = data.iter().flat_map(|p| &p.glass_list).any(|i| i.cut_contour.is_some());
     let mut headers = vec!["Kozijn", "Pos", "Glastype", "Breedte_mm", "Hoogte_mm", "Dikte_mm", "Ug", "Opp_m2", "Aantal"];
     if with_contours { headers.extend(["Snijvorm_mm", "Contour_mm_vanaf_linksboven_x_rechts_y_omlaag"]); }
+    headers.extend(["Productiegereed", "Blokkeerreden"]);
     write_row(&mut w, &headers)?;
     for prod in data {
         for item in &prod.glass_list {
@@ -189,6 +190,8 @@ fn write_glaslijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
                 format!("{:.2}", item.area_m2), item.quantity.to_string(),
             ];
             if with_contours { fields.extend([item.shape_label_nl(), item.cut_steps().join(" | ")]); }
+            fields.push(if item.production_ready { "Ja".into() } else { "Nee".into() });
+            fields.push(item.production_issue.clone().unwrap_or_default());
             write_row(&mut w, &fields.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
     }

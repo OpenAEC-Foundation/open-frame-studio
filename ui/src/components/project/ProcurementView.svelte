@@ -13,6 +13,7 @@
   $: grandTotal = proposals.reduce((sum, p) => sum + (p.totalExclBtw || 0), 0);
   $: ordersGrandTotal = orders.reduce((sum, o) => sum + (o.totalInclBtw || 0), 0);
   $: unresolved = [...new Set((mode === "orders" ? orders : proposals).flatMap(p => p.unresolvedPieceIds ?? []))];
+  $: blocked = [...new Set([...proposals, ...orders].flatMap(p => p.blockedPieceIds ?? []))];
 
   async function generateProposals() {
     loading = true;
@@ -32,7 +33,12 @@
   async function generateOrders() {
     loading = true;
     try {
-      orders = (await invoke("generate_purchase_orders", {})) || [];
+      const [nextOrders, nextProposals] = await Promise.all([
+        invoke("generate_purchase_orders", {}),
+        invoke("generate_purchase_proposals", {})
+      ]);
+      orders = nextOrders || [];
+      proposals = nextProposals || [];
       ordersGenerated = true;
       if (orders.length > 0) {
         toast.success($_("procurement.generated"));
@@ -84,6 +90,9 @@
 
   {#if !loading && unresolved.length}
     <p class="hint">{$_("archJoint.unresolvedPieces")} · {unresolved.join(", ")}</p>
+  {/if}
+  {#if !loading && blocked.length}
+    <p class="hint">{$_("procurement.blockedItems")} · {blocked.join(", ")}</p>
   {/if}
   {#if loading}
     <p class="hint">{$_("procurement.loading")}</p>

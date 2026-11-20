@@ -819,6 +819,7 @@
   "procurement.noResults": "Geen inkoopregels gevonden. Voeg eerst kozijnen toe aan het project.",
   "procurement.generated": "Inkoopvoorstel gegenereerd",
   "procurement.generateError": "Fout bij genereren inkoopvoorstel",
+  "procurement.blockedItems": "Afgekeurde glasregels niet bestelbaar",
   "procurement.totalExclBtw": "Totaal excl. btw",
   "procurement.colDescription": "Omschrijving",
   "procurement.colArticle": "Artikelnr.",

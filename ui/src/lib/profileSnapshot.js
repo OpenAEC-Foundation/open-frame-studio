@@ -6,6 +6,9 @@ function mm(value) {
 // in step with ofs-core/build.rs for catalog profiles opened by ID.
 export function resolveProfileSnapshot(profile) {
   const system = profile.material === "pvc" || profile.material === "aluminum";
+  const systemId = system && profile.manufacturer && profile.series
+    ? `${profile.manufacturer.trim().toLowerCase()}::${profile.series.trim().toLowerCase()}`
+    : null;
   const rebate = profile.sponning;
   const side = rebate?.position || ({ binnensponning: "binnen", buitensponning: "buiten" })[rebate?.type ?? rebate?.sponningType];
   const frame = mm(profile.sightline);
@@ -14,6 +17,10 @@ export function resolveProfileSnapshot(profile) {
   const overlap = mm(rebate?.opdekWidth) ?? mm(rebate?.opdek_width) ?? mm(profile.overslagHoogte) ?? mm(profile.ventOverlap);
   const levels = profile.sealingLevels;
   return {
+    systemId,
+    minGlassThickness: mm(profile.minGlassThickness),
+    maxGlassThickness: mm(profile.maxGlassThickness),
+    dividerFaceWidth: mm(profile.sightlineMullion),
     sponningDiepte: system ? null : mm(rebate?.width) ?? mm(profile.glazingRebate),
     sponningHoogte: mm(rebate?.depth),
     beadPosition: ["binnen", "buiten"].includes(side) ? side : null,

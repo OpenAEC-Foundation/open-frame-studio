@@ -1,6 +1,9 @@
-use crate::kozijn::{Kozijn, ShapeType};
 use crate::curved_contour::{Contour, CurvedFrame, FrameCurve};
-use crate::layout::{compute_layout_geometry, compute_layout_geometry_unclipped, LayoutGeometry, LayoutRect, Vakvulling};
+use crate::kozijn::{Kozijn, ShapeType};
+use crate::layout::{
+    compute_layout_geometry, compute_layout_geometry_unclipped, LayoutGeometry, LayoutRect,
+    Vakvulling,
+};
 use serde::{Deserialize, Serialize};
 
 /// 2D rectangle for SVG rendering
@@ -178,6 +181,28 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let oh = kozijn.frame.outer_height;
     // Divider width defaults to frame width (same profile family)
     let divider_width = fw;
+    let column_divider_widths: Vec<f64> = kozijn
+        .grid
+        .columns
+        .iter()
+        .skip(1)
+        .map(|d| {
+            d.divider_width
+                .filter(|w| w.is_finite() && *w > 0.0)
+                .unwrap_or(fw)
+        })
+        .collect();
+    let row_divider_widths: Vec<f64> = kozijn
+        .grid
+        .rows
+        .iter()
+        .skip(1)
+        .map(|d| {
+            d.divider_width
+                .filter(|w| w.is_finite() && *w > 0.0)
+                .unwrap_or(fw)
+        })
+        .collect();
 
     // Outer rect
     let outer_rect = Rect2D {
@@ -206,7 +231,12 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // placement of the tree for arched/round shapes.
     let frame_curve = FrameCurve::new(&kozijn.frame);
     let layout_geom = kozijn.layout.as_ref().map(|node| {
-        let rect = LayoutRect { x: fw, y: fw, width: ow - 2.0 * fw, height: oh - 2.0 * fw };
+        let rect = LayoutRect {
+            x: fw,
+            y: fw,
+            width: ow - 2.0 * fw,
+            height: oh - 2.0 * fw,
+        };
         if frame_curve.is_some() {
             // Stock bordering a wall on just one side still runs down to its
             // actual joint. Divider machining removes double-sided wall spans.
@@ -221,7 +251,11 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         || kozijn.frame.shape.shape_type == ShapeType::ArchedTrapezoid;
     let is_round = kozijn.frame.shape.shape_type == ShapeType::Round;
     let is_elliptical = kozijn.frame.shape.shape_type == ShapeType::Elliptical;
-    let top_rect_height = if is_arched || is_round || is_elliptical { 0.0 } else { fw };
+    let top_rect_height = if is_arched || is_round || is_elliptical {
+        0.0
+    } else {
+        fw
+    };
 
     // For arched frames, stiles start at the arch spring line (not y=0)
     let stile_top_y = if is_arched {
@@ -242,10 +276,30 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let mut frame_polygons: Vec<Vec<[f64; 2]>> = Vec::new();
     let frame_rects = if is_round || is_elliptical {
         vec![
-            Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
-            Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
-            Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
-            Rect2D { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            Rect2D {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            Rect2D {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            Rect2D {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            Rect2D {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
         ]
     } else if kozijn.frame.shape.shape_type == ShapeType::Rectangular {
         let corners = crate::joint::frame_corner_model(
@@ -268,17 +322,57 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             .all(|c| !c.verstek && c.through == crate::joint::ThroughMember::Stijl);
         let rects = if all_stijl_through {
             vec![
-                Rect2D { x: fw, y: 0.0, width: ow - 2.0 * fw, height: fw }, // top rail between stiles
-                Rect2D { x: fw, y: oh - fw, width: ow - 2.0 * fw, height: fw }, // bottom rail between stiles
-                Rect2D { x: 0.0, y: 0.0, width: fw, height: oh }, // left stile full height
-                Rect2D { x: ow - fw, y: 0.0, width: fw, height: oh }, // right stile full height
+                Rect2D {
+                    x: fw,
+                    y: 0.0,
+                    width: ow - 2.0 * fw,
+                    height: fw,
+                }, // top rail between stiles
+                Rect2D {
+                    x: fw,
+                    y: oh - fw,
+                    width: ow - 2.0 * fw,
+                    height: fw,
+                }, // bottom rail between stiles
+                Rect2D {
+                    x: 0.0,
+                    y: 0.0,
+                    width: fw,
+                    height: oh,
+                }, // left stile full height
+                Rect2D {
+                    x: ow - fw,
+                    y: 0.0,
+                    width: fw,
+                    height: oh,
+                }, // right stile full height
             ]
         } else {
             vec![
-                Rect2D { x: 0.0, y: 0.0, width: ow, height: fw },
-                Rect2D { x: 0.0, y: oh - fw, width: ow, height: fw },
-                Rect2D { x: 0.0, y: fw, width: fw, height: oh - 2.0 * fw },
-                Rect2D { x: ow - fw, y: fw, width: fw, height: oh - 2.0 * fw },
+                Rect2D {
+                    x: 0.0,
+                    y: 0.0,
+                    width: ow,
+                    height: fw,
+                },
+                Rect2D {
+                    x: 0.0,
+                    y: oh - fw,
+                    width: ow,
+                    height: fw,
+                },
+                Rect2D {
+                    x: 0.0,
+                    y: fw,
+                    width: fw,
+                    height: oh - 2.0 * fw,
+                },
+                Rect2D {
+                    x: ow - fw,
+                    y: fw,
+                    width: fw,
+                    height: oh - 2.0 * fw,
+                },
             ]
         };
         if has_buiten {
@@ -296,13 +390,33 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     } else {
         vec![
             // Top (hidden for arched — arc replaces it)
-            Rect2D { x: 0.0, y: 0.0, width: ow, height: top_rect_height },
+            Rect2D {
+                x: 0.0,
+                y: 0.0,
+                width: ow,
+                height: top_rect_height,
+            },
             // Bottom (sill)
-            Rect2D { x: 0.0, y: oh - fw, width: ow, height: fw },
+            Rect2D {
+                x: 0.0,
+                y: oh - fw,
+                width: ow,
+                height: fw,
+            },
             // Left stile (starts at arch spring for arched frames)
-            Rect2D { x: 0.0, y: stile_top_y, width: fw, height: oh - stile_top_y - fw },
+            Rect2D {
+                x: 0.0,
+                y: stile_top_y,
+                width: fw,
+                height: oh - stile_top_y - fw,
+            },
             // Right stile
-            Rect2D { x: ow - fw, y: stile_top_y, width: fw, height: oh - stile_top_y - fw },
+            Rect2D {
+                x: ow - fw,
+                y: stile_top_y,
+                width: fw,
+                height: oh - stile_top_y - fw,
+            },
         ]
     };
 
@@ -313,7 +427,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         col_positions.push(x);
         x += col.size;
         if i < kozijn.grid.columns.len() - 1 {
-            x += divider_width; // space for divider
+            x += column_divider_widths[i]; // space for the selected article
         }
     }
 
@@ -327,13 +441,17 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let row_area_top = if rows_from_spring { stile_top_y } else { fw };
     let rows_total: f64 = kozijn.grid.rows.iter().map(|r| r.size).sum();
     let row_scale = if rows_from_spring && rows_total > 0.0 {
-        let divider_total = divider_width * (num_rows.saturating_sub(1) as f64);
+        let divider_total: f64 = row_divider_widths.iter().sum();
         ((oh - fw - row_area_top - divider_total) / rows_total).max(0.0)
     } else {
         1.0
     };
-    let row_display_sizes: Vec<f64> =
-        kozijn.grid.rows.iter().map(|r| r.size * row_scale).collect();
+    let row_display_sizes: Vec<f64> = kozijn
+        .grid
+        .rows
+        .iter()
+        .map(|r| r.size * row_scale)
+        .collect();
 
     let mut row_positions = Vec::new();
     let mut row_divider_sizes = Vec::new();
@@ -342,6 +460,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         row_positions.push(y);
         y += size;
         if i < num_rows - 1 {
+            let divider_width = row_divider_widths[i];
             let height = if rows_from_spring {
                 divider_width.min((oh - fw - y).max(0.0))
             } else {
@@ -364,6 +483,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         for i in 0..kozijn.grid.columns.len() {
             vx += kozijn.grid.columns[i].size;
             if i < kozijn.grid.columns.len() - 1 {
+                let divider_width = column_divider_widths[i];
                 v_dividers.push(Rect2D {
                     x: vx,
                     y: row_area_top,
@@ -377,12 +497,12 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         // Horizontal dividers (follow the displayed — possibly scaled — row heights)
         let mut h_dividers = Vec::new();
         for (i, &height) in row_divider_sizes.iter().enumerate() {
-                h_dividers.push(Rect2D {
-                    x: fw,
-                    y: row_positions[i] + row_display_sizes[i],
-                    width: ow - 2.0 * fw,
-                    height,
-                });
+            h_dividers.push(Rect2D {
+                x: fw,
+                y: row_positions[i] + row_display_sizes[i],
+                width: ow - 2.0 * fw,
+                height,
+            });
         }
 
         // Cell rects
@@ -419,7 +539,11 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // Its top row and the mullions supporting it extend into the curved cap.
     let curved_window = |r: &Rect2D, reaches_head: bool| {
         if rows_from_spring && layout_geom.is_none() && reaches_head {
-            Rect2D { y: fw, height: r.y + r.height - fw, ..r.clone() }
+            Rect2D {
+                y: fw,
+                height: r.y + r.height - fw,
+                ..r.clone()
+            }
         } else {
             r.clone()
         }
@@ -429,38 +553,52 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         day: shape.outline(fw),
     });
     let mut curved_dividers: Vec<_> = frame_curve.as_ref().map_or_else(Vec::new, |shape| {
-        v_dividers.iter().map(|r| shape.window(fw, &curved_window(r, true)))
+        v_dividers
+            .iter()
+            .map(|r| shape.window(fw, &curved_window(r, true)))
             .chain(h_dividers.iter().map(|r| shape.window(fw, r)))
             .collect()
     });
     let mut curved_divider_timber = crate::curved_timber::divider_members(
-        &curved_dividers, &v_dividers, &h_dividers, layout_geom.as_ref(),
+        &curved_dividers,
+        &v_dividers,
+        &h_dividers,
+        layout_geom.as_ref(),
     );
-    if layout_geom.as_ref().is_some_and(|l| l.leaves.iter().any(|leaf| leaf.vulling.is_buiten())) {
+    if layout_geom
+        .as_ref()
+        .is_some_and(|l| l.leaves.iter().any(|leaf| leaf.vulling.is_buiten()))
+    {
         // Even legacy views must not paint an unused splitter through a wall.
         let mut has_stock = vec![false; curved_dividers.len()];
         for part in &curved_divider_timber {
             has_stock[part.source_index + if part.vertical { 0 } else { v_dividers.len() }] = true;
         }
         for (contour, exists) in curved_dividers.iter_mut().zip(has_stock) {
-            if !exists { contour.segments.clear(); }
+            if !exists {
+                contour.segments.clear();
+            }
         }
     }
-    let cells_aligned = layout_geom.as_ref().map_or(true, |g| g.leaves.len() == kozijn.cells.len());
+    let cells_aligned = layout_geom
+        .as_ref()
+        .map_or(true, |g| g.leaves.len() == kozijn.cells.len());
     for cr in &mut cell_rects {
         let cell = kozijn.cells.get(cr.cell_index).filter(|_| cells_aligned);
         let window = curved_window(&cr.rect, cr.row == 0);
         let mount;
-        (cr.fit, cr.second_fit, mount) = crate::glazing_fit::glazing_fits(
-            &window, &kozijn.frame, cell, cr.vulling.as_ref(),
-        );
+        (cr.fit, cr.second_fit, mount) =
+            crate::glazing_fit::glazing_fits(&window, &kozijn.frame, cell, cr.vulling.as_ref());
         if let Some(shape) = &frame_curve {
             let contour = shape.window(fw, &window);
             cr.opening_bounds = Some(contour.bounds());
             let empty = contour.segments.is_empty();
             cr.opening_contour = Some(contour);
             for (i, fit) in [&mut cr.fit, &mut cr.second_fit].into_iter().enumerate() {
-                if fit.as_mut().is_some_and(|f| empty || !shape.shape_fit(&window, fw, f, mount.as_ref(), i)) {
+                if fit
+                    .as_mut()
+                    .is_some_and(|f| empty || !shape.shape_fit(&window, fw, f, mount.as_ref(), i))
+                {
                     cr.missing_glass_panes += 1;
                     *fit = None;
                 }
@@ -482,7 +620,6 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let mut dimensions = Vec::new();
     let inner_w = ow - 2.0 * fw;
     let inner_h = oh - 2.0 * fw;
-    let divider_width = fw;
     let num_cols = kozijn.grid.columns.len();
     let num_rows = kozijn.grid.rows.len();
 
@@ -497,7 +634,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             // Contiguous by construction: the segments sum to the buitenmaat.
             for pair in layout_chain_bounds(lg, true, ow, oh, fw).windows(2) {
                 dimensions.push(DimensionLine {
-                    x1: pair[0], y1: bot_y1, x2: pair[1], y2: bot_y1,
+                    x1: pair[0],
+                    y1: bot_y1,
+                    x2: pair[1],
+                    y2: bot_y1,
                     label: format!("{:.0}", pair[1] - pair[0]),
                     side: DimensionSide::Bottom,
                 });
@@ -505,7 +645,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         } else {
             // Left stijl
             dimensions.push(DimensionLine {
-                x1: 0.0, y1: bot_y1, x2: fw, y2: bot_y1,
+                x1: 0.0,
+                y1: bot_y1,
+                x2: fw,
+                y2: bot_y1,
                 label: format!("{:.0}", fw),
                 side: DimensionSide::Bottom,
             });
@@ -513,15 +656,22 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             for (i, col) in kozijn.grid.columns.iter().enumerate() {
                 let cx = col_positions[i];
                 dimensions.push(DimensionLine {
-                    x1: cx, y1: bot_y1, x2: cx + col.size, y2: bot_y1,
+                    x1: cx,
+                    y1: bot_y1,
+                    x2: cx + col.size,
+                    y2: bot_y1,
                     label: format!("{:.0}", col.size),
                     side: DimensionSide::Bottom,
                 });
                 // Divider width (tussenstijl)
                 if i < num_cols - 1 {
                     let dx = cx + col.size;
+                    let divider_width = column_divider_widths[i];
                     dimensions.push(DimensionLine {
-                        x1: dx, y1: bot_y1, x2: dx + divider_width, y2: bot_y1,
+                        x1: dx,
+                        y1: bot_y1,
+                        x2: dx + divider_width,
+                        y2: bot_y1,
                         label: format!("{:.0}", divider_width),
                         side: DimensionSide::Bottom,
                     });
@@ -529,7 +679,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             }
             // Right stijl
             dimensions.push(DimensionLine {
-                x1: ow - fw, y1: bot_y1, x2: ow, y2: bot_y1,
+                x1: ow - fw,
+                y1: bot_y1,
+                x2: ow,
+                y2: bot_y1,
                 label: format!("{:.0}", fw),
                 side: DimensionSide::Bottom,
             });
@@ -539,7 +692,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // ── Bottom Level 2: dagmaat ──
     let bot_y2 = oh + dim_start + dim_gap;
     dimensions.push(DimensionLine {
-        x1: fw, y1: bot_y2, x2: ow - fw, y2: bot_y2,
+        x1: fw,
+        y1: bot_y2,
+        x2: ow - fw,
+        y2: bot_y2,
         label: format!("{:.0}", inner_w),
         side: DimensionSide::Bottom,
     });
@@ -547,7 +703,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // ── Bottom Level 3: buitenwerkse maat ──
     let bot_y3 = oh + dim_start + dim_gap * 2.0;
     dimensions.push(DimensionLine {
-        x1: 0.0, y1: bot_y3, x2: ow, y2: bot_y3,
+        x1: 0.0,
+        y1: bot_y3,
+        x2: ow,
+        y2: bot_y3,
         label: format!("{:.0}", ow),
         side: DimensionSide::Bottom,
     });
@@ -562,17 +721,27 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             // dorpel. Same level (offset) as the grid chain.
             for pair in layout_chain_bounds(lg, false, ow, oh, fw).windows(2) {
                 dimensions.push(DimensionLine {
-                    x1: right_x1, y1: pair[0], x2: right_x1, y2: pair[1],
+                    x1: right_x1,
+                    y1: pair[0],
+                    x2: right_x1,
+                    y2: pair[1],
                     label: format!("{:.0}", pair[1] - pair[0]),
                     side: DimensionSide::Right,
                 });
             }
         } else {
             // For a day-referenced arch the row chain starts at the crown.
-            let top_h = if is_arched && !rows_from_spring { fw } else { top_rect_height };
+            let top_h = if is_arched && !rows_from_spring {
+                fw
+            } else {
+                top_rect_height
+            };
             if top_h > 0.0 {
                 dimensions.push(DimensionLine {
-                    x1: right_x1, y1: 0.0, x2: right_x1, y2: top_h,
+                    x1: right_x1,
+                    y1: 0.0,
+                    x2: right_x1,
+                    y2: top_h,
                     label: format!("{:.0}", top_h),
                     side: DimensionSide::Right,
                 });
@@ -580,7 +749,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             // Boogpijl (arch rise) for arched frames
             if rows_from_spring {
                 dimensions.push(DimensionLine {
-                    x1: right_x1, y1: 0.0, x2: right_x1, y2: stile_top_y,
+                    x1: right_x1,
+                    y1: 0.0,
+                    x2: right_x1,
+                    y2: stile_top_y,
                     label: format!("{:.0}", stile_top_y),
                     side: DimensionSide::Right,
                 });
@@ -590,7 +762,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                 let cy = row_positions[i];
                 let size = row_display_sizes[i];
                 dimensions.push(DimensionLine {
-                    x1: right_x1, y1: cy, x2: right_x1, y2: cy + size,
+                    x1: right_x1,
+                    y1: cy,
+                    x2: right_x1,
+                    y2: cy + size,
                     label: format!("{:.0}", size),
                     side: DimensionSide::Right,
                 });
@@ -599,7 +774,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                     let dy = cy + size;
                     let height = row_divider_sizes[i];
                     dimensions.push(DimensionLine {
-                        x1: right_x1, y1: dy, x2: right_x1, y2: dy + height,
+                        x1: right_x1,
+                        y1: dy,
+                        x2: right_x1,
+                        y2: dy + height,
                         label: format!("{:.0}", height),
                         side: DimensionSide::Right,
                     });
@@ -607,7 +785,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
             }
             // Onderdorpel
             dimensions.push(DimensionLine {
-                x1: right_x1, y1: oh - fw, x2: right_x1, y2: oh,
+                x1: right_x1,
+                y1: oh - fw,
+                x2: right_x1,
+                y2: oh,
                 label: format!("{:.0}", fw),
                 side: DimensionSide::Right,
             });
@@ -617,7 +798,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // ── Right Level 2: dagmaat ──
     let right_x2 = ow + dim_start + dim_gap;
     dimensions.push(DimensionLine {
-        x1: right_x2, y1: fw, x2: right_x2, y2: oh - fw,
+        x1: right_x2,
+        y1: fw,
+        x2: right_x2,
+        y2: oh - fw,
         label: format!("{:.0}", inner_h),
         side: DimensionSide::Right,
     });
@@ -625,7 +809,10 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     // ── Right Level 3: buitenwerkse maat ──
     let right_x3 = ow + dim_start + dim_gap * 2.0;
     dimensions.push(DimensionLine {
-        x1: right_x3, y1: 0.0, x2: right_x3, y2: oh,
+        x1: right_x3,
+        y1: 0.0,
+        x2: right_x3,
+        y2: oh,
         label: format!("{:.0}", oh),
         side: DimensionSide::Right,
     });
@@ -638,10 +825,23 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         if let Some(frame) = &curved_frame {
             for (outline, stroke) in [(&frame.outer, fw), (&frame.day, 1.0)] {
                 for segment in &outline.segments {
-                    if let crate::curved_contour::Segment::Arc { center, radius, start_angle, sweep_angle, .. } = segment {
+                    if let crate::curved_contour::Segment::Arc {
+                        center,
+                        radius,
+                        start_angle,
+                        sweep_angle,
+                        ..
+                    } = segment
+                    {
                         let start = (-start_angle.to_degrees()).rem_euclid(360.0);
-                        arcs.push(Arc2D { cx:center[0], cy:center[1], radius:*radius,
-                            start_angle:start, end_angle:start - sweep_angle.to_degrees(), stroke_width:stroke });
+                        arcs.push(Arc2D {
+                            cx: center[0],
+                            cy: center[1],
+                            radius: *radius,
+                            start_angle: start,
+                            end_angle: start - sweep_angle.to_degrees(),
+                            stroke_width: stroke,
+                        });
                     }
                 }
             }
@@ -662,26 +862,38 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         let cy = oh / 2.0;
         // Outer circle (two semicircles, thin stroke — SVG fill handles the frame area)
         arcs.push(Arc2D {
-            cx, cy, radius,
-            start_angle: 180.0, end_angle: 0.0,
+            cx,
+            cy,
+            radius,
+            start_angle: 180.0,
+            end_angle: 0.0,
             stroke_width: 2.0,
         });
         arcs.push(Arc2D {
-            cx, cy, radius,
-            start_angle: 0.0, end_angle: -180.0,
+            cx,
+            cy,
+            radius,
+            start_angle: 0.0,
+            end_angle: -180.0,
             stroke_width: 2.0,
         });
         // Inner circle (glass opening edge)
         let inner_r = radius - fw;
         if inner_r > 0.0 {
             arcs.push(Arc2D {
-                cx, cy, radius: inner_r,
-                start_angle: 180.0, end_angle: 0.0,
+                cx,
+                cy,
+                radius: inner_r,
+                start_angle: 180.0,
+                end_angle: 0.0,
                 stroke_width: 1.5,
             });
             arcs.push(Arc2D {
-                cx, cy, radius: inner_r,
-                start_angle: 0.0, end_angle: -180.0,
+                cx,
+                cy,
+                radius: inner_r,
+                start_angle: 0.0,
+                end_angle: -180.0,
                 stroke_width: 1.5,
             });
         }
@@ -704,14 +916,20 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         // For the geometry data, we emit placeholder arcs that the frontend can interpret.
         // Outer ellipse (top half)
         arcs.push(Arc2D {
-            cx, cy, radius: rx,
-            start_angle: 180.0, end_angle: 0.0,
+            cx,
+            cy,
+            radius: rx,
+            start_angle: 180.0,
+            end_angle: 0.0,
             stroke_width: 2.0,
         });
         // Outer ellipse (bottom half)
         arcs.push(Arc2D {
-            cx, cy, radius: rx,
-            start_angle: 0.0, end_angle: -180.0,
+            cx,
+            cy,
+            radius: rx,
+            start_angle: 0.0,
+            end_angle: -180.0,
             stroke_width: 2.0,
         });
         // Inner ellipse (top half)
@@ -719,13 +937,19 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         let inner_ry = ry - fw;
         if inner_rx > 0.0 && inner_ry > 0.0 {
             arcs.push(Arc2D {
-                cx, cy, radius: inner_rx,
-                start_angle: 180.0, end_angle: 0.0,
+                cx,
+                cy,
+                radius: inner_rx,
+                start_angle: 180.0,
+                end_angle: 0.0,
                 stroke_width: 1.5,
             });
             arcs.push(Arc2D {
-                cx, cy, radius: inner_rx,
-                start_angle: 0.0, end_angle: -180.0,
+                cx,
+                cy,
+                radius: inner_rx,
+                start_angle: 0.0,
+                end_angle: -180.0,
                 stroke_width: 1.5,
             });
         }
@@ -741,9 +965,9 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         let apex_y = 0.0;
 
         trapezoid_outer = vec![
-            [0.0, oh],         // bottom-left
-            [ow, oh],          // bottom-right
-            [apex_x, apex_y],  // apex
+            [0.0, oh],        // bottom-left
+            [ow, oh],         // bottom-right
+            [apex_x, apex_y], // apex
         ];
 
         // Inner polygon (offset inward by frame width)
@@ -786,16 +1010,19 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
                 let cy: f64 = points.iter().map(|p| p[1]).sum::<f64>() / n;
 
                 // Offset each point toward centroid by fw
-                trapezoid_inner = points.iter().map(|p| {
-                    let dx = cx - p[0];
-                    let dy = cy - p[1];
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    if dist > 0.0 {
-                        [p[0] + dx / dist * fw, p[1] + dy / dist * fw]
-                    } else {
-                        *p
-                    }
-                }).collect();
+                trapezoid_inner = points
+                    .iter()
+                    .map(|p| {
+                        let dx = cx - p[0];
+                        let dy = cy - p[1];
+                        let dist = (dx * dx + dy * dy).sqrt();
+                        if dist > 0.0 {
+                            [p[0] + dx / dist * fw, p[1] + dy / dist * fw]
+                        } else {
+                            *p
+                        }
+                    })
+                    .collect();
             }
         }
     } else if kozijn.frame.shape.shape_type == ShapeType::Trapezoid
@@ -807,27 +1034,31 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
 
         // Offset from bottom edge to top edge based on angle
         // At 90°: offset = 0 (vertical). At <90°: offset > 0 (leaning inward)
-        let left_offset = if left_angle_deg >= 89.9 { 0.0 } else {
+        let left_offset = if left_angle_deg >= 89.9 {
+            0.0
+        } else {
             oh * (90.0 - left_angle_deg).to_radians().tan()
         };
-        let right_offset = if right_angle_deg >= 89.9 { 0.0 } else {
+        let right_offset = if right_angle_deg >= 89.9 {
+            0.0
+        } else {
             oh * (90.0 - right_angle_deg).to_radians().tan()
         };
 
         // Outer polygon (clockwise from bottom-left)
         trapezoid_outer = vec![
-            [0.0, oh],                              // bottom-left
-            [ow, oh],                               // bottom-right
-            [ow - right_offset, 0.0],               // top-right
-            [left_offset, 0.0],                     // top-left
+            [0.0, oh],                // bottom-left
+            [ow, oh],                 // bottom-right
+            [ow - right_offset, 0.0], // top-right
+            [left_offset, 0.0],       // top-left
         ];
 
         // Inner polygon (inside frame members)
         trapezoid_inner = vec![
-            [fw, oh - fw],                          // bottom-left inner
-            [ow - fw, oh - fw],                     // bottom-right inner
-            [ow - right_offset - fw + (fw * right_offset / oh), fw],  // top-right inner
-            [left_offset + fw - (fw * left_offset / oh), fw],         // top-left inner
+            [fw, oh - fw],                                           // bottom-left inner
+            [ow - fw, oh - fw],                                      // bottom-right inner
+            [ow - right_offset - fw + (fw * right_offset / oh), fw], // top-right inner
+            [left_offset + fw - (fw * left_offset / oh), fw],        // top-left inner
         ];
     }
 
@@ -841,18 +1072,29 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let snap = kozijn.frame.profile_snapshot.as_ref();
     let material = &kozijn.frame.material;
 
-    let curved_timber = curved_frame.as_ref().map_or_else(Vec::new, |c|
-        crate::curved_timber::frame_members(&kozijn.frame, c, layout_geom.as_ref()));
+    let curved_timber = curved_frame.as_ref().map_or_else(Vec::new, |c| {
+        crate::curved_timber::frame_members(&kozijn.frame, c, layout_geom.as_ref())
+    });
     let corner_settings = crate::joint::resolved_frame_joints(
-        material, &kozijn.frame.corner_joints, kozijn.frame.joints_configured,
+        material,
+        &kozijn.frame.corner_joints,
+        kozijn.frame.joints_configured,
     );
     let arch_joints = crate::curved_timber::fit_timber_tenons(
-        kozijn, &curved_timber, &mut curved_divider_timber, &cell_rects, &corner_settings,
+        kozijn,
+        &curved_timber,
+        &mut curved_divider_timber,
+        &cell_rects,
+        &corner_settings,
     );
     KozijnGeometry2D {
         perimeter_stop: crate::perimeter_stop::outline(
-            &kozijn.frame, frame_curve.as_ref(), &trapezoid_outer,
-            layout_geom.as_ref().is_some_and(|layout| layout.leaves.iter().any(|l| l.vulling.is_buiten())),
+            &kozijn.frame,
+            frame_curve.as_ref(),
+            &trapezoid_outer,
+            layout_geom
+                .as_ref()
+                .is_some_and(|layout| layout.leaves.iter().any(|l| l.vulling.is_buiten())),
         ),
         corner_settings,
         arch_joints,
@@ -884,7 +1126,12 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
 /// concepts and stay 0 on this path: consumers key layout cells by
 /// `cell_index` and read the vulling straight from the cell.
 fn layout_dividers_and_cells(lg: &LayoutGeometry) -> (Vec<Rect2D>, Vec<Rect2D>, Vec<CellRect>) {
-    let to_rect = |r: &LayoutRect| Rect2D { x: r.x, y: r.y, width: r.width, height: r.height };
+    let to_rect = |r: &LayoutRect| Rect2D {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+    };
     let v_dividers = lg
         .dividers
         .iter()
@@ -1004,7 +1251,13 @@ fn stepped_frame_polygons(lg: &LayoutGeometry, ow: f64, oh: f64, fw: f64) -> Vec
 /// divider or unanchored rest). Mirrors `layoutChain()` in the frontend
 /// (ui/src/components/editor/KozijnCanvas.svelte) — keep the two in sync,
 /// including the 1.0 mm touch tolerance and 0.5 mm dedup.
-fn layout_chain_bounds(lg: &LayoutGeometry, horizontal: bool, ow: f64, oh: f64, fw: f64) -> Vec<f64> {
+fn layout_chain_bounds(
+    lg: &LayoutGeometry,
+    horizontal: bool,
+    ow: f64,
+    oh: f64,
+    fw: f64,
+) -> Vec<f64> {
     let total = if horizontal { ow } else { oh };
     let inner_edge = if horizontal { oh - fw } else { ow - fw };
     let mut bounds = vec![0.0, fw, total - fw, total];
@@ -1038,11 +1291,17 @@ fn layout_chain_bounds(lg: &LayoutGeometry, horizontal: bool, ow: f64, oh: f64, 
     uniq
 }
 
-
 /// Explicitly reset a grid to one cell. Changing its outer shape preserves the
 /// grid; older callers can still request a one-cell layout separately.
 pub fn normalize_grid_single_cell(kozijn: &mut Kozijn) {
-    let single = |size| vec![crate::kozijn::GridDivision { size, divider_profile: None }];
+    let single = |size| {
+        vec![crate::kozijn::GridDivision {
+            size,
+            divider_profile: None,
+            divider_width: None,
+            divider_depth: None,
+        }]
+    };
     kozijn.grid.columns = single(kozijn.frame.outer_width - 2.0 * kozijn.frame.frame_width);
     kozijn.grid.rows = single(kozijn.frame.outer_height - 2.0 * kozijn.frame.frame_width);
     kozijn.rebuild_cells();
@@ -1186,11 +1445,17 @@ mod tests {
         let left = &g.frame_rects[2];
         let right = &g.frame_rects[3];
         assert!((left.y - fw).abs() < 1e-6 && (left.height - (oh - 2.0 * fw)).abs() < 1e-6);
-        assert!((right.x - (ow - fw)).abs() < 1e-6 && (right.height - (oh - 2.0 * fw)).abs() < 1e-6);
+        assert!(
+            (right.x - (ow - fw)).abs() < 1e-6 && (right.height - (oh - 2.0 * fw)).abs() < 1e-6
+        );
         // No miter/step polygons for a plain butt frame — payload byte-compat.
         assert!(g.frame_polygons.is_empty());
         let json = serde_json::to_string(&g).unwrap();
-        assert!(!json.contains("framePolygons"), "plain frame grew a key: {}", json);
+        assert!(
+            !json.contains("framePolygons"),
+            "plain frame grew a key: {}",
+            json
+        );
     }
 
     #[test]
@@ -1276,8 +1541,14 @@ mod tests {
     fn layout_kozijn_2vaks() -> Kozijn {
         let mut k = Kozijn::new("Test", "K01", 1200.0, 1500.0);
         k.layout = Some(split_row(vec![
-            VakChild { size: 1.0, node: glas() },
-            VakChild { size: 1.0, node: raam("draaikiep") },
+            VakChild {
+                size: 1.0,
+                node: glas(),
+            },
+            VakChild {
+                size: 1.0,
+                node: raam("draaikiep"),
+            },
         ]));
         k // grid stays the default 1×1 — the tree must win
     }
@@ -1323,17 +1594,30 @@ mod tests {
             .iter()
             .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
             .collect();
-        assert_eq!(chain.len(), 5, "stijl+vak+tussenstijl+vak+stijl: {:?}", chain);
+        assert_eq!(
+            chain.len(),
+            5,
+            "stijl+vak+tussenstijl+vak+stijl: {:?}",
+            chain
+        );
         assert!((chain[0].x1 - 0.0).abs() < 1e-6);
         assert!((chain.last().unwrap().x2 - ow).abs() < 1e-6);
         for w in chain.windows(2) {
-            assert!((w[0].x2 - w[1].x1).abs() < 1e-6, "chain gap: {:?} → {:?}", w[0], w[1]);
+            assert!(
+                (w[0].x2 - w[1].x1).abs() < 1e-6,
+                "chain gap: {:?} → {:?}",
+                w[0],
+                w[1]
+            );
         }
         let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
         assert!((sum - ow).abs() < 1e-6, "chain sums to buitenmaat");
         // Interior segments (without the two stijlen) sum to the dagmaat
         let interior: f64 = chain[1..chain.len() - 1].iter().map(|d| d.x2 - d.x1).sum();
-        assert!((interior - (ow - 2.0 * fw)).abs() < 1e-6, "interior = binnenmaat");
+        assert!(
+            (interior - (ow - 2.0 * fw)).abs() < 1e-6,
+            "interior = binnenmaat"
+        );
 
         // Right level-1 chain (at ow + 20): both leaves are full height, only
         // the one bordering the right stijl anchors → dorpel + dagmaat + dorpel
@@ -1373,11 +1657,17 @@ mod tests {
         assert_eq!(g.cell_rects.len(), 2);
         assert_eq!(g.cell_rects[0].cell_index, 0); // deur (full height)
         assert_eq!(g.cell_rects[1].cell_index, 1); // zijlicht glas (buiten = 2)
-        assert!(matches!(g.cell_rects[0].vulling, Some(Vakvulling::Deur { .. })));
+        assert!(matches!(
+            g.cell_rects[0].vulling,
+            Some(Vakvulling::Deur { .. })
+        ));
         // The tussenstijl is clipped to the side light (borders buiten below);
         // the side-light onderdorpel borders buiten directly, so it drops out.
         assert_eq!(g.v_dividers.len(), 1);
-        assert!(g.v_dividers[0].height < inner_h - 1e-6, "tussenstijl must be clipped");
+        assert!(
+            g.v_dividers[0].height < inner_h - 1e-6,
+            "tussenstijl must be clipped"
+        );
         assert_eq!(g.h_dividers.len(), 0);
         // Stepped frame outline: one ring per real vak (deur + side light).
         assert_eq!(g.frame_polygons.len(), 2);
@@ -1430,8 +1720,16 @@ mod tests {
         assert_eq!(g.glaslat_hoogte, Some(20.0));
         // camelCase on the wire, like the rest of the payload
         let json = serde_json::to_string(&g).unwrap();
-        assert!(json.contains("\"sponningHoogte\":20.0"), "payload: {}", json);
-        assert!(json.contains("\"glaslatBreedte\":15.0"), "payload: {}", json);
+        assert!(
+            json.contains("\"sponningHoogte\":20.0"),
+            "payload: {}",
+            json
+        );
+        assert!(
+            json.contains("\"glaslatBreedte\":15.0"),
+            "payload: {}",
+            json
+        );
         assert!(json.contains("\"glaslatHoogte\":20.0"), "payload: {}", json);
     }
 
@@ -1485,7 +1783,10 @@ mod tests {
         let json = serde_json::to_string(&k).unwrap();
         assert!(json.contains("\"profileSnapshot\":{"), "model: {}", json);
         let back: Kozijn = serde_json::from_str(&json).unwrap();
-        let s = back.frame.profile_snapshot.expect("snapshot survives roundtrip");
+        let s = back
+            .frame
+            .profile_snapshot
+            .expect("snapshot survives roundtrip");
         assert_eq!(s.sponning_diepte, Some(24.0));
         assert_eq!(s.sponning_hoogte, Some(17.0));
         assert_eq!(s.glaslat_breedte, None);
@@ -1529,7 +1830,11 @@ mod tests {
         assert!(!gj.contains("glaslatHoogte"));
 
         let kj = serde_json::to_string(&k).unwrap();
-        assert!(!kj.contains("profileSnapshot"), "model must not grow a key: {}", kj);
+        assert!(
+            !kj.contains("profileSnapshot"),
+            "model must not grow a key: {}",
+            kj
+        );
         let back: Kozijn = serde_json::from_str(&kj).unwrap();
         assert!(back.frame.profile_snapshot.is_none());
     }
@@ -1569,7 +1874,11 @@ mod tests {
             .filter(|d| matches!(d.side, DimensionSide::Bottom) && (d.y1 - bot_y1).abs() < 1e-6)
             .collect();
         let sum: f64 = chain.iter().map(|d| d.x2 - d.x1).sum();
-        assert!((sum - 1200.0).abs() < 1e-6, "level-1 chain sums to {} != 1200", sum);
+        assert!(
+            (sum - 1200.0).abs() < 1e-6,
+            "level-1 chain sums to {} != 1200",
+            sum
+        );
         let labels: Vec<&str> = chain.iter().map(|d| d.label.as_str()).collect();
         assert_eq!(labels, vec!["67", "375", "67", "624", "67"]);
 
@@ -1577,6 +1886,9 @@ mod tests {
         // the optional field is skipped entirely when absent
         assert!(g.cell_rects.iter().all(|c| c.vulling.is_none()));
         let json = serde_json::to_string(&g).unwrap();
-        assert!(!json.contains("vulling"), "grid payload must not grow a vulling key");
+        assert!(
+            !json.contains("vulling"),
+            "grid payload must not grow a vulling key"
+        );
     }
 }

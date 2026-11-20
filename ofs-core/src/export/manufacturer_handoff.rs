@@ -145,7 +145,7 @@ fn write_bundle(project: &Project, dir: &Path) -> Result<(), String> {
                         x.quantity,
                     )
                 }
-                "IFCPLATE" => {
+                "IFCWINDOW" | "IFCPLATE" => {
                     let id = part
                         .properties
                         .get("OFS_CalculatieIndicatief.GlaslijstID")

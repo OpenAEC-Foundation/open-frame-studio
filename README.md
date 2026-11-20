@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.47.1
+# Open Frame Studio v2026.47.2
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.47.2 (2026-11-20)
+
+- De onderdelen-IFC schrijft de zichtbreedte en zichthoogte van ruiten in de juiste standaardvelden. Beglazing is selecteerbaar als `IfcWindow` met `CPset_31.Onderdeel = Ruit`. De noordrichting heeft twee componenten.
+- Na een materiaalwissel gebruikt de IFC-export de tussenstijlbreedte van het gekozen profiel. De zaagoptimalisatie verdeelt verschillende profielartikelen over aparte handelsstaven.
+- Afgekeurde beglazing is herkenbaar in de glaslijst. Inkoop sluit die regels uit en de producentenoverdracht meldt welke ruit eerst gecorrigeerd moet worden.
 
 ## Changelog v2026.47.1 (2026-11-19)
 

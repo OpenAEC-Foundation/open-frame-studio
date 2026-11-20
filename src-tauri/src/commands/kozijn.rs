@@ -1,12 +1,12 @@
 use crate::state::AppState;
-use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
-use ofs_core::hardware::{HardwareSet, SecurityClass};
-use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, PanelType, OpeningDirection, ShapeType};
-use ofs_core::profile::ProfileRef;
-use ofs_core::thermal;
-use ofs_core::template::{self, KozijnSjabloon};
 use ofs_core::edge::EdgeConfig;
+use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
 use ofs_core::grid;
+use ofs_core::hardware::{HardwareSet, SecurityClass};
+use ofs_core::kozijn::{FrameShape, Glazing, Kozijn, OpeningDirection, PanelType, ShapeType};
+use ofs_core::profile::ProfileRef;
+use ofs_core::template::{self, KozijnSjabloon};
+use ofs_core::thermal;
 use tauri::State;
 
 #[tauri::command]
@@ -69,7 +69,11 @@ pub fn save_custom_sjabloon(
         .map_err(|e| format!("Ongeldig sjabloon JSON: {}", e))?;
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     // Update existing or add new
-    if let Some(existing) = project.custom_sjablonen.iter_mut().find(|s| s.id == sjabloon.id) {
+    if let Some(existing) = project
+        .custom_sjablonen
+        .iter_mut()
+        .find(|s| s.id == sjabloon.id)
+    {
         *existing = sjabloon;
     } else {
         project.custom_sjablonen.push(sjabloon);
@@ -88,10 +92,18 @@ pub fn delete_custom_sjabloon(
 }
 
 #[tauri::command]
-pub fn update_perimeter_stop(state: State<'_, AppState>, id: String, profile_json: String) -> Result<Kozijn, String> {
+pub fn update_perimeter_stop(
+    state: State<'_, AppState>,
+    id: String,
+    profile_json: String,
+) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id).ok_or("Kozijn niet gevonden")?;
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
+        .ok_or("Kozijn niet gevonden")?;
     kozijn.frame.set_perimeter_stop(&profile_json)?;
     Ok(kozijn.clone())
 }
@@ -105,11 +117,14 @@ pub fn update_edge_config(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    let edge: EdgeConfig = serde_json::from_str(&edge_json)
-        .map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
+    let edge: EdgeConfig =
+        serde_json::from_str(&edge_json).map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
 
     // Ensure edges vector has 4 entries (left, right, top, bottom)
     while kozijn.frame.edges.len() < 4 {
@@ -131,7 +146,10 @@ pub fn add_frame_extension(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     let ext: ofs_core::kozijn::FrameExtension = serde_json::from_str(&extension_json)
@@ -149,7 +167,10 @@ pub fn remove_frame_extension(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     if extension_index < kozijn.extensions.len() {
@@ -172,17 +193,27 @@ pub fn update_cell_sash_profile(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    let cell = kozijn.cells.get_mut(cell_index)
-        .ok_or("Cel niet gevonden")?;
-
-    cell.sash_profile_snapshot = profile_snapshot_json.as_deref()
-        .map(serde_json::from_str).transpose().map_err(|e| format!("Ongeldig profiel: {e}"))?
+    let snapshot = profile_snapshot_json
+        .as_deref()
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|e| format!("Ongeldig profiel: {e}"))?
         .flatten();
-    cell.sash_profile = Some(ProfileRef { id: profile_id, name: profile_name });
-    cell.sash_width = Some(sash_width);
-    cell.sash_depth = Some(sash_depth);
+    kozijn.update_cell_sash_profile(
+        cell_index,
+        ProfileRef {
+            id: profile_id,
+            name: profile_name,
+        },
+        sash_width,
+        sash_depth,
+        snapshot,
+    )?;
 
     Ok(kozijn.clone())
 }
@@ -213,14 +244,19 @@ pub fn update_kozijn_layout(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
     let trimmed = layout_json.trim();
     kozijn.layout = if trimmed.is_empty() || trimmed == "null" {
         None
     } else {
-        Some(serde_json::from_str::<ofs_core::layout::VakNode>(trimmed)
-            .map_err(|e| format!("Ongeldig layout JSON: {}", e))?)
+        Some(
+            serde_json::from_str::<ofs_core::layout::VakNode>(trimmed)
+                .map_err(|e| format!("Ongeldig layout JSON: {}", e))?,
+        )
     };
     Ok(kozijn.clone())
 }
@@ -267,7 +303,9 @@ pub fn update_grid_sizes(
 
     // Typed sizes stay exact; untouched vakken absorb the difference so the
     // dimension chain keeps closing on the binnenmaat.
-    if rows_from_day == Some(true) { kozijn.grid.rows_from_day = true; }
+    if rows_from_day == Some(true) {
+        kozijn.grid.rows_from_day = true;
+    }
     kozijn.set_grid_sizes_fitted(&column_sizes, &row_sizes);
 
     Ok(kozijn.clone())
@@ -286,11 +324,20 @@ pub fn update_frame_profile(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
     kozijn.apply_frame_profile(
-        ProfileRef { id: profile_id, name: profile_name }, profile_width, profile_depth,
-        profile_snapshot_json.as_deref(), profile_material_json.as_deref(),
+        ProfileRef {
+            id: profile_id,
+            name: profile_name,
+        },
+        profile_width,
+        profile_depth,
+        profile_snapshot_json.as_deref(),
+        profile_material_json.as_deref(),
     )?;
     Ok(kozijn.clone())
 }
@@ -304,9 +351,15 @@ pub fn update_sill_profile(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    kozijn.frame.sill_profile = Some(ProfileRef { id: profile_id, name: profile_name });
+    kozijn.frame.sill_profile = Some(ProfileRef {
+        id: profile_id,
+        name: profile_name,
+    });
     Ok(kozijn.clone())
 }
 
@@ -319,46 +372,26 @@ pub fn update_member_profile(
     profile_id: String,
     profile_name: String,
     profile_width: Option<f64>,
-    _profile_depth: Option<f64>,
+    profile_depth: Option<f64>,
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    let profile = ProfileRef { id: profile_id, name: profile_name };
-    match member_type.as_str() {
-        "frame_top" => kozijn.frame.top_profile = Some(profile),
-        "frame_bottom" => kozijn.frame.bottom_profile = Some(profile),
-        "frame_left" => kozijn.frame.left_profile = Some(profile),
-        "frame_right" => kozijn.frame.right_profile = Some(profile),
-        "divider_v" => {
-            if let Some(idx) = member_index {
-                // Divider indices: column index + 1 (first column has no divider)
-                let col_idx = idx + 1;
-                if let Some(col) = kozijn.grid.columns.get_mut(col_idx) {
-                    col.divider_profile = Some(profile);
-                }
-            }
-        }
-        "divider_h" => {
-            if let Some(idx) = member_index {
-                let row_idx = idx + 1;
-                if let Some(row) = kozijn.grid.rows.get_mut(row_idx) {
-                    row.divider_profile = Some(profile);
-                }
-            }
-        }
-        _ => return Err(format!("Onbekend member type: {}", member_type)),
-    }
-
-    // Update frame dimensions if width/depth provided (for frame members only)
-    if member_type.starts_with("frame") {
-        if let Some(_w) = profile_width {
-            // Don't change frame_width globally — that affects all members
-            // Per-member width would need geometry changes (future)
-        }
-    }
+    kozijn.update_member_profile(
+        &member_type,
+        member_index,
+        ProfileRef {
+            id: profile_id,
+            name: profile_name,
+        },
+        profile_width,
+        profile_depth,
+    )?;
 
     Ok(kozijn.clone())
 }
@@ -397,8 +430,11 @@ pub fn add_column(
         .iter_mut()
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    if elevation == Some(true) { kozijn.add_divider_in_elevation(false, position); }
-    else { kozijn.add_column(position); }
+    if elevation == Some(true) {
+        kozijn.add_divider_in_elevation(false, position);
+    } else {
+        kozijn.add_column(position);
+    }
     Ok(kozijn.clone())
 }
 
@@ -416,8 +452,11 @@ pub fn add_row(
         .iter_mut()
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    if elevation == Some(true) { kozijn.add_divider_in_elevation(true, position); }
-    else { kozijn.add_row(position); }
+    if elevation == Some(true) {
+        kozijn.add_divider_in_elevation(true, position);
+    } else {
+        kozijn.add_row(position);
+    }
     Ok(kozijn.clone())
 }
 
@@ -458,7 +497,10 @@ pub fn update_frame_shape(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     // Merge with the existing shape: None arguments keep the stored value, so
@@ -489,11 +531,14 @@ pub fn update_corner_joints(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    let joints: Vec<ofs_core::joint::Joint> = serde_json::from_str(&joints_json)
-        .map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
+    let joints: Vec<ofs_core::joint::Joint> =
+        serde_json::from_str(&joints_json).map_err(|e| format!("Ongeldige joints JSON: {}", e))?;
 
     kozijn.frame.corner_joints = joints;
     // Undo can restore a frame that still follows its material defaults.
@@ -502,10 +547,7 @@ pub fn update_corner_joints(
 }
 
 #[tauri::command]
-pub fn add_custom_profile(
-    state: State<'_, AppState>,
-    profile_json: String,
-) -> Result<(), String> {
+pub fn add_custom_profile(state: State<'_, AppState>, profile_json: String) -> Result<(), String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let profile: ofs_core::profile::ProfileDefinition =
         serde_json::from_str(&profile_json).map_err(|e| format!("Ongeldig profiel: {}", e))?;
@@ -559,9 +601,8 @@ pub fn update_cell_panel_filling(
         .cells
         .get_mut(cell_index)
         .ok_or("Cel niet gevonden")?;
-    let filling: ofs_core::panel_filling::PanelFilling =
-        serde_json::from_str(&panel_filling_json)
-            .map_err(|e| format!("Ongeldige vakvulling data: {}", e))?;
+    let filling: ofs_core::panel_filling::PanelFilling = serde_json::from_str(&panel_filling_json)
+        .map_err(|e| format!("Ongeldige vakvulling data: {}", e))?;
     cell.panel_filling = Some(filling);
     Ok(kozijn.clone())
 }
@@ -658,13 +699,18 @@ pub fn update_cell_glazing(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
-    let cell = kozijn.cells.get_mut(cell_index)
+    let cell = kozijn
+        .cells
+        .get_mut(cell_index)
         .ok_or("Cel niet gevonden")?;
 
-    let glazing: Glazing = serde_json::from_str(&glazing_json)
-        .map_err(|e| format!("Ongeldig glazing JSON: {}", e))?;
+    let glazing: Glazing =
+        serde_json::from_str(&glazing_json).map_err(|e| format!("Ongeldig glazing JSON: {}", e))?;
     cell.glazing = glazing;
 
     Ok(kozijn.clone())
@@ -679,7 +725,10 @@ pub fn update_frame_colors(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter_mut().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter_mut()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     kozijn.frame.color_inside = color_inside;
@@ -696,7 +745,10 @@ pub fn duplicate_kozijn(
 ) -> Result<Kozijn, String> {
     let mut project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let original = project.kozijnen.iter().find(|k| k.id == id)
+    let original = project
+        .kozijnen
+        .iter()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     let duplicate = original.duplicate(&new_mark);
@@ -712,7 +764,10 @@ pub fn calculate_thermal(
 ) -> Result<thermal::ThermalResult, String> {
     let project = state.project.lock().map_err(|e| e.to_string())?;
     let id: uuid::Uuid = id.parse().map_err(|e: uuid::Error| e.to_string())?;
-    let kozijn = project.kozijnen.iter().find(|k| k.id == id)
+    let kozijn = project
+        .kozijnen
+        .iter()
+        .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
     let profiles = &project.custom_profiles;

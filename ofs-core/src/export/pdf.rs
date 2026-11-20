@@ -485,7 +485,12 @@ pub fn generate_production_pdf(
                 w.push(36.0);
             }
             let rows: Vec<Vec<String>> = prod.glass_list.iter().map(|i| vec![
-                i.piece_id.clone(), i.glass_type.clone(),
+                i.piece_id.clone(),
+                if i.production_ready {
+                    i.glass_type.clone()
+                } else {
+                    format!("{} [AFGEKEURD]", i.glass_type)
+                },
                 i.dimension_text(i.width_mm), i.dimension_text(i.height_mm),
                 format!("{:.0}", i.thickness_mm), format!("{:.1}", i.ug_value),
                 format!("{:.2}", i.area_m2), format!("{}", i.quantity),

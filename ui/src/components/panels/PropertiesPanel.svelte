@@ -614,6 +614,7 @@
             label={$_(systemMaterial ? 'system.sashProfile' : 'props.sashProfile')}
             filter={systemMaterial && ["sliding", "lift_slide"].includes(selectedCell.panelType) ? "sliding_sash" : "sash"}
             material={systemMaterial}
+            systemProfile={systemMaterial ? $currentKozijn.frame.profile : null}
             value={selectedCell.sashProfile}
             onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />
@@ -645,6 +646,7 @@
           <ProfileSelector
             label={$_(systemMaterial ? 'system.doorProfile' : 'props.doorProfile')}
             filter="sash" material={systemMaterial}
+            systemProfile={systemMaterial ? $currentKozijn.frame.profile : null}
             value={selectedCell.sashProfile}
             onchange={(detail) => updateCellSashProfile($selectedCellIndex, detail.id, detail.name, detail.width, detail.depth, detail.snapshot)}
           />

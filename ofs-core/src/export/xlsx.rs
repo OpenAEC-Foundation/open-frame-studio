@@ -374,7 +374,10 @@ pub fn generate_production_xlsx(
         ];
         let with_contours = production_data.iter().flat_map(|p| &p.glass_list).any(|i| i.cut_contour.is_some());
         if with_contours { headers.extend(["Snijvorm (mm)", "Contour in mm vanaf linksboven, x rechts / y omlaag"]); }
+        headers.extend(["Productiegereed", "Blokkeerreden"]);
         write_headers(ws, &headers, &hfmt)?;
+        let ready_col = headers.len() as u16 - 2;
+        let issue_col = headers.len() as u16 - 1;
 
         let mut row = 1u32;
         for prod in production_data {
@@ -402,6 +405,20 @@ pub fn generate_production_xlsx(
                             .map_err(|e| e.to_string())?;
                     }
                 }
+                ws.write_string_with_format(
+                    row,
+                    ready_col,
+                    if item.production_ready { "Ja" } else { "Nee" },
+                    &df,
+                )
+                .map_err(|e| e.to_string())?;
+                ws.write_string_with_format(
+                    row,
+                    issue_col,
+                    item.production_issue.as_deref().unwrap_or(""),
+                    &df,
+                )
+                .map_err(|e| e.to_string())?;
                 row += 1;
             }
         }

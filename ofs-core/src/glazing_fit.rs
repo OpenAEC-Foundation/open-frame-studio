@@ -19,6 +19,10 @@ pub struct GlazingFit {
     pub rebate: Rect2D,
     pub glass: Rect2D,
     pub glass_thickness: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_glass_thickness: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_glass_thickness: Option<f64>,
     /// Measured build-direction depth of the receiving glazing pocket, if known.
     pub rebate_depth: Option<f64>,
     /// Modelled compressed bedding thickness on each face of the pane.
@@ -42,11 +46,20 @@ pub struct SystemSeals {
 }
 
 pub(crate) fn compatible_profile(id: &str, material: &Material) -> bool {
-    if !material.is_profile_system() { return true; }
+    if !material.is_profile_system() {
+        return true;
+    }
     // Older templates stored a generic timber sash/sill even on a system frame.
-    if id == "deur-meranti-67x114" || id.starts_with("raamhout-") || id.starts_with("wood-") { return false; }
-    let Some((_, expected, _)) = catalog_entry(id) else { return true };
-    matches!((material, *expected), (Material::Pvc, "pvc") | (Material::Aluminum, "aluminum"))
+    if id == "deur-meranti-67x114" || id.starts_with("raamhout-") || id.starts_with("wood-") {
+        return false;
+    }
+    let Some((_, expected, _)) = catalog_entry(id) else {
+        return true;
+    };
+    matches!(
+        (material, *expected),
+        (Material::Pvc, "pvc") | (Material::Aluminum, "aluminum")
+    )
 }
 
 impl Rect2D {
@@ -92,9 +105,45 @@ pub(crate) fn catalog_snapshot(id: &str, material: &Material) -> Option<&'static
     (*catalog_material == material_key).then_some(snapshot)
 }
 
+fn catalog_system_id(id: &str) -> Option<&'static str> {
+    static SYSTEMS: &[(&str, &str)] =
+        include!(concat!(env!("OUT_DIR"), "/profile_system_ids.rs"));
+    SYSTEMS.binary_search_by(|row| row.0.cmp(id)).ok().map(|i| SYSTEMS[i].1)
+}
+
+/// System frame and sash articles may only be paired when their manufacturer
+/// and series are verified to match. Legacy/custom entries without a known
+/// series are accepted only when they are the same selected article.
+pub fn system_profile_pair_compatible(
+    material: &Material,
+    frame_id: &str,
+    frame_snapshot: Option<&ProfileSnapshot>,
+    sash_id: &str,
+    sash_snapshot: Option<&ProfileSnapshot>,
+) -> bool {
+    if !material.is_profile_system() || frame_id == sash_id {
+        return true;
+    }
+    let frame_catalog = catalog_snapshot(frame_id, material);
+    let sash_catalog = catalog_snapshot(sash_id, material);
+    let frame_system = frame_snapshot
+        .and_then(|s| s.system_id.as_deref())
+        .or_else(|| frame_catalog.and_then(|s| s.system_id.as_deref()))
+        .or_else(|| catalog_system_id(frame_id));
+    let sash_system = sash_snapshot
+        .and_then(|s| s.system_id.as_deref())
+        .or_else(|| sash_catalog.and_then(|s| s.system_id.as_deref()))
+        .or_else(|| catalog_system_id(sash_id));
+    frame_system.is_some() && frame_system == sash_system
+}
+
 fn catalog_entry(id: &str) -> Option<&'static (&'static str, &'static str, ProfileSnapshot)> {
-    static TABLE: &[(&str, &str, ProfileSnapshot)] = include!(concat!(env!("OUT_DIR"), "/profile_snapshots.rs"));
-    TABLE.binary_search_by(|row| row.0.cmp(id)).ok().map(|i| &TABLE[i])
+    static TABLE: &[(&str, &str, ProfileSnapshot)] =
+        include!(concat!(env!("OUT_DIR"), "/profile_snapshots.rs"));
+    TABLE
+        .binary_search_by(|row| row.0.cmp(id))
+        .ok()
+        .map(|i| &TABLE[i])
 }
 
 /// Resolve the layout leaf first. A grid cell supplies saved profile and bead
@@ -173,12 +222,22 @@ pub(crate) fn glazing_fits(
     // Projects may have explicit system dimensions alongside a historic
     // stock reference. The saved dimensions describe the installed section.
     let frame_spec = frame.profile_snapshot.as_ref().or(frame_catalog);
-    let sash_cell = cell.filter(|c| c.sash_profile.as_ref().is_none_or(|p| compatible_profile(&p.id, &frame.material)));
-    let sash_id = sash_cell.and_then(|c| c.sash_profile.as_ref()).map(|p| p.id.as_str());
+    let sash_cell = cell.filter(|c| {
+        c.sash_profile
+            .as_ref()
+            .is_none_or(|p| compatible_profile(&p.id, &frame.material))
+    });
+    let sash_id = sash_cell
+        .and_then(|c| c.sash_profile.as_ref())
+        .map(|p| p.id.as_str());
     let sash_catalog = sash_id.and_then(|id| catalog_snapshot(id, &frame.material));
     let sash_spec = sash_cell
         .and_then(|c| c.sash_profile_snapshot.as_ref())
-        .or_else(|| (system && sash_id.is_none_or(|id| id == frame.profile.id)).then_some(frame_spec).flatten())
+        .or_else(|| {
+            (system && sash_id.is_none_or(|id| id == frame.profile.id))
+                .then_some(frame_spec)
+                .flatten()
+        })
         .or_else(|| {
             // Older timber templates use the frame stock as a door profile.
             let id = match sash_id {
@@ -214,18 +273,23 @@ pub(crate) fn glazing_fits(
         .unwrap_or_else(|| {
             glass_cover.map_or_else(|| norm_glasinval(&frame.material), |v| v + 5.0)
         });
-    let system_width = sash_spec.and_then(|p| p.sash_face_width)
+    let system_width = sash_spec
+        .and_then(|p| p.sash_face_width)
         .or_else(|| sash_catalog.and_then(|p| p.sash_face_width))
         .or_else(|| frame_spec.and_then(|p| p.sash_face_width))
-        .or_else(|| frame_catalog.and_then(|p| p.sash_face_width)).filter(|n| system && positive(n));
-    let sash_width = sash_cell.and_then(|c| c.sash_width).filter(positive).or(system_width).unwrap_or(
-        if system || sash.as_ref().is_some_and(|s| s.door) {
+        .or_else(|| frame_catalog.and_then(|p| p.sash_face_width))
+        .filter(|n| system && positive(n));
+    let sash_width = sash_cell
+        .and_then(|c| c.sash_width)
+        .filter(positive)
+        .or(system_width)
+        .unwrap_or(if system || sash.as_ref().is_some_and(|s| s.door) {
             frame.frame_width
         } else {
             69.0
-        },
-    );
-    let system_overlap = sash_spec.and_then(|s| s.sash_overlap)
+        });
+    let system_overlap = sash_spec
+        .and_then(|s| s.sash_overlap)
         .or_else(|| sash_catalog.and_then(|s| s.sash_overlap))
         .or_else(|| frame_spec.and_then(|s| s.sash_overlap))
         .or_else(|| frame_catalog.and_then(|s| s.sash_overlap))
@@ -239,7 +303,8 @@ pub(crate) fn glazing_fits(
             (true, false) => 14.0,
             _ => 0.0,
         };
-        system_overlap.unwrap_or(fallback)
+        system_overlap
+            .unwrap_or(fallback)
             .min(frame.frame_width.max(0.0) / 2.0)
             .min(sash_width)
     } else {
@@ -274,18 +339,33 @@ pub(crate) fn glazing_fits(
                 .filter(positive)
         })
         .unwrap_or(15.0);
-    let known_clearance = frame_spec.and_then(|p| p.sash_clearance)
-        .or_else(|| frame_catalog.and_then(|p| p.sash_clearance)).filter(positive);
-    let known_gap = frame_spec.and_then(|p| p.meeting_gap)
-        .or_else(|| frame_catalog.and_then(|p| p.meeting_gap)).filter(positive);
+    let known_clearance = frame_spec
+        .and_then(|p| p.sash_clearance)
+        .or_else(|| frame_catalog.and_then(|p| p.sash_clearance))
+        .filter(positive);
+    let known_gap = frame_spec
+        .and_then(|p| p.meeting_gap)
+        .or_else(|| frame_catalog.and_then(|p| p.meeting_gap))
+        .filter(positive);
     let hinged = sash.as_ref().is_some_and(|s| s.hinged);
     let system_seals = system.then(|| SystemSeals {
-        profile_id: if frame_ok { frame.profile.id.clone() } else { String::new() },
-        profile_name: if frame_ok { frame.profile.name.clone() } else { String::new() },
+        profile_id: if frame_ok {
+            frame.profile.id.clone()
+        } else {
+            String::new()
+        },
+        profile_name: if frame_ok {
+            frame.profile.name.clone()
+        } else {
+            String::new()
+        },
         hinged,
-        sealing_levels: frame_spec.and_then(|p| p.sealing_levels)
+        sealing_levels: frame_spec
+            .and_then(|p| p.sealing_levels)
             .or_else(|| frame_catalog.and_then(|p| p.sealing_levels))
-            .filter(|v| hinged && (1..=3).contains(v) && sash_id.is_none_or(|id| id == frame.profile.id)),
+            .filter(|v| {
+                hinged && (1..=3).contains(v) && sash_id.is_none_or(|id| id == frame.profile.id)
+            }),
         sash_overlap_mm: system_overlap.filter(|_| hinged).map(|_| overlap),
         sash_clearance_mm: known_clearance.filter(|_| hinged),
         meeting_gap_mm: known_gap.filter(|_| sash.as_ref().is_some_and(|s| s.pair)),
@@ -311,6 +391,8 @@ pub(crate) fn glazing_fits(
             glass: day.inset(-cover),
             day,
             glass_thickness,
+            min_glass_thickness: glazing_spec.and_then(|s| s.min_glass_thickness),
+            max_glass_thickness: glazing_spec.and_then(|s| s.max_glass_thickness),
             rebate_depth,
             seal_thickness: 2.0,
             bead_height,
@@ -327,7 +409,9 @@ pub(crate) fn glazing_fits(
         let clearance = known_clearance.unwrap_or(4.0);
         SashMount {
             clearance: clearance.min((frame.frame_width - overlap - 1.).max(0.)),
-            seat_depth: frame_spec.and_then(|p| p.sash_seat_depth).filter(positive)
+            seat_depth: frame_spec
+                .and_then(|p| p.sash_seat_depth)
+                .filter(positive)
                 .or_else(|| catalog.and_then(|p| p.sash_seat_depth)),
             outward: s.outward,
             pair: s.pair,
