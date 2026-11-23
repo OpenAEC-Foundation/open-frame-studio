@@ -18,17 +18,16 @@
   }
 
   // Leaf-hittest op de vrije indeling: welk vak ligt onder (mx,my) in model-mm?
-  function layoutLeafAt(k, mx, my) {
-    if (!k?.layout) return null;
-    const fw = k.frame.frameWidth || 67;
-    const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
+  function layoutLeafAt(k, geometry, mx, my) {
+    if (!k?.layout || !geometry?.innerRect) return null;
+    const dividerWidth = geometry.layoutDividerWidth ?? k.frame.frameWidth;
     const tree = ensureIds(k.layout);
-    const geom = layoutToRects(tree, inner, fw);
+    const geom = layoutToRects(tree, geometry.innerRect, dividerWidth);
     const leaf = geom.leaves.find((l) =>
       l.node.vulling?.type !== "buiten" &&
       mx >= l.rect.x && mx <= l.rect.x + l.rect.width &&
       my >= l.rect.y && my <= l.rect.y + l.rect.height);
-    return leaf ? { tree, leaf } : null;
+    return leaf ? { tree, leaf, dividerWidth } : null;
   }
 
   // Context menu state
@@ -133,7 +132,7 @@
       if (inDay(mx, my, k.frame)) {
         // Op een vrije-indeling-kozijn splitst Ctrl+klik alleen het vak onder de
         // cursor — clamp de preview-lijn dan ook op dat vak i.p.v. de hele dag.
-        const hit = layoutLeafAt(k, mx, my);
+        const hit = layoutLeafAt(k, geom, mx, my);
         const b = hit ? hit.leaf.rect : { x: fw, y: fw, width: ow - 2 * fw, height: oh - 2 * fw };
         if (k.layout && !hit) {
           splitPreview = null;
@@ -194,12 +193,13 @@
       // Vrije indeling: splits het vak onder de cursor op de klikpositie
       // (WH Okna-patroon) — de matrix-commando's zouden hier het onzichtbare
       // grid muteren zonder zichtbaar effect.
-      const hit = layoutLeafAt(k, mx, my);
+      const hit = layoutLeafAt(k, get(currentGeometry), mx, my);
       if (!hit) return;
-      const { tree, leaf } = hit;
-      const ratio = horizontal
-        ? (my - leaf.rect.y) / Math.max(1, leaf.rect.height)
-        : (mx - leaf.rect.x) / Math.max(1, leaf.rect.width);
+      const { tree, leaf, dividerWidth } = hit;
+      const length = horizontal ? leaf.rect.height : leaf.rect.width;
+      if (length <= dividerWidth) return;
+      const offset = horizontal ? my - leaf.rect.y : mx - leaf.rect.x;
+      const ratio = (offset - dividerWidth / 2) / (length - dividerWidth);
       setKozijnLayout(splitLeafAt(tree, leaf.node.id, horizontal ? "column" : "row", ratio));
     } else if (horizontal) {
       addRow(my, !!get(currentGeometry)?.curvedFrame);

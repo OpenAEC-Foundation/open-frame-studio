@@ -1,10 +1,10 @@
 <script>
   import { selectedCellIndex, selectedMember, selectedLayoutLeafId, selectedTimberJoints, selectDividerPiece, updateCellType, updateDimensions, updateGridSizes, currentKozijn, setKozijnLayout } from "../../stores/kozijn.js";
   import { get } from "svelte/store";
-  import { layoutToRects, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
+  import { layoutToRects, gridRowHeights, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
   import { ralToHex } from "../../lib/ral-colors.js";
   import { cellFits, insetOpening, moveFit } from "../../lib/glazingFit.js";
-  import { circleDiameter, contourPath, openingPath } from "../../lib/contour2d.js";
+  import { circleDiameter, contourPath, openingPath, sawAllowancePath } from "../../lib/contour2d.js";
   import { timberMemberType, memberLabel, dividerPieceLabel } from "../../lib/labels.js";
   import { jointPaths } from "../../lib/dividerJoinery.js";
   import { fittingDrawing } from "../../lib/hardwareDrawing.js";
@@ -39,11 +39,9 @@
   let activeTree = $derived(workingTree ?? ensureIds(kozijn?.layout ?? null));
 
   let layoutGeom = $derived.by(() => {
-    const k = kozijn;
-    if (!activeTree || !k?.frame) return null;
-    const fw = k.frame.frameWidth || 67;
-    const inner = { x: fw, y: fw, width: (k.frame.outerWidth || 0) - 2 * fw, height: (k.frame.outerHeight || 0) - 2 * fw };
-    return layoutToRects(activeTree, inner, fw, undefined, !geometry?.curvedDividerTimber);
+    if (!activeTree || !geometry?.innerRect) return null;
+    const width = geometry.layoutDividerWidth ?? kozijn.frame.frameWidth;
+    return layoutToRects(activeTree, geometry.innerRect, width, undefined, !geometry.curvedDividerTimber);
   });
   let selectedLeafRect = $derived.by(() => {
     const index = layoutGeom?.leaves.findIndex(l => l.node.id === selectedLeafId) ?? -1;
@@ -335,15 +333,9 @@
     }
     const hasLayout = !!(k.layout && layoutGeom);
 
-    // Grid member start positions, mirroring ofs-core's column/row walk
-    const cols = k.grid?.columns || [];
-    const rows = k.grid?.rows || [];
-    const colPos = [];
-    { let x = fw; for (const c of cols) { colPos.push(x); x += c.size + fw; } }
-    const isArch = shape === "arched" || shape === "arched_trapezoid";
-    const rowStart = isArch ? (k.frame.shape.archHeight ?? ow / 4) : fw;
-    const rowPos = [];
-    { let y = rowStart; for (const r of rows) { rowPos.push(y); y += r.size + fw; } }
+    const gridCells = hasLayout ? [] : geometry?.cellRects ?? [];
+    const columns = gridCells.filter(c => c.row === 0);
+    const rows = gridCells.filter(c => c.col === 0);
 
     const SIDES = {
       bottom: { isH: true, base: oh, dir: 1 },
@@ -364,11 +356,10 @@
       // Vak match before the edge-touch rule: older wasm builds lay the last
       // column flush against the outer edge, and a genuine vak must stay
       // editable there. Current-backend vak dims never touch the outer edge.
-      const pos = cfg.isH ? colPos : rowPos;
-      const sizes = cfg.isH ? cols : rows;
-      for (let i = 0; i < pos.length; i++) {
-        if (near(a, pos[i]) && near(b - a, sizes[i].size)) {
-          return { kind: "vak", editable: true, a, b, gridAxis: cfg.isH ? "col" : "row", gridIndex: i };
+      for (const cell of cfg.isH ? columns : rows) {
+        const r = cell.rect;
+        if (near(a, cfg.isH ? r.x : r.y) && near(b - a, cfg.isH ? r.width : r.height)) {
+          return { kind: "vak", editable: true, a, b, gridAxis: cfg.isH ? "col" : "row", gridIndex: cfg.isH ? cell.col : cell.row };
         }
       }
       if (near(a, 0) || near(b, total)) return { kind: "stijl", editable: false, a, b };
@@ -447,7 +438,7 @@
             seg.kind = "layoutVak";
             seg.layout = layoutEditInfo(leaf, cfg, a, b);
             seg.editable = !!seg.layout;
-          } else if (near(b - a, fw)) {
+          } else if (near(b - a, geometry.layoutDividerWidth ?? fw)) {
             // Divider-width gap between anchored leaves → tussenstijl/-dorpel
             seg.kind = "tussenstijl";
           }
@@ -609,15 +600,16 @@
       // Vakmaat: resize this column/row and compensate the neighbour so the
       // buitenwerkse maat stays fixed
       const colSizes = k.grid.columns.map((c) => c.size);
-      const rowSizes = k.grid.rows.map((r) => r.size);
+      const fromDay = entry.gridAxis === "row" && !!geometry.curvedFrame;
+      const rowSizes = gridRowHeights(k, fromDay ? geometry : null);
       const arr = entry.gridAxis === "col" ? colSizes : rowSizes;
       const i = entry.gridIndex;
       if (i == null || i < 0 || i >= arr.length) return;
-      const size = Math.max(100, newVal);
+      const size = Math.max(100, arr[i] + newVal - (entry.b - entry.a));
       const nb = i + 1 < arr.length ? i + 1 : i - 1;
       if (nb >= 0) arr[nb] = Math.max(100, arr[nb] - (size - arr[i]));
       arr[i] = size;
-      updateGridSizes(colSizes, rowSizes);
+      updateGridSizes(colSizes, rowSizes, fromDay);
     } else if (entry.kind === "layoutVak" && entry.layout) {
       // Vrije indeling: pas de twee kinderen van de aangrenzende split aan
       // (same mm→size mapping and minimum as the divider drag)
@@ -1432,6 +1424,18 @@
       >
         {ext.extensionType || "ext"}
       </text>
+    {/if}
+  {/each}
+
+  {#each geometry.curvedDividerTimber ?? [] as piece}
+    {#if $selectedMember?.type === (piece.vertical ? "divider_v" : "divider_h") && $selectedMember.index === piece.sourceIndex && $selectedMember.pieceIndex === piece.pieceIndex}
+      {#each ["start", "end"] as side}
+        {@const path = sawAllowancePath(piece, side)}
+        {#if path}
+          <path d={path} class="saw-allowance" fill="none" stroke="var(--editor-selected)" stroke-width="1.5"
+            stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />
+        {/if}
+      {/each}
     {/if}
   {/each}
 

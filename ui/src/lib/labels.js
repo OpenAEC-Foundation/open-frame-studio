@@ -79,6 +79,22 @@ export function memberLabel(t, type, side) {
   return t(MEMBER_TYPE_KEYS[type] || type);
 }
 
+const PROFILE_SASH_KEYS = {
+  sash_top: "member.profileSashTop",
+  sash_bottom: "member.profileSashBottom",
+  sash_left: "member.profileSashLeft",
+  sash_right: "member.profileSashRight",
+};
+
+export function cutMemberLabel(t, item) {
+  // CutListItem.material comes from Material::label_nl in all UI languages.
+  if (item.material === "Kunststof" || item.material === "Aluminium") {
+    const key = PROFILE_SASH_KEYS[item.memberType];
+    if (key) return t(key);
+  }
+  return memberLabel(t, item.memberType, item.profileSide);
+}
+
 /**
  * Get translated label for a gasket type.
  * @param {Function} t - the `$_` translation function

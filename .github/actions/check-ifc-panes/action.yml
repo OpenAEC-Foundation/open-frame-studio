@@ -1,0 +1,17 @@
+name: Check IFC panes with Open BIM Suite
+description: Validate OFS parts exports before and after a revision and retain the IFC and IDS results.
+runs:
+  using: composite
+  steps:
+    - name: Validate exported panes and run negative controls
+      shell: bash
+      run: node scripts/check-ifc-panes.mjs "$RUNNER_TEMP/ofs-ifc-acceptance"
+
+    - name: Save IFC files and validation reports
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ifc-ruitcontrole
+        path: |
+          ${{ runner.temp }}/ofs-ifc-acceptance/run-*/*.ifc
+          ${{ runner.temp }}/ofs-ifc-acceptance/run-*/*.json

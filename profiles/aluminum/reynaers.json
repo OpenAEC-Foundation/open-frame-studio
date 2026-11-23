@@ -211,34 +211,20 @@
   },
   {
     "id": "reynaers-cs77-standard",
-    "name": "Reynaers CS 77 Standard",
+    "name": "Reynaers CS 77 Standard (Functional)",
+    "referenceFrameArticle": "008.3136.XX",
     "manufacturer": "Reynaers Aluminium",
     "series": "ConceptSystem 77",
     "material": "aluminum",
     "materialSubtype": "thermisch_onderbroken",
     "width": 51,
-    "depth": 77,
-    "ventDepth": 87,
+    "depth": 68,
+    "ventDepth": 77,
     "sightline": 51,
     "glazingRebate": 25,
     "maxGlassThickness": 63,
     "minGlassThickness": 4,
-    "crossSection": [
-      [0, 0],
-      [51, 0],
-      [51, 25],
-      [32, 25],
-      [32, 21],
-      [29, 21],
-      [29, 25],
-      [26, 25],
-      [26, 69],
-      [23, 69],
-      [23, 74],
-      [26, 74],
-      [26, 77],
-      [0, 77]
-    ],
+    "crossSection": [[0,0],[51,0],[51,4],[48.7,4],[48.7,2],[42,2],[42,3.1],[43,3.1],[43,4],[40,4],[40,2],[19,2],[19,4],[17.2,4],[17.2,13],[20,13],[20,47],[26,47],[26,49.8],[24.3,49.8],[24.3,48.7],[22,48.7],[22,66],[24.3,66],[24.3,64],[26,64],[26,68],[0,68],[0,64],[1.7,64],[1.7,66],[4.4,66],[4.4,48.7],[1.7,48.7],[1.7,49.8],[0,49.8],[0,46.5],[6,46.5],[6,12.6],[8.3,12.6],[8.3,1.8],[1.7,1.8],[1.7,4],[0,4]],
     "ufValue": 2.2,
     "uwValue": 1.4,
     "airTightness": "Klasse 4",
@@ -267,91 +253,59 @@
       "type": "binnensponning"
     },
     "sources": [
-      "reynaers.com + Concept-naamconventie: CS 77 = 77 mm bouwdiepte (depth-veld stond op 68 en width op 77 — verwisseld)"
+      "BUtgb ATG 05/2644, blad 11 fig. 1a. Kader 008.3136.XX, 51 mm aanzicht en 68 mm bouwdiepte. https://api.butgb-ubatc.be/api/public/file/ATG052644N_000529_1.pdf",
+      "https://www.reynaersathome.co.uk/products/cs-77-aluminium-windows-doors/ — ConceptSystem 77, Technical information.",
+      "https://www.reynaersathome.co.uk/wp-content/uploads/2021/07/REY14555-CS77-Brochure_01.pdf — Reynaers CS 77, Technical characteristics, Functional en HI+."
     ],
     "unverifiedFields": [
-      "width",
-      "sightline",
-      "ventDepth",
-      "glazingRebate",
-      "sponning.depth",
       "ufValue",
       "uwValue",
-      "maxGlassThickness",
-      "minGlassThickness"
+      "sponning.width"
     ],
     "dataNotes": [
-      "width/sightline 51: bestaande aanzichtwaarde aangehouden, CS77-aanzichten deze ronde niet onderzocht",
-      "ventDepth 87 afgeleid uit het alu-patroon vleugel = kozijn + 10 (niet CS77-specifiek bevestigd)",
-      "sponninghoogte CS77 niet publiek gevonden — 25 aangehouden met vlag, niet verzonnen"
+      "Kader 008.3136.XX, schematische doorsnede naar Reynaers CS 77, weerstandprofielen fig. 1a, ATG 05/2644 blad 11. De dunne buitenflens, kamers en isolatorposities zijn benaderd uit het aanzicht van 51 mm en de bouwdiepte van 68 mm. Detailradii, krimpverbinding en de interne wanden van de isolator zijn weggelaten.",
+      "Binnendraaiend Functionalkader met de minimale aanzichtbreedte. Buitencontour, klikgroef en kamerwanden zijn schematisch."
     ],
     "innerWalls": [
-      [
-        [2, 2],
-        [24, 2],
-        [24, 23],
-        [2, 23]
-      ],
-      [
-        [28, 2],
-        [49, 2],
-        [49, 19],
-        [28, 19]
-      ],
-      [
-        [1.2, 25],
-        [3.2, 25],
-        [3.2, 49],
-        [1.2, 49]
-      ],
-      [
-        [22.8, 25],
-        [24.8, 25],
-        [24.8, 49],
-        [22.8, 49]
-      ],
-      [
-        [5.2, 26],
-        [20.8, 26],
-        [20.8, 48],
-        [5.2, 48]
-      ],
-      [
-        [2, 51],
-        [21, 51],
-        [21, 75],
-        [2, 75]
-      ]
-    ]
+      [[10.1,2.1],[15.4,2.1],[15.4,12.8],[10.1,12.8]],
+      [[6,14.5],[8.2,14.5],[8.2,46.5],[6,46.5]],
+      [[17.8,14.5],[20,14.5],[20,46.5],[17.8,46.5]],
+      [[6.4,48.7],[19.9,48.7],[19.9,66],[6.4,66]]
+    ],
+    "sightlineMullion": 76,
+    "thermalBreakWidth": 32,
+    "maxGlassThicknessFixed": 52,
+    "maxGlassThicknessVent": 63,
+    "innerWallTypes": ["chamber", "insulator", "insulator", "chamber"]
   },
   {
     "id": "reynaers-cs77-hi-plus",
-    "name": "Reynaers CS 77 HI+",
+    "name": "Reynaers CS 77 HI+ (Functional)",
     "manufacturer": "Reynaers Aluminium",
     "series": "ConceptSystem 77 HI+",
     "material": "aluminum",
     "materialSubtype": "high_insulation",
-    "width": 51,
-    "depth": 77,
-    "ventDepth": 87,
-    "sightline": 51,
+    "width": 64,
+    "depth": 68,
+    "ventDepth": 77,
+    "sightline": 64,
     "glazingRebate": 25,
-    "maxGlassThickness": 63,
+    "maxGlassThickness": 53,
     "crossSection": [
       [0, 0],
-      [51, 0],
-      [51, 25],
-      [32, 25],
-      [32, 21],
-      [29, 21],
-      [29, 25],
-      [26, 25],
-      [26, 69],
-      [23, 69],
-      [23, 74],
-      [26, 74],
-      [26, 77],
-      [0, 77]
+      [64, 0],
+      [64, 25],
+      [45, 25],
+      [45, 21],
+      [42, 21],
+      [42, 25],
+      [39, 25],
+      [39, 60],
+      [36, 60],
+      [36, 65],
+      [39, 65],
+      [39, 68],
+      [0, 68]
     ],
     "ufValue": 1.2,
     "airTightness": "Klasse 4",
@@ -380,72 +334,80 @@
       "type": "binnensponning"
     },
     "sources": [
-      "reynaers.com + Concept-naamconventie: CS 77 = 77 mm bouwdiepte"
+      "https://www.reynaersathome.co.uk/products/cs-77-aluminium-windows-doors/ — ConceptSystem 77, Technical information.",
+      "https://www.reynaersathome.co.uk/wp-content/uploads/2021/07/REY14555-CS77-Brochure_01.pdf — Reynaers CS 77, Technical characteristics, Functional en HI+.",
+      "https://www.aawnv.be/pdf/cs77.pdf — Reynaers CS 77, technische kenmerken, variant Functional HI+, voetnoot 8."
     ],
     "unverifiedFields": [
-      "width",
-      "sightline",
-      "ventDepth",
-      "glazingRebate",
-      "sponning.depth",
       "ufValue",
-      "maxGlassThickness"
+      "sponning.width"
     ],
     "dataNotes": [
-      "zelfde vlaggen als CS 77 Standard: aanzichten/sponning/Uf deze ronde niet onderzocht"
+      "Binnendraaiend Functionalkader met de minimale aanzichtbreedte. Buitencontour, klikgroef en kamerwanden zijn schematisch.",
+      "De HI+-voetnoot geeft minimaal 64 mm kaderaanzicht, 46 mm zichtbaar vleugelaanzicht en 89 mm T-profiel. Het blad geeft maximaal 53 mm glas zonder aparte tabel per glaslat."
     ],
     "innerWalls": [
       [
         [2, 2],
-        [24, 2],
-        [24, 23],
+        [37, 2],
+        [37, 23],
         [2, 23]
       ],
       [
-        [28, 2],
-        [49, 2],
-        [49, 19],
-        [28, 19]
+        [41, 2],
+        [62, 2],
+        [62, 19],
+        [41, 19]
       ],
       [
         [1.2, 25],
         [3.2, 25],
-        [3.2, 59],
-        [1.2, 59]
+        [3.2, 57],
+        [1.2, 57]
       ],
       [
-        [22.8, 25],
-        [24.8, 25],
-        [24.8, 59],
-        [22.8, 59]
+        [35.8, 25],
+        [37.8, 25],
+        [37.8, 57],
+        [35.8, 57]
       ],
       [
         [5.2, 26],
-        [20.8, 26],
-        [20.8, 58],
-        [5.2, 58]
+        [33.8, 26],
+        [33.8, 56],
+        [5.2, 56]
       ],
       [
-        [2, 61],
-        [21, 61],
-        [21, 75],
-        [2, 75]
+        [2, 59],
+        [34, 59],
+        [34, 66],
+        [2, 66]
       ]
+    ],
+    "sightlineMullion": 89,
+    "thermalBreakWidth": 32,
+    "innerWallTypes": [
+      "chamber",
+      "chamber",
+      "insulator",
+      "insulator",
+      "chamber",
+      "chamber"
     ]
   },
   {
     "id": "reynaers-cs86-hi",
-    "name": "Reynaers CS 86-HI",
+    "name": "Reynaers CS 86-HI (Functional)",
     "manufacturer": "Reynaers Aluminium",
     "series": "ConceptSystem 86-HI",
     "material": "aluminum",
     "materialSubtype": "super_insulated",
     "width": 51,
-    "depth": 86,
-    "ventDepth": 96,
+    "depth": 77,
+    "ventDepth": 86,
     "sightline": 51,
     "glazingRebate": 25,
-    "maxGlassThickness": 72,
+    "maxGlassThickness": 62,
     "minGlassThickness": 10,
     "crossSection": [
       [0, 0],
@@ -456,12 +418,12 @@
       [29, 21],
       [29, 25],
       [26, 25],
-      [26, 78],
-      [23, 78],
-      [23, 83],
-      [26, 83],
-      [26, 86],
-      [0, 86]
+      [26, 69],
+      [23, 69],
+      [23, 74],
+      [26, 74],
+      [26, 77],
+      [0, 77]
     ],
     "ufValue": 1,
     "applicableAs": [
@@ -487,20 +449,15 @@
       "type": "binnensponning"
     },
     "sources": [
-      "Reynaers Concept-naamconventie: CS 86 = 86 mm bouwdiepte (depth-veld stond op 77)"
+      "https://www.reynaers.com/resource/59494/download — CS 86-HI, Technical characteristics, Functional window."
     ],
     "unverifiedFields": [
-      "width",
-      "sightline",
-      "ventDepth",
-      "glazingRebate",
-      "sponning.depth",
       "ufValue",
-      "maxGlassThickness",
-      "minGlassThickness"
+      "minGlassThickness",
+      "sponning.width"
     ],
     "dataNotes": [
-      "ventDepth 96 afgeleid uit het +10-patroon; aanzichten deze ronde niet onderzocht"
+      "Binnendraaiend Functionalkader met de minimale aanzichtbreedte. Buitencontour, klikgroef en kamerwanden zijn schematisch."
     ],
     "innerWalls": [
       [
@@ -518,27 +475,37 @@
       [
         [1.2, 25],
         [3.2, 25],
-        [3.2, 67],
-        [1.2, 67]
+        [3.2, 66],
+        [1.2, 66]
       ],
       [
         [22.8, 25],
         [24.8, 25],
-        [24.8, 67],
-        [22.8, 67]
+        [24.8, 66],
+        [22.8, 66]
       ],
       [
         [5.2, 26],
         [20.8, 26],
-        [20.8, 66],
-        [5.2, 66]
+        [20.8, 65],
+        [5.2, 65]
       ],
       [
-        [2, 69],
-        [21, 69],
-        [21, 84],
-        [2, 84]
+        [2, 68],
+        [21, 68],
+        [21, 75],
+        [2, 75]
       ]
+    ],
+    "sightlineMullion": 76,
+    "thermalBreakWidth": 41,
+    "innerWallTypes": [
+      "chamber",
+      "chamber",
+      "insulator",
+      "insulator",
+      "chamber",
+      "chamber"
     ]
   },
   {

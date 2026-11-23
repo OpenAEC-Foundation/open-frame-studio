@@ -1,5 +1,7 @@
 <script>
-  import { profileEditor, editorVertices, editorInnerWalls, editorBounds, editorSelectedVertex, editorSnap } from "../../stores/profileEditor.js";
+  import { profileEditor, editorProfile, editorVertices, editorInnerWalls, editorBounds, editorSelectedVertex, editorSnap } from "../../stores/profileEditor.js";
+  import { systemProfileSolids } from "../../lib/systemProfileSolids.js";
+  import SystemProfileFill from "../panels/SystemProfileFill.svelte";
   import VertexHandles from "./VertexHandles.svelte";
   import EdgeSegments from "./EdgeSegments.svelte";
 
@@ -183,6 +185,8 @@
       .filter((poly) => Array.isArray(poly) && poly.length > 2)
       .map((poly) => "M " + poly.map((p) => `${p[0]} ${p[1]}`).join(" L ") + " Z")
   );
+  let solids = $derived(systemProfileSolids({ ...$editorProfile,
+    crossSection: $editorVertices.map(v => [v.x, v.y]), innerWalls: $editorInnerWalls }));
 
   // Dimension labels
   let dims = $derived.by(() => {
@@ -232,6 +236,9 @@
 
       <!-- Profile polygon -->
       {#if $editorVertices.length >= 3}
+        {#if solids}
+          <SystemProfileFill {solids} />
+        {:else}
         <path
           d={profilePathD}
           fill="var(--bg-surface-alt, #2a2a32)"
@@ -256,6 +263,7 @@
             pointer-events="none"
           />
         {/each}
+        {/if}
       {/if}
 
       <!-- Dimension labels -->

@@ -412,6 +412,17 @@ pub fn update_frame_shape(
 }
 
 #[wasm_bindgen]
+pub fn update_frame_colors(id: &str, color_inside: String, color_outside: String) -> Result<String, String> {
+    with_project(|p| {
+        let idx = find_kozijn(p, id)?;
+        let k = &mut p.kozijnen[idx];
+        k.frame.color_inside = color_inside;
+        k.frame.color_outside = color_outside;
+        serde_json::to_string(k).map_err(|e| e.to_string())
+    })?
+}
+
+#[wasm_bindgen]
 pub fn update_frame_profile(
     id: &str,
     profile_id: &str,
@@ -568,6 +579,16 @@ pub fn get_production_data_project() -> Result<String, String> {
             .collect();
         serde_json::to_string(&data).unwrap()
     })
+}
+
+#[wasm_bindgen]
+pub fn optimize_project_cut_list(stock_length_mm: Option<f64>) -> Result<String, String> {
+    with_project(|p| {
+        let plan = ofs_core::optimization::optimize_frame_cuts(
+            &p.kozijnen, stock_length_mm.unwrap_or(5800.0),
+        );
+        serde_json::to_string(&plan).map_err(|e| e.to_string())
+    })?
 }
 
 // ── Energy (BENG / Bouwbesluit) ─────────────────────────────────

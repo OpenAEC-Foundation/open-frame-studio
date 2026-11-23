@@ -25,6 +25,45 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn sash_cut_exports_name_each_member_for_its_material() {
+        let data = [
+            ("H", "standaard-67-meranti"), ("K", "kunststof-82-veka"), ("A", "aluminium-77-reynaers"),
+        ].map(|(mark, id)| {
+            let template = crate::template::get_sjabloon(id);
+            let mut k = crate::grid::template_single_turn_tilt_sj(1200., 1500., &template);
+            k.mark = mark.into();
+            compute_production_data(&k)
+        });
+        let dir = std::env::temp_dir().join(format!("ofs-vleugelbenamingen-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&data, dir.to_str().unwrap()).unwrap();
+        let csv = fs::read_to_string(dir.join("kortlijst.csv")).unwrap();
+        let xlsx_path = dir.join("productie.xlsx");
+        xlsx::generate_production_xlsx(&data, xlsx_path.to_str().unwrap()).unwrap();
+        let sheet = open_workbook_auto(xlsx_path).unwrap().worksheet_range("Kortlijst").unwrap();
+        let pdf_path = dir.join("productie.pdf");
+        pdf::generate_production_pdf(&data, pdf_path.to_str().unwrap()).unwrap();
+        let doc = lopdf::Document::load(pdf_path).unwrap();
+        let text = doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
+        for (suffix, timber, system) in [
+            ("RSL", "Raamhout links", "Vleugelstijl links"),
+            ("RSR", "Raamhout rechts", "Vleugelstijl rechts"),
+            ("RDB", "Raamhout boven", "Bovenregel vleugel"),
+            ("RDO", "Raamhout onder", "Onderregel vleugel"),
+        ] {
+            for (mark, label) in [("H", timber), ("K", system), ("A", system)] {
+                let id = format!("{mark}-V1-{suffix}");
+                let row = csv.lines().map(|line| line.split(';').collect::<Vec<_>>())
+                    .find(|row| row[1] == id).unwrap();
+                assert_eq!(row[2], label);
+                let row = sheet.rows().find(|r| r[1].to_string() == id).unwrap();
+                assert_eq!(row[2].to_string(), label);
+                assert!(text.contains(label), "PDF mist {label}");
+            }
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn system_seal_and_hardware_lists_export_physical_positions_and_measured_lengths() {
         let mut k = Kozijn::new("MD", "V1", 1200.0, 1500.0);
         k.frame.material = crate::kozijn::Material::Pvc;
@@ -55,6 +94,39 @@ mod tests {
         let text = doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
         for label in ["Rubberlijst", "Netto modelomtrek", "Middendichting", "5080.0", "Beslag per vleugel", "Sluitplaat"] {
             assert!(text.contains(label), "{label}");
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn arched_system_exports_keep_fractional_sizes_for_straight_and_curved_panes() {
+        let sj = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut k = Kozijn::new_with_sjabloon("Boog met onderlichten", "K02", 1200., 1500., &sj);
+        k.frame.shape.shape_type = ShapeType::Arched;
+        k.frame.shape.arch_height = Some(300.);
+        k.add_divider_in_elevation(false, 520.5);
+        k.add_divider_in_elevation(true, 650.4);
+        let lists = [compute_production_data(&k)];
+        let dir = std::env::temp_dir().join(format!("ofs-boogvakken-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&lists, dir.to_str().unwrap()).unwrap();
+        let csv = fs::read_to_string(dir.join("glaslijst.csv")).unwrap();
+        let book = dir.join("lijsten.xlsx");
+        xlsx::generate_production_xlsx(&lists, book.to_str().unwrap()).unwrap();
+        let sheet = open_workbook_auto(book).unwrap().worksheet_range("Glaslijst").unwrap();
+        let path = dir.join("lijsten.pdf");
+        pdf::generate_production_pdf(&lists, path.to_str().unwrap()).unwrap();
+        let pdf = lopdf::Document::load(path).unwrap();
+        let text = pdf.extract_text(&pdf.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
+        for (id, width, height, shape) in [
+            ("K02-V1", "440.5", "562.2", "Boog R697.0"),
+            ("K02-V4", "599.5", "769.6", "Rechthoek"),
+        ] {
+            let row = csv.lines().map(|s| s.split(';').collect::<Vec<_>>())
+                .find(|r| r[1] == id).unwrap();
+            assert_eq!((&row[3..5], row[9]), ([width, height].as_slice(), shape));
+            let row = sheet.rows().find(|r| r[1].to_string() == id).unwrap();
+            assert_eq!([row[3].to_string(), row[4].to_string(), row[9].to_string()], [width, height, shape]);
+            assert!(text.contains(width) && text.contains(height) && text.contains(shape));
         }
         fs::remove_dir_all(dir).unwrap();
     }
@@ -150,6 +222,132 @@ mod tests {
     }
 
     #[test]
+    fn revised_round_system_exports_head_geometry_and_identifies_missing_machining_data() {
+        let pvc = crate::template::get_sjabloon("kunststof-82-veka");
+        let alu = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let mut k = Kozijn::new_with_sjabloon("Rond kruis", "P", 1200., 1200., &pvc);
+        k.frame.shape.shape_type = ShapeType::Round;
+        k.add_divider_in_elevation(false, 600.);
+        k.add_divider_in_elevation(true, 600.);
+        let pvc_data = compute_production_data(&k);
+        k.apply_frame_profile(alu.stijl_profile.clone(), Some(51.), Some(68.), None, Some(r#""aluminum""#)).unwrap();
+        k.mark = "A".into();
+        let data = [pvc_data, compute_production_data(&k)];
+        let dir = std::env::temp_dir().join(format!("ofs-ronde-t-profielen-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&data, dir.to_str().unwrap()).unwrap();
+        let csv = fs::read_to_string(dir.join("kortlijst.csv")).unwrap();
+        let path = dir.join("productie.xlsx");
+        xlsx::generate_production_xlsx(&data, path.to_str().unwrap()).unwrap();
+        let mut book = open_workbook_auto(&path).unwrap();
+        let sheet = book.worksheet_range("Kortlijst").unwrap();
+        let path = dir.join("productie.pdf");
+        pdf::generate_production_pdf(&data, path.to_str().unwrap()).unwrap();
+        let doc = lopdf::Document::load(&path).unwrap();
+        let pdf = doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
+        for (mark, system, radius, half_face) in [("P", "VEKA", 527., 47.), ("A", "Reynaers", 549., 38.)] {
+            for (suffix, net, cope) in [("TS1", 2.0 * radius, 15), ("TD1.1", radius - half_face, 15),
+                                        ("TD1.2", radius - half_face, 16)] {
+                let id = format!("{mark}-{suffix}");
+                let row = csv.lines().map(|l| l.split(';').collect::<Vec<_>>()).find(|r| r[1] == id).unwrap();
+                assert!(row[3].contains(system));
+                assert_eq!(row[5], format!("{net:.1}"));
+                assert!(row[6].is_empty()); // The curved counterprofile has no confirmed blank length.
+                assert!(row[10..15].iter().all(|col| col.is_empty())); // No developed length for straight stock.
+                assert_eq!(row[cope], format!("{radius:.1}"));
+                assert!(row[if cope == 15 { 19 } else { 22 }].contains(&format!("R{radius:.1}")));
+                let xl = sheet.rows().find(|r| r[1].to_string() == id).unwrap();
+                assert_eq!(xl[3].to_string(), row[3]);
+                assert!(xl[6].to_string().is_empty());
+                let status = row.len() - 3 + (cope - 15);
+                assert_eq!(row[status], "Fabrieksblad boogverbinding vereist");
+                assert_eq!(xl[status].to_string(), row[status]);
+                for (col, expected) in [(5, net), (cope, radius)] {
+                    let actual = xl[col].to_string().parse::<f64>().unwrap();
+                    assert!((actual - expected).abs() < 1e-6);
+                }
+                assert!(pdf.contains(&id));
+            }
+        }
+        assert!(pdf.contains("Kopprofielen van tussenstijlen en tussendorpels"));
+        assert!(pdf.contains("Fabrieksblad boogverbinding") && pdf.contains("vereist"));
+        assert!(csv.lines().next().unwrap().contains("Kopradius_begin_in_aanzicht_mm"));
+        assert!(!book.sheet_names().iter().any(|name| name == "Pen en gat"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn veka_standard_straight_heads_export_glm_without_kerf_and_gross_with_kerf() {
+        let sj = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut frame = Kozijn::new_with_sjabloon("Getoogd", "K", 1200., 1500., &sj);
+        frame.frame.shape.shape_type = ShapeType::Arched;
+        frame.frame.shape.arch_height = Some(300.);
+        frame.add_divider_in_elevation(false, 600.);
+        frame.add_divider_in_elevation(true, 800.);
+        let lists = [compute_production_data(&frame)];
+        let p = &lists[0];
+        let cut = |id: &str| p.cut_list.iter().find(|r| r.piece_id == id).unwrap();
+        for id in ["K-TD1.1", "K-TD1.2"] {
+            let part = cut(id);
+            assert_eq!(part.net_length_mm, 480.);
+            assert_eq!(part.system_saw_cut_mm(), Some(530.));
+            assert_eq!(p.blank_length_mm(part), Some(534.));
+        }
+        let stile = cut("K-TS1");
+        assert_eq!(stile.divider_end.as_ref().unwrap().saw_allowance_mm, Some(25.));
+        assert!(p.blank_length_mm(stile).is_none() && stile.system_saw_cut_mm().is_none());
+        let dir = std::env::temp_dir().join(format!("ofs-standaard-glm-{}", uuid::Uuid::new_v4()));
+        csv_production::generate_production_csv(&lists, dir.to_str().unwrap()).unwrap();
+        let csv = fs::read_to_string(dir.join("kortlijst.csv")).unwrap();
+        let rail: Vec<_> = csv.lines().find(|row| row.contains(";K-TD1.1;")).unwrap().split(';').collect();
+        assert_eq!(&rail[5..7], ["480.0", "534.0"]);
+        assert_eq!(rail.last().copied(), Some("530.0"));
+        assert!(rail[rail.len()-2].contains("GLM +25"));
+        let path = dir.join("lijsten.xlsx");
+        xlsx::generate_production_xlsx(&lists, path.to_str().unwrap()).unwrap();
+        let sheet = open_workbook_auto(path).unwrap().worksheet_range("Kortlijst").unwrap();
+        let rail = sheet.rows().find(|r| r[1].to_string() == "K-TD1.1").unwrap();
+        assert_eq!(rail.last().unwrap().to_string(), "530");
+        let path = dir.join("lijsten.pdf");
+        pdf::generate_production_pdf(&lists, path.to_str().unwrap()).unwrap();
+        let doc = lopdf::Document::load(path).unwrap();
+        let text = doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
+        assert!(text.contains("530.0") && text.contains("534.0") && text.contains("Bewerking T-profielen"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn workshop_pdf_draws_the_head_intersections_at_print_scale() {
+        let sj = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut k = Kozijn::new_with_sjabloon("Rond", "R", 1200., 1200., &sj);
+        k.frame.shape.shape_type = ShapeType::Round;
+        k.add_divider_in_elevation(false, 455.);
+        k.add_divider_in_elevation(true, 480.);
+        let path = std::env::temp_dir().join(format!("ofs-boogkop-{}.pdf", uuid::Uuid::new_v4()));
+        pdf::generate_workshop_pdf(&k, &crate::kozijn::Project::new("Kopproef", "T"), path.to_str().unwrap()).unwrap();
+        let doc = lopdf::Document::load(&path).unwrap();
+        let page = doc.get_pages()[&1];
+        let stream = lopdf::content::Content::decode(&doc.get_page_content(page).unwrap()).unwrap();
+        let vertices: Vec<_> = stream.operations.iter().filter(|op| matches!(op.operator.as_str(), "m" | "l"))
+            .map(|op| [op.operands[0].as_float().unwrap(), op.operands[1].as_float().unwrap()])
+            .collect();
+        let radius: f64 = 600. - 73.;
+        let half: f64 = 94. / 2.;
+        let x = 455. - half;
+        let y = 480. - half;
+        for (x, y) in [(x, 600. - (radius*radius - (600.-x).powi(2)).sqrt()),
+                       (600. - (radius*radius - (600.-y).powi(2)).sqrt(), y)] {
+            // The A3 drawing is centred at (210, 168.5) mm at a scale of 1:8.
+            let pdf_x = (210. + (x-600.)/8.)*72./25.4;
+            let pdf_y = (168.5 - (y-600.)/8.)*72./25.4;
+            assert!(vertices.iter().any(|v| (f64::from(v[0])-pdf_x).abs()<0.02 &&
+                (f64::from(v[1])-pdf_y).abs()<0.02), "missing end point ({x}, {y}) on printed contour");
+        }
+        let text = doc.extract_text(&[1]).unwrap();
+        assert!(text.contains("Koppen in aanzicht op de daglijn") && text.contains("1:8"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn arch_spring_exports_the_flat_shoulder_and_the_cope_with_its_chord_angle() {
         let mut frame = Kozijn::new("Toog met hoge tussendorpel", "B1", 1200.0, 1500.0);
         frame.frame.shape.shape_type = ShapeType::Arched;
@@ -193,7 +391,7 @@ mod tests {
         pdf::generate_production_pdf(&prod, pdf_path.to_str().unwrap()).unwrap();
         let pdf = lopdf::Document::load(pdf_path).unwrap();
         let text = pdf.extract_text(&pdf.get_pages().into_keys().collect::<Vec<_>>()).unwrap();
-        assert!(text.contains("Kopprofielen tussenhout") && text.contains("Middelpunt X, Y"));
+        assert!(text.contains("Kopprofielen van tussenstijlen en tussendorpels") && text.contains("Middelpunt X, Y"));
         assert!(text.contains(&format!("{angle:.2} / R683.0")));
         fs::remove_dir_all(dir).unwrap();
     }

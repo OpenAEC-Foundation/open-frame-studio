@@ -2,7 +2,7 @@ use super::{GasketListItem, GasketType, HardwareListItem, SealMeasureLine, SealR
 use crate::curved_contour::{Contour, SashLeaf};
 use crate::geometry::{CellRect, Rect2D};
 use crate::glaslat::GlaslatPosition;
-use crate::glazing_fit::GlazingFit;
+use crate::glazing_fit::{GlazingFit, SealPosition};
 use crate::hardware::{FittingKind, HardwareMount, HardwareSet};
 use crate::kozijn::{Cell, HardwareType};
 use std::collections::BTreeMap;
@@ -29,7 +29,7 @@ pub(super) fn gaskets(
             |c| c.bead_inner.perimeter(),
         ),
     );
-    let mut add = |kind, (line, length_mm), quantity| {
+    let mut add = |kind, (line, length_mm), quantity, article: Option<&str>| {
         rows.push(GasketListItem {
             gasket_type: kind,
             length_mm,
@@ -38,6 +38,7 @@ pub(super) fn gaskets(
                 piece_id: piece.into(),
                 profile_name: profile.into(),
                 line,
+                article_number: article.map(str::to_owned),
             }),
         })
     };
@@ -45,23 +46,34 @@ pub(super) fn gaskets(
         GlaslatPosition::Binnen => (bead, day),
         GlaslatPosition::Buiten => (day, bead),
     };
-    add(GasketType::GlazingInner, inside, 1);
-    add(GasketType::GlazingOuter, outside, 1);
+    add(GasketType::GlazingInner, inside, 1, None);
+    add(GasketType::GlazingOuter, outside, 1, None);
     let Some(sash) = &fit.sash_outer else { return };
     let length = contours
         .and_then(|c| c.sash_outer.as_ref())
         .map_or_else(|| rect_perimeter(sash), Contour::perimeter);
     let measure = (SealMeasureLine::SashOuter, length);
-    match system.sealing_levels {
-        Some(1) => add(GasketType::ClosingSingle, measure, 1),
-        Some(2 | 3) => {
-            add(GasketType::ClosingInner, measure, 1);
-            if system.sealing_levels == Some(3) {
-                add(GasketType::ClosingCentre, measure, 1);
-            }
-            add(GasketType::ClosingOuter, measure, 1);
+    if !system.closing_seals.is_empty() {
+        for seal in &system.closing_seals {
+            let kind = match seal.position {
+                SealPosition::Inner => GasketType::ClosingInner,
+                SealPosition::Middle => GasketType::ClosingCentre,
+                SealPosition::Outer => GasketType::ClosingOuter,
+            };
+            add(kind, measure, 1, Some(&seal.article_number));
         }
-        _ => add(GasketType::ClosingUnspecified, measure, 0),
+        return;
+    }
+    match system.sealing_levels {
+        Some(1) => add(GasketType::ClosingSingle, measure, 1, None),
+        Some(2 | 3) => {
+            add(GasketType::ClosingInner, measure, 1, None);
+            if system.sealing_levels == Some(3) {
+                add(GasketType::ClosingCentre, measure, 1, None);
+            }
+            add(GasketType::ClosingOuter, measure, 1, None);
+        }
+        _ => add(GasketType::ClosingUnspecified, measure, 0, None),
     }
 }
 
@@ -265,6 +277,36 @@ mod tests {
             .gasket_list
             .iter()
             .any(|g| g.gasket_type == GasketType::ClosingCentre));
+    }
+
+    #[test]
+    fn cs77_article_pair_uses_its_middle_and_inner_closing_seals() {
+        let template = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let mut k = crate::grid::template_single_turn_tilt_sj(1200., 1500., &template);
+        for thickness in [24., 60.] {
+            k.cells[0].glazing.thickness_mm = thickness;
+            let p = compute_production_data(&k);
+            assert!(p.glass_list[0].production_ready);
+            assert_eq!(p.gasket_list.len(), 4);
+            for (kind, article) in [
+                (GasketType::ClosingCentre, "080.9655.04"),
+                (GasketType::ClosingInner, "080.9450.04"),
+            ] {
+                let seal = p.gasket_list.iter().find(|r| r.gasket_type == kind).unwrap();
+                assert_eq!(seal.quantity, 1);
+                assert_eq!(seal.length_mm, 2. * (1158. + 1458.));
+                assert_eq!(seal.reference.as_ref().unwrap().article_number.as_deref(), Some(article));
+                assert!(p.bom.iter().any(|r| r.description.contains(article)));
+            }
+            for kind in [GasketType::GlazingInner, GasketType::GlazingOuter] {
+                assert!(p.gasket_list.iter().any(|r| r.gasket_type == kind));
+            }
+        }
+        k.change_cell_opening(0, PanelType::FixedGlass, None).unwrap();
+        assert_eq!(compute_production_data(&k).gasket_list.len(), 2);
+        k.change_cell_opening(0, PanelType::Turn, Some(crate::kozijn::OpeningDirection::Outward)).unwrap();
+        assert!(compute_production_data(&k).gasket_list.iter()
+            .all(|g| g.reference.as_ref().unwrap().article_number.is_none()));
     }
 
     #[test]

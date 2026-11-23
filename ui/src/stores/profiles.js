@@ -6,6 +6,7 @@
  */
 import { writable, derived } from "svelte/store";
 import { invoke } from "../lib/tauri.js";
+import profileIndex from "../../../profiles/index.json" with { type: "json" };
 import { generateProfileGeometry } from "../lib/profileContour.js";
 
 // Statische bibliotheek uit de profiles/ directory (of embedded fallback)
@@ -121,6 +122,8 @@ function withRealSection(p) {
 }
 
 function getEmbeddedProfiles() {
+  const systemFiles = import.meta.glob("../../../profiles/{pvc,aluminum}/*.json", { eager: true, import: "default" });
+  const systems = profileIndex.categories.filter(c => c.id === "pvc" || c.id === "aluminum");
   return [
     {
       id: "wood",
@@ -138,29 +141,9 @@ function getEmbeddedProfiles() {
         { id: "wood-meranti-glasroede-32x12", name: "Meranti glasroede 32x12mm (opgelegd)", manufacturer: "Generiek", series: "Roede", material: "wood", materialSubtype: "meranti", width: 32, depth: 12, sightline: 32, glazingRebate: 0, ufValue: 0, applicableAs: ["divider"] },
       ].map(withRealSection),
     },
-    {
-      id: "aluminum",
-      label: "Aluminium",
-      profiles: [
-        { id: "reynaers-cs77-standard", name: "Reynaers CS 77", manufacturer: "Reynaers Aluminium", series: "ConceptSystem 77", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 51, depth: 77, ventDepth: 87, sightline: 51, glazingRebate: 25, ufValue: 2.2, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
-        { id: "reynaers-masterline8", name: "Reynaers MasterLine 8", manufacturer: "Reynaers Aluminium", series: "MasterLine 8", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 53, depth: 77, ventDepth: 87, sightline: 53, sightlineVent: 37, sightlineCombination: 97, glazingRebate: 27, thermalBreakWidth: 40, glazingBeadHeight: 25, glaslatHeight: 25, minGlassThickness: 24, maxGlassThickness: 72, ufValue: 1.9, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 27, position: "midden" } },
-        { id: "reynaers-slimline38-classic", name: "Reynaers SlimLine 38 Classic", manufacturer: "Reynaers Aluminium", series: "SlimLine 38", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 33.5, depth: 99, ventDepth: 86, sightline: 33.5, sightlineVent: 23, sightlineCombination: 67, glazingRebate: 13.5, minGlassThickness: 16, maxGlassThickness: 55, ufValue: 1.9, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 13.5, position: "midden" } },
-        { id: "schuco-aws70hi", name: "Schuco AWS 70.HI", manufacturer: "Schuco", series: "AWS 70.HI", material: "aluminum", materialSubtype: "thermisch_onderbroken", width: 51, depth: 70, ventDepth: 80, sightline: 51, glazingRebate: 25, ufValue: 1.5, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
-        { id: "schuco-aws75si-plus", name: "Schuco AWS 75.SI+", manufacturer: "Schuco", series: "AWS 75.SI+", material: "aluminum", materialSubtype: "super_insulated", width: 41, depth: 75, ventDepth: 85, sightline: 41, sightlineVent: 59, sightlineCombination: 107, glazingRebate: 25, ufValue: 1.2, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 25, position: "midden" } },
-      ].map(withRealSection),
-    },
-    {
-      id: "pvc",
-      label: "Kunststof (PVC)",
-      profiles: [
-        { id: "gealan-s9000", name: "Gealan S 9000", manufacturer: "Gealan", series: "S 9000", material: "pvc", materialSubtype: "6_kamer", chambers: 6, sealingLevels: 3, steelReinforced: true, width: 70, depth: 82.5, sightline: 70, sightlineCombination: 110, sightlineMullion: 92, glazingRebate: 28, glasinval: 18, overslagHoogte: 26, falzluft: 12, stulpNaad: 6, maxGlassThickness: 54, ufValue: 0.89, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 28, position: "midden" } },
-        { id: "gealan-kubus", name: "Gealan-KUBUS", manufacturer: "Gealan", series: "KUBUS", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, flushDesign: true, width: 85, depth: 85, sightline: 0, glazingRebate: 30, maxGlassThickness: 54, ufValue: 0.92, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 30, position: "midden" } },
-        { id: "veka-softline82", name: "VEKA Softline 82 MD", manufacturer: "VEKA", series: "Softline 82", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, chambersSash: 6, sealingLevels: 3, steelReinforced: true, width: 73, depth: 82, sightline: 73, sightlineVent: 84, sightlineCombination: 124, sightlineMullion: 94, glazingRebate: 28, glasinval: 20, falzluft: 12, stulpNaad: 8, minGlassThickness: 24, maxGlassThickness: 52, glazingBead: { clipHeight: 25, widthBase: 59.5 }, glaslatHeight: 25, wallThicknessVisible: 2.8, wallThicknessOther: 2.5, ufValue: 1.1, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 28, position: "midden" } },
-        { id: "veka-softline70", name: "VEKA Softline 70", manufacturer: "VEKA", series: "Softline 70", material: "pvc", materialSubtype: "5_kamer", chambers: 5, sealingLevels: 2, steelReinforced: true, width: 70, depth: 70, sightline: 53, glazingRebate: 24, maxGlassThickness: 40, ufValue: 1.3, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 24, position: "midden" } },
-        { id: "kommerling-88md", name: "Kommerling 88 MD", manufacturer: "Kommerling (profine)", series: "88 MD", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, width: 74, depth: 88, sightline: 74, glazingRebate: 30, maxGlassThickness: 58, ufValue: 0.95, applicableAs: ["frame", "sash"], sponning: { width: 15, depth: 30, position: "midden" } },
-        { id: "schuco-living82-md", name: "Schüco LivIng 82 MD", manufacturer: "Schüco", series: "LivIng 82", variant: "MD", material: "pvc", materialSubtype: "7_kamer", chambers: 7, sealingLevels: 3, steelReinforced: true, width: 70, depth: 82, sightline: 70, sightlineCombination: 120, minGlassThickness: 16, maxGlassThickness: 54, ufValue: 0.96, applicableAs: ["frame", "sash"] },
-      ].map(withRealSection),
-    },
+    ...systems.map(({ id, label, files }) => ({
+      id, label, profiles: files.flatMap(file => systemFiles[`../../../profiles/${file}`]),
+    })),
     {
       id: "wood-aluminum",
       label: "Hout-Aluminium",

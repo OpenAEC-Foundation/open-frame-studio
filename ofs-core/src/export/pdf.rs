@@ -149,6 +149,35 @@ pub fn generate_kozijnstaat_pdf(project: &Project, output_path: &str) -> Result<
 // Workshop drawing PDF
 // ══════════════════════════════════════════════════════════════
 
+/// Elevation coordinates are y-down. Sampling a circular edge at this scale
+/// keeps the sagitta under 0.02 mm on paper and includes each exact end point.
+fn workshop_contour(ops: &mut Vec<Op>, contour: &crate::curved_contour::Contour,
+    origin: [f32; 2], scale: f32, fill: (f32, f32, f32)) {
+    use crate::curved_contour::Segment;
+    let mut points = Vec::new();
+    for edge in &contour.segments {
+        let steps = match edge {
+            Segment::Line { .. } => 1,
+            Segment::Arc { radius, sweep_angle, .. } => {
+                let paper_r = radius * f64::from(scale);
+                (sweep_angle.abs() * (paper_r / (8.0 * 0.02)).sqrt()).ceil().max(2.) as usize
+            }
+        };
+        for n in 0..steps {
+            let [x, y] = edge.point(n as f64 / steps as f64);
+            points.push(LinePoint { p: Point {
+                x: Mm(origin[0] + x as f32 * scale).into(),
+                y: Mm(origin[1] - y as f32 * scale).into(),
+            }, bezier: false });
+        }
+    }
+    if points.len() >= 3 {
+        ops.push(Op::SetFillColor { col: col(fill) });
+        ops.push(Op::DrawPolygon { polygon: Polygon { rings: vec![PolygonRing { points }],
+            mode: PaintMode::FillStroke, winding_order: WindingOrder::NonZero } });
+    }
+}
+
 pub fn generate_workshop_pdf(
     kozijn: &Kozijn,
     project: &Project,
@@ -191,64 +220,123 @@ pub fn generate_workshop_pdf(
     ));
 
     // Scale
-    let dim_m: f32 = 60.0;
+    let geometry = crate::geometry::compute_2d_geometry(kozijn);
+    let dim_m: f32 = if geometry.curved_frame.is_some() { 25.0 } else { 60.0 };
     let aw = daw - 2.0 * dim_m;
     let ah = dah - 2.0 * dim_m;
-    let sc = (aw / ow).min(ah / oh) * 0.85;
+    let fitted_scale = (aw / ow).min(ah / oh) * 0.85;
+    let sc = if geometry.curved_frame.is_some() {
+        1.0 / (1.0 / fitted_scale).ceil().max(1.0)
+    } else {
+        fitted_scale
+    };
     let ox = margin + dim_m + (aw - ow * sc) / 2.0;
     let oy = margin + tb_h + dim_m + (ah - oh * sc) / 2.0;
 
     let sx = |v: f32| -> f32 { ox + v * sc };
     let sy = |v: f32| -> f32 { oy + v * sc };
 
-    // Outer frame
-    ops.extend(line_ops(sx(0.0), sy(0.0), sx(ow), sy(0.0), DEEP_FORGE, 2.0));
-    ops.extend(line_ops(sx(ow), sy(0.0), sx(ow), sy(oh), DEEP_FORGE, 2.0));
-    ops.extend(line_ops(sx(ow), sy(oh), sx(0.0), sy(oh), DEEP_FORGE, 2.0));
-    ops.extend(line_ops(sx(0.0), sy(oh), sx(0.0), sy(0.0), DEEP_FORGE, 2.0));
-
-    // Frame members
-    for (fx, fy, fw2, fh) in [
-        (0.0, oh - fw, ow, fw), (0.0, 0.0, ow, fw),
-        (0.0, fw, fw, oh - 2.0 * fw), (ow - fw, fw, fw, oh - 2.0 * fw),
-    ] {
-        ops.extend(fill_rect_ops(sx(fx), sy(fy), fw2 * sc, fh * sc, LIGHT_GRAY));
-    }
-
-    // Cell labels
-    let columns = &kozijn.grid.columns;
-    let rows = &kozijn.grid.rows;
-    let nc = columns.len();
-    let mut col_pos = Vec::new();
-    let mut cx = fw;
-    for (i, c) in columns.iter().enumerate() {
-        col_pos.push(cx);
-        cx += c.size as f32;
-        if i < columns.len() - 1 { cx += fw; }
-    }
-    let mut row_pos = Vec::new();
-    let mut ry = fw;
-    for (i, r) in rows.iter().enumerate() {
-        row_pos.push(ry);
-        ry += r.size as f32;
-        if i < rows.len() - 1 { ry += fw; }
-    }
-
-    for (ri, row) in rows.iter().enumerate() {
-        for (ci, col) in columns.iter().enumerate() {
-            let idx = ri * nc + ci;
-            if idx >= kozijn.cells.len() { continue; }
-            let cx = col_pos[ci];
-            let cy = row_pos[ri];
-            let cw = col.size as f32;
-            let ch = row.size as f32;
-            ops.extend(text_ops(
-                panel_label(kozijn.cells[idx].panel_type),
-                8.0, sx(cx + cw/2.0) - 2.0, sy(cy + ch/2.0) - 1.5, font_bold(), DEEP_FORGE,
-            ));
+    if let Some(curve) = &geometry.curved_frame {
+        let origin = [ox, sy(oh)];
+        if geometry.curved_divider_timber.iter().any(|p| p.start.machining_status.is_some()) {
+            ops.extend(text_ops("Koppen in aanzicht op de daglijn. Afkortmaat en bewerkingsstatus per kop staan in de zaaglijst.",
+                8.0, margin + 35.0, margin + tb_h + 5.0, font(), DEEP_FORGE));
         }
-    }
+        ops.push(Op::SetOutlineColor { col: col(DEEP_FORGE) });
+        ops.push(Op::SetOutlineThickness { pt: Pt(0.45) });
+        if geometry.curved_timber.is_empty() {
+            workshop_contour(&mut ops, &curve.outer, origin, sc, LIGHT_GRAY);
+            workshop_contour(&mut ops, &curve.day, origin, sc, WHITE_C);
+        } else {
+            for member in &geometry.curved_timber {
+                workshop_contour(&mut ops, &member.outline, origin, sc, LIGHT_GRAY);
+                for notch in &member.masonry_notches {
+                    workshop_contour(&mut ops, &member.outline.clone().clipped(notch), origin, sc, WHITE_C);
+                }
+            }
+        }
+        for part in &geometry.curved_divider_timber {
+            workshop_contour(&mut ops, &part.outline, origin, sc, LIGHT_GRAY);
+        }
+        for cell in &geometry.cell_rects {
+            let Some(bounds) = &cell.opening_bounds else { continue };
+            if bounds.width <= 0. || bounds.height <= 0. { continue; }
+            for fit in [&cell.fit, &cell.second_fit].into_iter().flatten() {
+                let Some(edges) = &fit.contours else { continue };
+                if let Some(sash) = &edges.sash_outer {
+                    workshop_contour(&mut ops, sash, origin, sc, LIGHT_GRAY);
+                }
+                let inside = fit.bead_position == crate::glaslat::GlaslatPosition::Binnen;
+                workshop_contour(&mut ops, if inside { &edges.rebate } else { &edges.day }, origin, sc, LIGHT_GRAY);
+                if inside && fit.bead_height < edges.rebate_height {
+                    workshop_contour(&mut ops, &edges.bead_inner, origin, sc, LIGHT_GRAY);
+                }
+                let visible_glass = if fit.bead_height >= edges.rebate_height { &edges.bead_inner } else { &edges.day };
+                workshop_contour(&mut ops, visible_glass, origin, sc, WHITE_C);
+            }
+            let label = match &cell.vulling {
+                Some(crate::layout::Vakvulling::Buiten) => continue,
+                Some(crate::layout::Vakvulling::Glas { .. }) => "VG",
+                Some(crate::layout::Vakvulling::Raam { .. }) => "Raam",
+                Some(crate::layout::Vakvulling::Deur { .. }) => "Deur",
+                Some(crate::layout::Vakvulling::Paneel { .. }) => "PN",
+                Some(crate::layout::Vakvulling::Rooster) => "VR",
+                None => kozijn.cells.get(cell.cell_index).map_or("", |c| panel_label(c.panel_type)),
+            };
+            let x = (bounds.x + bounds.width / 2.) as f32;
+            let y = (bounds.y + bounds.height / 2.) as f32;
+            ops.extend(text_ops(label, 8., sx(x) - 2., sy(oh - y) - 1.5, font_bold(), DEEP_FORGE));
+        }
+    } else {
+        // Outer frame
+        ops.extend(line_ops(sx(0.0), sy(0.0), sx(ow), sy(0.0), DEEP_FORGE, 2.0));
+        ops.extend(line_ops(sx(ow), sy(0.0), sx(ow), sy(oh), DEEP_FORGE, 2.0));
+        ops.extend(line_ops(sx(ow), sy(oh), sx(0.0), sy(oh), DEEP_FORGE, 2.0));
+        ops.extend(line_ops(sx(0.0), sy(oh), sx(0.0), sy(0.0), DEEP_FORGE, 2.0));
 
+        // Frame members
+        for (fx, fy, fw2, fh) in [
+            (0.0, oh - fw, ow, fw), (0.0, 0.0, ow, fw),
+            (0.0, fw, fw, oh - 2.0 * fw), (ow - fw, fw, fw, oh - 2.0 * fw),
+        ] {
+            ops.extend(fill_rect_ops(sx(fx), sy(fy), fw2 * sc, fh * sc, LIGHT_GRAY));
+        }
+
+        // Cell labels
+        let columns = &kozijn.grid.columns;
+        let rows = &kozijn.grid.rows;
+        let nc = columns.len();
+        let mut col_pos = Vec::new();
+        let mut cx = fw;
+        for (i, c) in columns.iter().enumerate() {
+            col_pos.push(cx);
+            cx += c.size as f32;
+            if i < columns.len() - 1 { cx += fw; }
+        }
+        let mut row_pos = Vec::new();
+        let mut ry = fw;
+        for (i, r) in rows.iter().enumerate() {
+            row_pos.push(ry);
+            ry += r.size as f32;
+            if i < rows.len() - 1 { ry += fw; }
+        }
+
+        for (ri, row) in rows.iter().enumerate() {
+            for (ci, col) in columns.iter().enumerate() {
+                let idx = ri * nc + ci;
+                if idx >= kozijn.cells.len() { continue; }
+                let cx = col_pos[ci];
+                let cy = row_pos[ri];
+                let cw = col.size as f32;
+                let ch = row.size as f32;
+                ops.extend(text_ops(
+                    panel_label(kozijn.cells[idx].panel_type),
+                    8.0, sx(cx + cw/2.0) - 2.0, sy(cy + ch/2.0) - 1.5, font_bold(), DEEP_FORGE,
+                ));
+            }
+        }
+
+    }
     // Dimensions
     let dim_off: f32 = 15.0;
     let tick: f32 = 3.0;
@@ -264,7 +352,7 @@ pub fn generate_workshop_pdf(
     ops.extend(line_ops(xd-tick, sy(oh), xd+tick, sy(oh), DEEP_FORGE, 0.5));
     ops.extend(text_ops(&format!("{}", oh as i32), 7.0, xd+3.0, sy(oh/2.0), font(), DEEP_FORGE));
 
-    let st = if sc < 1.0 { format!("1:{}", (1.0/sc) as i32) } else { format!("{:.1}:1", sc) };
+    let st = if sc < 1.0 { format!("1:{:.1}", 1.0/sc) } else { format!("{:.1}:1", sc) };
     ops.extend(text_ops(&st, 8.0, margin+5.0, margin+tb_h+5.0, font(), (0.5,0.5,0.5)));
 
     doc.pages.push(PdfPage::new(Mm(A3_W), Mm(A3_H), ops));
@@ -317,7 +405,7 @@ pub fn generate_production_pdf(
             let with_curved_cuts = prod.cut_list.iter().any(|i| i.has_curved_cut());
             if prod.cut_list.iter().any(|i| i.divider_start.is_some()) {
                 y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 17.0);
-                ops.extend(text_ops("Tussenhout: netto van lang punt tot lang punt. Bij een ronde of samengestelde kop is de hoek gemeten tussen de koorde en de lengterichting.",
+                ops.extend(text_ops("Meet de nettolengte van lang punt tot lang punt. Bij een ronde of samengestelde kop geldt de hoek tussen de koorde en de lengterichting.",
                     8.0, margin, y, font(), DEEP_FORGE));
                 y -= 5.0;
             }
@@ -333,6 +421,24 @@ pub fn generate_production_pdf(
             ]).collect();
             y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &rows);
             y -= 4.0;
+            let system_heads: Vec<_> = prod.cut_list.iter().filter(|i| i.has_system_heads()).map(|i| {
+                let status = |end: &Option<crate::curved_timber::DividerEnd>| {
+                    end.as_ref().and_then(|e| e.machining_status).map_or("", |s| s.label_nl()).to_owned()
+                };
+                vec![i.piece_id.clone(), status(&i.divider_start), status(&i.divider_end),
+                    i.system_saw_cut_mm().map_or_else(|| "Onbepaald".to_owned(), |v| format!("{v:.1}"))]
+            }).collect();
+            if !system_heads.is_empty() {
+                y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 27.0);
+                ops.extend(text_ops("Bewerking T-profielen", 12.0, margin, y, font_bold(), AMBER));
+                y -= 5.0;
+                ops.extend(text_ops("De kopradius en koordehoek beschrijven de aansluiting in aanzicht. GLM is de PVC-zaagmaat voor de standaardverbinder, exclusief zaagsnede.",
+                    8.0, margin, y, font(), DEEP_FORGE));
+                y -= 4.5;
+                let h = ["Pos.", "Fabrikantbewerking begin", "Fabrikantbewerking eind", "PVC GLM (mm)"];
+                let w = [28.0, 98.0, 98.0, 40.0];
+                y = pdf_table(&mut doc, &mut ops, &prod.kozijn_mark, margin, y, &h, &w, &wrap_details(&system_heads)) - 4.0;
+            }
             for kind in super::arch_joints::KINDS {
                 let joints: Vec<_> = prod.arch_joints.iter().filter(|j| j.joint.kind == kind).collect();
                 if joints.is_empty() { continue; }
@@ -417,7 +523,7 @@ pub fn generate_production_pdf(
             }
             if !heads.is_empty() {
                 y = ensure_table_space(&mut doc, &mut ops, &prod.kozijn_mark, y, 32.0);
-                ops.extend(text_ops("Kopprofielen tussenhout", 12.0, margin, y, font_bold(), AMBER));
+                ops.extend(text_ops("Kopprofielen van tussenstijlen en tussendorpels", 12.0, margin, y, font_bold(), AMBER));
                 y -= 5.0;
                 ops.extend(text_ops("Insprong in mm vanaf het langste punt van de kop. Bij een stijl is rand 1 links en rand 2 rechts. Bij een dorpel is rand 1 boven en rand 2 onder.",
                     8.0, margin, y, font(), DEEP_FORGE));
@@ -503,7 +609,7 @@ pub fn generate_production_pdf(
         let seals: Vec<_> = prod.gasket_list.iter().filter_map(|item| {
             let r = item.reference.as_ref()?;
             let quantity = if item.quantity == 0 { "opgave".into() } else { item.quantity.to_string() };
-            Some(vec![r.piece_id.clone(), r.profile_name.clone(), item.gasket_type.label_nl().into(),
+            Some(vec![r.piece_id.clone(), r.profile_name.clone(), item.article_label_nl(),
                 r.line.label_nl().into(), format!("{:.1}", item.length_mm), quantity])
         }).collect();
         if !seals.is_empty() {

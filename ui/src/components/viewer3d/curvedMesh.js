@@ -1,3 +1,5 @@
+import { sectionSweepLayers } from "../../lib/systemProfileSolids.js";
+
 // The kernel keeps circles exact. Only the displayed mesh is tessellated.
 // Limit the chord error in model millimetres and keep quadrant extrema as vertices.
 const CHORD_ERROR = 0.08;
@@ -57,6 +59,36 @@ export function timberPlan(members) {
       }
       return nearest;
     } };
+}
+
+// Split a perimeter sweep where neighbouring lights can change their pocket.
+// Both the day and the back of the profile meet on the divider's centre plane,
+// including on a long straight sill with no intermediate contour vertices.
+export function dividerSweepCuts(outer, day, verticals, horizontals, joints=[]) {
+  const cuts = [...joints];
+  function intersections(loop, axis, coordinate) {
+    const values = [];
+    for (let i=0;i<loop.length;i++) {
+      const a=loop[i], b=loop[(i+1)%loop.length];
+      if ((a[axis] <= coordinate) === (b[axis] <= coordinate)) continue;
+      const fraction=(coordinate-a[axis])/(b[axis]-a[axis]);
+      values.push(a[1-axis]+fraction*(b[1-axis]-a[1-axis]));
+    }
+    return values.sort((a,b)=>a-b);
+  }
+  for (const [axis,members] of [[0,verticals],[1,horizontals]]) {
+    const centres = members.map(r=>axis ? r.y+r.height/2 : r.x+r.width/2);
+    for (const n of new Set(centres)) {
+      const a=intersections(outer,axis,n), b=intersections(day,axis,n);
+      if (a.length!==2 || b.length!==2) continue;
+      for (let i=0;i<2;i++) {
+        const from=axis ? [a[i],n] : [n,a[i]], to=axis ? [b[i],n] : [n,b[i]];
+        if (!cuts.some(([p,q])=>Math.hypot(p[0]-from[0],p[1]-from[1])<0.1 ||
+          Math.hypot(q[0]-to[0],q[1]-to[1])<0.1)) cuts.push([from,to]);
+      }
+    }
+  }
+  return cuts;
 }
 
 // Position on the physical saw face. The chord rendering tolerance also
@@ -232,10 +264,26 @@ function sawLoop(points, cx, cy, anchors) {
     stations: [...reference, ...path.map(p => transferAngle(p.a,current,reference))] };
 }
 
+// The day and outer skin already sample circular arcs at the chord tolerance.
+// Add the springings, corners and saw planes from each intermediate wall.
+// Repeating every smooth facet at every depth multiplies the tessellation.
+function profileCornerStations(loop, anchorCount) {
+  const points=loop.points.map(p=>p.p), n=points.length;
+  const turns=points.map(([x,y],i)=>{
+    const [a,b]=points[(i+n-1)%n], [c,d]=points[(i+1)%n];
+    return Math.atan2((x-a)*(d-y)-(y-b)*(c-x),(x-a)*(c-x)+(y-b)*(d-y));
+  });
+  return loop.stations.filter((_,i)=>{
+    if (i<anchorCount) return true;
+    const j=i-anchorCount, t=turns[j];
+    return Math.abs(t)>0.15 || Math.abs(t-turns[(j+n-1)%n])>1e-6 || Math.abs(t-turns[(j+1)%n])>1e-6;
+  });
+}
+
 // Sweep one actual (u,v) stock cross-section around a closed contour.
 // outer and inner are the paths at u=0 and u=stock.w respectively. A change
 // of stock or of glazing side at a joint terminates and caps each profile.
-export function sweepRing(THREE, outer, inner, sectionsAt, zInner, material, role, pathAtDepth, cuts = [], seamMaterial) {
+export function sweepRing(THREE, outer, inner, sectionsAt, zInner, material, role, pathAtDepth, cuts = [], seamMaterial, sectionMaterials) {
   if (outer.length < 3 || inner.length < 3 || Math.abs(signedArea(inner)) < EPS) return [];
   const cx = inner.reduce((s,p) => s+p[0], 0) / inner.length;
   const cy = inner.reduce((s,p) => s+p[1], 0) / inner.length;
@@ -267,7 +315,10 @@ export function sweepRing(THREE, outer, inner, sectionsAt, zInner, material, rol
       for (const [u] of section.pts) {
         const depth = section.minU + section.w - u;
         if (depth > EPS && depth < section.w-EPS && !loops.has(depth)) {
-          for (const angle of loopAt(depth).stations) directions.add(angle);
+          const loop=loopAt(depth);
+          const stations=sectionMaterials && section.solids
+            ? profileCornerStations(loop,loop.stations.length-loop.points.length) : loop.stations;
+          for (const angle of stations) directions.add(angle);
         }
       }
     }
@@ -296,40 +347,52 @@ export function sweepRing(THREE, outer, inner, sectionsAt, zInner, material, rol
       return [x, -y, zInner-s.d+v-s.minV];
     });
   }
+  function buffersFor(s) {
+    if (buffers.has(s.id)) return buffers.get(s.id);
+    let layers;
+    if (sectionMaterials && s.solids) {
+      layers = sectionSweepLayers(s.solids);
+    } else {
+      const pts = signedArea(s.pts) >= 0 ? s.pts : [...s.pts].reverse();
+      const caps = THREE.ShapeUtils.triangulateShape(pts.map(([u,v]) => new THREE.Vector2(u,v)), []);
+      layers = [{pts, caps, edges:pts.map((_,i)=>[i,(i+1)%pts.length])}];
+    }
+    const result=layers.map(layer=>({...layer,xyz:[],seams:[],piece:s.timber,leaf:s.leaf,role:s.meshRole || role}));
+    buffers.set(s.id,result);
+    return result;
+  }
   for (let i=0; i<angles.length; i++) {
     const next = (i+1) % angles.length, prev = (i+angles.length-1) % angles.length;
     for (const s of pieces[i]) {
       if (s.pts.length < 3 || !(s.w > 0)) continue;
-      let buffer = buffers.get(s.id);
-      if (!buffer) {
-        const pts = signedArea(s.pts) >= 0 ? s.pts : [...s.pts].reverse();
-        const caps = THREE.ShapeUtils.triangulateShape(pts.map(([u,v]) => new THREE.Vector2(u,v)), []);
-        buffer = { pts, caps, xyz: [], seams: [], piece: s.timber, leaf: s.leaf, role: s.meshRole || role };
-        buffers.set(s.id, buffer);
-      }
-      const { pts, caps, xyz } = buffer;
-      const a = vertices(s, i, pts), b = vertices(s, next, pts);
-      for (let j=0; j<pts.length; j++) {
-        const k=(j+1)%pts.length;
-        xyz.push(...a[j],...b[j],...b[k],...a[j],...b[k],...a[k]);
-      }
-      if (!pieces[prev].some(other => other.id === s.id)) {
-        for (const [j,k,l] of caps) xyz.push(...a[j],...a[k],...a[l]);
-        if (s.timber && pieces[prev].some(other => other.timber && other.timber !== s.timber)) {
-          for (let j=0; j<a.length; j++) buffer.seams.push(...a[j], ...a[(j+1)%a.length]);
+      const begins=!pieces[prev].some(other=>other.id===s.id), ends=!pieces[next].some(other=>other.id===s.id);
+      for (const buffer of buffersFor(s)) {
+        const {pts, caps, edges, xyz} = buffer;
+        const a = vertices(s,i,pts), b = vertices(s,next,pts);
+        for (const [j,k] of edges) {
+          xyz.push(...a[j],...b[j],...b[k],...a[j],...b[k],...a[k]);
         }
-      }
-      if (!pieces[next].some(other => other.id === s.id)) {
-        for (const [j,k,l] of caps) xyz.push(...b[l],...b[k],...b[j]);
+        if (begins) {
+          const face=buffer.capPts ? vertices(s,i,buffer.capPts) : a;
+          for (const [j,k,l] of caps) xyz.push(...face[j],...face[k],...face[l]);
+          if (s.timber && pieces[prev].some(other=>other.timber && other.timber!==s.timber)) {
+            for (const [j,k] of edges) buffer.seams.push(...a[j],...a[k]);
+          }
+        }
+        if (ends) {
+          const face=buffer.capPts ? vertices(s,next,buffer.capPts) : b;
+          for (const [j,k,l] of caps) xyz.push(...face[l],...face[k],...face[j]);
+        }
       }
     }
   }
-  return [...buffers.values()].map(({ xyz, role, piece, leaf, seams }) => {
+  return [...buffers.values()].flat().map(({ xyz, role, piece, leaf, seams, material:kind }) => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position",new THREE.Float32BufferAttribute(xyz,3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo,material);
+    const mesh = new THREE.Mesh(geo,sectionMaterials?.[kind] || material);
     mesh.userData.role = role;
+    if (kind) mesh.userData.sectionMaterial=kind;
     if (piece) mesh.userData.timber = { role: piece.role, index: piece.index };
     if (leaf) mesh.userData.leaf = leaf;
     if (seams.length && seamMaterial) mesh.add(jointLines(THREE,seams,seamMaterial));

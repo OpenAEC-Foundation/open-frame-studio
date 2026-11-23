@@ -21,13 +21,50 @@ fn main() {
     let mut stock = BTreeMap::new();
     let mut fitting_limits = BTreeMap::new();
     let mut system_ids = BTreeMap::new();
+    let mut inward_window_frames = BTreeMap::new();
+    let mut stock_articles = BTreeMap::new();
+    let mut divider_articles = BTreeMap::new();
     for category in index["categories"].as_array().unwrap() {
         for file in category["files"].as_array().unwrap() {
             let records = read_json(&root.join(file.as_str().unwrap()));
             for profile in records.as_array().unwrap() {
                 let id = profile["id"].as_str().unwrap();
                 let material = profile["material"].as_str().unwrap();
+                if let Some(frame) = profile["inwardWindowFrame"].as_str() {
+                    let seals: Vec<String> = profile["closingSeals"].as_array().into_iter().flatten().map(|seal| {
+                        let zone = match seal["position"].as_str() {
+                            Some("inner") => "Inner",
+                            Some("middle") => "Middle",
+                            Some("outer") => "Outer",
+                            _ => panic!("Unknown closing seal position on {id}"),
+                        };
+                        let article = seal["articleNumber"].as_str().expect("Missing closing seal article");
+                        format!("(SealPosition::{zone}, {article:?})")
+                    }).collect();
+                    inward_window_frames.insert(id.to_owned(), format!("({id:?}, {frame:?}, &[{}])", seals.join(", ")));
+                }
                 if matches!(material, "aluminum" | "pvc") {
+                    let article = profile["referenceFrameArticle"].as_str().map(|a| ("Frame", a))
+                        .or_else(|| profile["inwardWindowFrame"].as_str()
+                            .and_then(|_| profile["articleNumber"].as_str()).map(|a| ("Sash", a)))
+                        .or_else(|| profile["dividerFrame"].as_str()
+                            .and_then(|_| profile["articleNumber"].as_str()).map(|a| ("Divider", a)));
+                    if let Some((role, article)) = article {
+                        let width = mm(&profile["width"]).expect("Missing article width");
+                        let depth = mm(&profile["depth"]).expect("Missing article depth");
+                        let manufacturer = profile["manufacturer"].as_str().expect("Missing manufacturer");
+                        let label = format!("{manufacturer} {article}");
+                        let material = if material == "pvc" { "Pvc" } else { "Aluminum" };
+                        if let Some(frame) = profile["dividerFrame"].as_str() {
+                            let name = profile["name"].as_str().expect("Missing divider name");
+                            divider_articles.insert(id.to_owned(), format!(
+                                "DividerArticle {{ id: {id:?}, frame: {frame:?}, material: Material::{material}, name: {name:?}, width: {width:?}, depth: {depth:?} }}"
+                            ));
+                        }
+                        stock_articles.insert(id.to_owned(), format!(
+                            "({id:?}, Material::{material}, StockRole::{role}, {width:?}, {depth:?}, {label:?})"
+                        ));
+                    }
                     let sliding = profile["materialSubtype"] == "sliding";
                     let max_kg = profile["maxWeight"]
                         .as_f64()
@@ -68,7 +105,9 @@ fn main() {
                 .iter()
                 .find_map(|v| mm(v));
                 let frame_face = mm(&profile["sightline"]);
-                let vent_face = mm(&profile["sightlineVent"]);
+                let inward_article = profile["inwardWindowFrame"].is_string();
+                let vent_face = if inward_article { mm(&profile["width"]) } else { mm(&profile["sightlineVent"]) };
+                let vent_depth = if inward_article { mm(&profile["depth"]) } else { mm(&profile["ventDepth"]) };
                 let combined = mm(&profile["sightlineCombination"]);
                 let system = matches!(material, "aluminum" | "pvc");
                 let overlap = explicit_overlap.or_else(|| {
@@ -102,18 +141,21 @@ fn main() {
                     }
                 }
                 rows.insert(id.to_string(), format!(
-                    "({id:?}, {material:?}, ProfileSnapshot {{ system_id: None, min_glass_thickness: {:?}, max_glass_thickness: {:?}, divider_face_width: {:?}, sponning_diepte: {depth:?}, \
+                    "({id:?}, {material:?}, ProfileSnapshot {{ system_id: None, min_glass_thickness: {:?}, max_glass_thickness: {:?}, \
+                    min_glass_thickness_fixed: {:?}, max_glass_thickness_fixed: {:?}, min_glass_thickness_vent: {:?}, max_glass_thickness_vent: {:?}, divider_face_width: {:?}, sponning_diepte: {depth:?}, \
                     sponning_hoogte: {:?}, glasinval: {:?}, glaslat_breedte: {:?}, glaslat_hoogte: {:?}, \
                     aanzichtbreedte: {:?}, bead_width_base: {:?}, sash_overlap: {overlap:?}, bead_position: {side}, \
                     sash_clearance: {:?}, sash_seat_depth: {:?}, sealing_levels: {:?}, meeting_gap: {:?}, sash_face_width: {:?}, sash_build_depth: {:?} }})",
                     mm(&profile["minGlassThickness"]), mm(&profile["maxGlassThickness"]),
-                    mm(&profile["sightlineMullion"]),
+                    mm(&profile["minGlassThicknessFixed"]), mm(&profile["maxGlassThicknessFixed"]),
+                    mm(&profile["minGlassThicknessVent"]), mm(&profile["maxGlassThicknessVent"]),
+                    mm(&profile["sightlineMullion"]).or_else(|| profile["dividerFrame"].as_str().and_then(|_| mm(&profile["width"]))),
                     mm(&rebate["depth"]), mm(&profile["glasinval"]), mm(&profile["glaslatWidth"]),
                     mm(&profile["glaslatHeight"]).or_else(|| mm(&profile["glazingBeadHeight"])).or_else(|| mm(&profile["glazingBead"]["clipHeight"])), mm(&profile["sightline"]), mm(&profile["glazingBead"]["widthBase"]),
                     mm(&profile["aanslagSponning"]["clearance"]).or_else(|| mm(&profile["falzluft"])),
                     mm(&profile["aanslagSponning"]["depth"]),
                     profile["sealingLevels"].as_u64().filter(|n| (1..=3).contains(n)),
-                    mm(&profile["stulpNaad"]), sash_face, mm(&profile["ventDepth"]),
+                    mm(&profile["stulpNaad"]), sash_face, vent_depth,
                 ));
             }
         }
@@ -130,6 +172,11 @@ fn main() {
     )
     .unwrap();
     let systems_path = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("profile_system_ids.rs");
+    let articles_path = systems_path.with_file_name("stock_articles.rs");
+    fs::write(systems_path.with_file_name("divider_articles.rs"), format!("&[{}]", divider_articles.into_values().collect::<Vec<_>>().join(",\n"))).unwrap();
+    fs::write(articles_path, format!("&[{}]", stock_articles.into_values().collect::<Vec<_>>().join(",\n"))).unwrap();
+    let inward_path = systems_path.with_file_name("inward_window_frames.rs");
+    fs::write(inward_path, format!("&[{}]", inward_window_frames.into_values().collect::<Vec<_>>().join(",\n"))).unwrap();
     fs::write(systems_path, format!("&[{}]", system_ids.into_values().collect::<Vec<_>>().join(",\n"))).unwrap();
     let stock_path = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("joinery_stock.rs");
     fs::write(

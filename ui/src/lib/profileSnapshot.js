@@ -12,7 +12,7 @@ export function resolveProfileSnapshot(profile) {
   const rebate = profile.sponning;
   const side = rebate?.position || ({ binnensponning: "binnen", buitensponning: "buiten" })[rebate?.type ?? rebate?.sponningType];
   const frame = mm(profile.sightline);
-  const vent = mm(profile.sightlineVent);
+  const vent = mm(profile.inwardWindowFrame ? profile.width : profile.sightlineVent);
   const combined = mm(profile.sightlineCombination);
   const overlap = mm(rebate?.opdekWidth) ?? mm(rebate?.opdek_width) ?? mm(profile.overslagHoogte) ?? mm(profile.ventOverlap);
   const levels = profile.sealingLevels;
@@ -20,13 +20,17 @@ export function resolveProfileSnapshot(profile) {
     systemId,
     minGlassThickness: mm(profile.minGlassThickness),
     maxGlassThickness: mm(profile.maxGlassThickness),
-    dividerFaceWidth: mm(profile.sightlineMullion),
+    minGlassThicknessFixed: mm(profile.minGlassThicknessFixed),
+    maxGlassThicknessFixed: mm(profile.maxGlassThicknessFixed),
+    minGlassThicknessVent: mm(profile.minGlassThicknessVent),
+    maxGlassThicknessVent: mm(profile.maxGlassThicknessVent),
+    dividerFaceWidth: mm(profile.sightlineMullion) ?? (profile.dividerFrame ? mm(profile.width) : null),
     sponningDiepte: system ? null : mm(rebate?.width) ?? mm(profile.glazingRebate),
     sponningHoogte: mm(rebate?.depth),
     beadPosition: ["binnen", "buiten"].includes(side) ? side : null,
     sashOverlap: overlap ?? (system && frame && vent && combined ? mm(frame + vent - combined) : null),
     sashFaceWidth: system && frame && combined && overlap ? mm(combined - frame + overlap) ?? vent : vent,
-    sashBuildDepth: mm(profile.ventDepth),
+    sashBuildDepth: mm(profile.inwardWindowFrame ? profile.depth : profile.ventDepth),
     sashClearance: mm(profile.aanslagSponning?.clearance) ?? mm(profile.falzluft),
     sashSeatDepth: mm(profile.aanslagSponning?.depth),
     meetingGap: mm(profile.stulpNaad),

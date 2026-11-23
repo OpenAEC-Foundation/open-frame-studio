@@ -1,0 +1,48 @@
+[
+  {
+    "id": "reynaers-0083102",
+    "name": "Reynaers 008.3102.XX – raamvleugel 68 mm",
+    "manufacturer": "Reynaers Aluminium",
+    "series": "ConceptSystem 77",
+    "articleNumber": "008.3102.XX",
+    "inwardWindowFrame": "reynaers-cs77-standard",
+    "closingSeals": [
+      {"position": "middle", "articleNumber": "080.9655.04", "frameContactDepth": 32},
+      {"position": "inner", "articleNumber": "080.9450.04", "sashContactInset": 2.5}
+    ],
+    "material": "aluminum",
+    "materialSubtype": "thermisch_onderbroken",
+    "width": 68,
+    "depth": 77,
+    "sightline": 33,
+    "ventOverlap": 30,
+    "shadowJoint": 5,
+    "sashInsideOffset": 9,
+    "glazingRebate": 25,
+    "minGlassThickness": 4,
+    "maxGlassThickness": 63,
+    "sponning": {"width": 15, "depth": 25, "type": "binnensponning"},
+    "ufValue": 2.2,
+    "applicableAs": ["sash"],
+    "sources": [
+      "BUtgb ATG 05/2644, tabel 7 en figuren 1a en 1b. Geteste draaikiepcombinatie met kader 008.3136.XX en vleugel 008.3102.XX. https://api.butgb-ubatc.be/api/public/file/ATG052644N_000529_1.pdf",
+      "Reynaers CS 77 architectencatalogus 09/2010, blad 012–013, snede 11, tekening CS77-010001. https://germansystemwindows.com/wp-content/uploads/2018/11/CS-77-win-doo-Section-Drawings-Architect-Catalogue-FR.pdf",
+      "Reynaers CS 77 Technical Information, maatreeks Functional. https://www.reynaersathome.co.uk/products/cs-77-aluminium-windows-doors/"
+    ],
+    "dataNotes": [
+      "Schematische doorsnede zonder klikrubbers of glaslat. Het buitenaanzicht telt 51 mm kader, 5 mm schaduwvoeg en 33 mm zichtbare vleugel. De profielbreedte van 68 mm overlapt de kaderdaglijn in aanzicht met 30 mm.",
+      "De middendichting sluit dwars tussen de isolatoren. De binnenaanslag sluit in de bouwdiepte tussen de kamerzijde van het kader en de overlappende vleugelflens. De schematische contactposities volgen snede 11 op blad 012.",
+      "XX duidt de afwerkingsvariant aan. Uf is een systeemwaarde en de vorm van de polyamidestroken en sponning is schematisch."
+    ],
+    "unverifiedFields": ["ufValue", "sponning.width"],
+    "crossSection": [[0, 75], [19, 75], [19, 48], [22, 48], [22, 13], [23, 13], [23, 5], [34, 5], [34, 0], [68, 0], [68, 2], [37, 2], [37, 7], [36, 7], [36, 14], [37, 14], [37, 47], [42, 47], [42, 51], [38, 51], [38, 61], [43, 61], [43, 77], [0, 77]],
+    "innerWalls": [
+      [[25, 7], [32, 7], [34, 9], [34, 12], [25, 12]],
+      [[22.5, 14], [25, 14], [25, 47], [22.5, 47]],
+      [[34, 14], [36.5, 14], [36.5, 47], [34, 47]],
+      [[25, 14], [34, 14], [34, 47], [25, 47]],
+      [[21, 50], [36, 50], [36, 63], [41, 63], [41, 74], [21, 74]]
+    ],
+    "innerWallTypes": ["chamber", "insulator", "insulator", "chamber", "chamber"]
+  }
+]

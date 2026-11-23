@@ -4,6 +4,36 @@ use crate::layout::{intersect_interval_unions, subtract_intervals, LayoutGeometr
 use serde::{Deserialize, Serialize};
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HeadMachiningStatus {
+    /// Only the elevation is known. The stock allowance and the counterprofile
+    /// through the section need the manufacturer's drawing for this curved joint.
+    DrawingRequired,
+    /// Straight end without an article-specific processing rule.
+    SectionDrawingRequired,
+    /// Standard mechanical VEKA MD connection, 102.310 into frame 101.290.
+    VekaMdGlm,
+    /// The groove dimension on a receiving 102.310 is known. The fixing for
+    /// T-to-T requires a separate assembly detail.
+    VekaMdGlmAtT,
+}
+
+impl HeadMachiningStatus {
+    pub fn label_nl(self) -> &'static str {
+        match self {
+            Self::DrawingRequired => "Fabrieksblad boogverbinding vereist",
+            Self::SectionDrawingRequired => "Fabrieksblad profielaansluiting vereist",
+            Self::VekaMdGlm => "VEKA standaardverbinder, GLM +25 mm t.o.v. dag",
+            Self::VekaMdGlmAtT => "VEKA T-op-T GLM +25 mm, bevestiging te controleren",
+        }
+    }
+
+    pub fn requires_drawing(self) -> bool {
+        matches!(self, Self::DrawingRequired | Self::SectionDrawingRequired)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DividerEnd {
@@ -15,10 +45,15 @@ pub struct DividerEnd {
     pub angle_deg: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radius_mm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machining_status: Option<HeadMachiningStatus>,
+    /// Distance beyond the day line for the unmachined profile blank, excluding saw kerf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saw_allowance_mm: Option<f64>,
     /// Axial setbacks from the longest point at this end. For a mullion these
     /// are read left/right and for a transom top/bottom in the elevation.
     pub edge_offsets_mm: [f64; 2],
-    /// Open machining path in that same order. A shoulder crossing the arch
+    /// Open outline in the elevation plane. A shoulder crossing the arch
     /// spring can include both part of the arc and part of the jamb.
     pub segments: Vec<Segment>,
 }
@@ -30,6 +65,8 @@ pub struct CurvedDividerMember {
     /// Zero-based source position within the vertical or horizontal dividers.
     pub source_index: usize,
     pub piece_index: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<crate::profile::ProfileRef>,
     pub outline: Contour,
     pub net_length_mm: f64,
     pub start: DividerEnd,
@@ -130,6 +167,8 @@ fn finish_end(segments: Vec<Segment>, axis: usize, long_point: f64) -> Option<Di
             .atan2((b[axis] - a[axis]).abs())
             .to_degrees(),
         radius_mm,
+        machining_status: None,
+        saw_allowance_mm: None,
         edge_offsets_mm: [(a[axis] - long_point).abs(), (b[axis] - long_point).abs()],
         segments,
     })
@@ -153,6 +192,7 @@ fn member(
         vertical,
         source_index,
         piece_index,
+        profile: None,
         start: finish_end(start, axis, lo)?,
         end: finish_end(end, axis, lo + length)?,
         net_length_mm: length,
@@ -193,6 +233,7 @@ pub(crate) fn divider_members(
     mullions: &[Rect2D],
     transoms: &[Rect2D],
     layout: Option<&LayoutGeometry>,
+    profile_system: bool,
 ) -> Vec<CurvedDividerMember> {
     let mut pieces = Vec::new();
     let walls: Vec<_> = layout
@@ -214,21 +255,19 @@ pub(crate) fn divider_members(
         } else {
             index - mullions.len()
         };
-        // Grid transoms run through. Free-tree members already terminate on
-        // either side of the parent splitter, irrespective of its orientation.
         let rect = if vertical {
             &mullions[source_index]
         } else {
             &transoms[source_index]
         };
-        let blocked = if vertical && layout.is_none() {
-            transoms
-                .iter()
-                .filter(|h| h.x <= rect.x + EPS && h.x + h.width >= rect.x + rect.width - EPS)
-                .map(|h| (h.y, h.y + h.height))
-                .collect()
-        } else {
-            walled_spans(rect, vertical, &walls)
+        // In a grid each divider spans the full day: timber rails run through
+        // the crossing, while system transoms terminate against the mullion.
+        // In a free tree the parent already determines the through member.
+        let blocked = match (layout, vertical, profile_system) {
+            (Some(_), _, _) => walled_spans(rect, vertical, &walls),
+            (None, true, false) => transoms.iter().map(|h| (h.y, h.y + h.height)).collect(),
+            (None, false, true) => mullions.iter().map(|v| (v.x, v.x + v.width)).collect(),
+            _ => Vec::new(),
         };
         if blocked.is_empty() {
             pieces.extend(member(outline.clone(), vertical, source_index, 0));
@@ -472,6 +511,91 @@ mod tests {
             parts.iter().map(|d| d.outline.area()).sum::<f64>(),
             geo.curved_dividers.iter().map(Contour::area).sum::<f64>() - 67. * 67.,
         );
+    }
+
+    #[test]
+    fn round_system_grid_ends_follow_the_circle_and_the_through_mullion() {
+        for (template, width) in [("kunststof-82-veka", 94.), ("aluminium-77-reynaers", 76.)] {
+            let sj = crate::template::get_sjabloon(template);
+            let mut k = Kozijn::new_with_sjabloon("Rond", "R1", 1200., 1200., &sj);
+            k.frame.shape.shape_type = ShapeType::Round;
+            k.add_divider_in_elevation(false, 510.);
+            k.add_divider_in_elevation(true, 475.);
+            let g = compute_2d_geometry(&k);
+            let parts = &g.curved_divider_timber;
+            assert_eq!(parts.len(), 3);
+            let (post, left, right) = (&parts[0], &parts[1], &parts[2]);
+            assert!(post.vertical && !left.vertical && !right.vertical);
+            assert_eq!((left.source_index, left.piece_index, right.source_index, right.piece_index), (0, 0, 0, 1));
+            near(g.v_dividers[0].x, 510. - width / 2.);
+            near(g.v_dividers[0].width, width);
+            near(g.h_dividers[0].y, 475. - width / 2.);
+            near(g.h_dividers[0].height, width);
+            let radius = 600. - sj.frame_width;
+            let reach = |offset: f64| (radius * radius - offset * offset).sqrt();
+            near(post.net_length_mm, 2. * reach(600. - (510. + width / 2.)));
+            near(left.net_length_mm + width + right.net_length_mm,
+                2. * reach(600. - (475. + width / 2.)));
+            for formed in [&post.start, &post.end, &left.start, &right.end] {
+                assert_eq!(formed.radius_mm, Some(radius));
+                assert!(formed.angle_deg > 0. && formed.angle_deg < 90.);
+            }
+            for joint in [&left.end, &right.start] {
+                assert!(joint.radius_mm.is_none());
+                near(joint.angle_deg, 90.);
+                assert_eq!(joint.edge_offsets_mm, [0., 0.]);
+            }
+            let fills: f64 = g.cell_rects.iter().map(|c| c.opening_contour.as_ref().unwrap().area()).sum();
+            let profiles: f64 = parts.iter().map(|p| p.outline.area()).sum();
+            near(fills + profiles, g.curved_frame.as_ref().unwrap().day.area());
+        }
+    }
+
+    #[test]
+    fn free_arched_system_uses_the_catalogue_t_section_in_both_split_directions() {
+        let sj = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let mut k = Kozijn::new_with_sjabloon("Getoogd", "B1", 1200., 1300., &sj);
+        k.frame.shape.shape_type = ShapeType::Arched;
+        k.frame.shape.arch_height = Some(340.);
+        use crate::layout::{glas, split_col, split_row, VakChild};
+        let child = |size, node| VakChild { size, node };
+        k.layout = Some(split_col(vec![
+            child(1., glas()),
+            child(6., split_row(vec![child(1., glas()), child(2., glas())])),
+        ]));
+        let g = compute_2d_geometry(&k);
+        assert_eq!(g.layout_divider_width, Some(76.));
+        near(g.h_dividers[0].height, 76.);
+        near(g.v_dividers[0].width, 76.);
+        let (post, rail) = (&g.curved_divider_timber[0], &g.curved_divider_timber[1]);
+        assert_eq!(g.curved_divider_timber.len(), 2);
+        assert!(post.vertical && !rail.vertical);
+        assert!(rail.start.radius_mm.is_some() && rail.end.radius_mm.is_some());
+        near(post.outline.bounds().y, rail.outline.bounds().y + 76.);
+        near(post.start.angle_deg, 90.);
+        let fills: f64 = g.cell_rects.iter().map(|c| c.opening_contour.as_ref().unwrap().area()).sum();
+        near(fills + post.outline.area() + rail.outline.area(), g.curved_frame.as_ref().unwrap().day.area());
+    }
+
+    #[test]
+    fn narrow_mullion_outside_the_upper_round_bay_only_limits_the_lower_sash() {
+        use crate::kozijn::{OpeningDirection, PanelType};
+        let sj = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let mut k = Kozijn::new_with_sjabloon("Rond", "R1", 1200., 1200., &sj);
+        k.frame.shape.shape_type = ShapeType::Round;
+        k.add_divider_in_elevation(false, 129.);
+        k.add_divider_in_elevation(true, 180.);
+        let narrow = crate::profile::ProfileRef { id: "project-t40".into(), name: "Projectprofiel 40 mm".into() };
+        k.update_member_profile("divider_v", Some(0), narrow, Some(40.), None).unwrap();
+        for index in [1, 3] {
+            k.change_cell_opening(index, PanelType::TurnTilt, Some(OpeningDirection::Right)).unwrap();
+        }
+        let g = compute_2d_geometry(&k);
+        let seals = |index: usize| g.cell_rects[index].fit.as_ref().unwrap().system_seals.as_ref().unwrap();
+        assert_eq!(seals(1).sash_overlap_mm, Some(30.));
+        assert!(seals(1).unmet_required_overlap_mm.is_none());
+        assert_eq!(seals(3).sash_overlap_mm, Some(20.));
+        assert_eq!(seals(3).unmet_required_overlap_mm, Some(30.));
     }
 
     #[test]

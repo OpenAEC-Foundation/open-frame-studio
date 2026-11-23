@@ -32,3 +32,22 @@ test("an incomplete system profile keeps unknown dimensions and seal count open"
     assert.equal(snapshot[key], null);
   }
 });
+
+test("Reynaers Functional frames and vents use their respective build depths", () => {
+  for (const [id, face, frame, vent, mullion] of [
+    ["reynaers-cs77-standard", 51, 68, 77, 76],
+    ["reynaers-cs77-hi-plus", 64, 68, 77, 89],
+    ["reynaers-cs86-hi", 51, 77, 86, 76],
+  ]) {
+    const p = catalogProfile("aluminum/reynaers.json", id);
+    const snapshot = resolveProfileSnapshot(p);
+    assert.equal(p.width, face);
+    assert.equal(p.depth, frame);
+    assert.equal(Math.max(...p.crossSection.map(([, depth]) => depth)), frame);
+    assert.equal(snapshot.sashBuildDepth, vent);
+    assert.equal(snapshot.dividerFaceWidth, mullion);
+  }
+  const cs77 = resolveProfileSnapshot(catalogProfile("aluminum/reynaers.json", "reynaers-cs77-standard"));
+  assert.equal(cs77.maxGlassThicknessFixed, 52);
+  assert.equal(cs77.maxGlassThicknessVent, 63);
+});

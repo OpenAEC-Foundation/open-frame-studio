@@ -1,8 +1,11 @@
 <script>
   import { _ } from "svelte-i18n";
-  let { crossSection = [], innerWalls = [], width = 80, height = 60, sponning = null } = $props();
+  import { systemProfileSolids } from "../../lib/systemProfileSolids.js";
+  import SystemProfileFill from "./SystemProfileFill.svelte";
+  let { profile, crossSection = [], innerWalls = [], width = 80, height = 60, sponning = null } = $props();
+  let solids = $derived(systemProfileSolids(profile));
 
-  let showRebate = $derived(sponning?.width > 0 && sponning?.depth > 0);
+  let showRebate = $derived(!solids && sponning?.width > 0 && sponning?.depth > 0);
   let points = $derived(crossSection && crossSection.length > 2 ? crossSection : null);
 
   // Binnenstructuur (kamers/staal/isolatoren) — impliciet gesloten polygonen
@@ -33,7 +36,9 @@
 <div class="cross-section" style="width: {width}px; height: {height}px;">
   {#if pathD}
     <svg {width} {height} viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
-      <!-- Profile outline with fill -->
+      {#if solids}
+        <SystemProfileFill {solids} />
+      {:else}
       <path d={pathD} fill="var(--bg-surface-alt)" stroke="var(--amber)" stroke-width="0.8" />
       <!-- Hatch pattern for material indication -->
       <defs>
@@ -45,6 +50,7 @@
       {#each wallPaths as wp}
         <path d={wp} fill="var(--bg-surface)" fill-opacity="0.6" stroke="var(--amber)" stroke-width="0.5" opacity="0.9" />
       {/each}
+      {/if}
       {#if showRebate}
         {@const minU = Math.min(...points.map(([u]) => u))}
         {@const maxU = Math.max(...points.map(([u]) => u))}

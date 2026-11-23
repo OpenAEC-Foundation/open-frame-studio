@@ -9,12 +9,14 @@ use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
 
 mod divider;
+mod system_heads;
 mod tenon;
 mod sash;
-pub use divider::{CurvedDividerMember, DividerEnd};
+pub use divider::{CurvedDividerMember, DividerEnd, HeadMachiningStatus};
 pub use tenon::{ArchJoint, ArchJointKind, ArchTenon, DividerTenon, FrameMemberRef, TenonIssue, TenonReceiver};
 pub(crate) use tenon::fit_timber_tenons;
 pub(crate) use divider::divider_members;
+pub(crate) use system_heads::resolve_system_heads;
 pub(crate) use sash::sash_members;
 
 type Point = [f64; 2];

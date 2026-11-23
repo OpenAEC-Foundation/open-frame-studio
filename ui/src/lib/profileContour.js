@@ -343,7 +343,7 @@ export function pvcProfileSection(spec) {
   const aanslag = aanslagCavity(w, rH, aY, t, bevRun);
   if (aanslag) innerWalls.push(aanslag);
 
-  return { crossSection, innerWalls };
+  return { crossSection, innerWalls, innerWallTypes: innerWalls.map(r => r.length === 8 ? "reinforcement" : "chamber") };
 }
 
 /**
@@ -352,8 +352,7 @@ export function pvcProfileSection(spec) {
  * polyamide isolatorstroken. Stegbreedte uit spec.thermalBreakWidth
  * (MasterLine 8: 40 mm) of de insulbar-referentiereeks per subtype
  * (24 / 34 / 42 mm). glazingRebate = sponninghoogte van het systeem
- * (SL38 13,5 / ML8 27; CS77 en Schüco AWS niet publiek — daar 25 met
- * unverified-vlag in de data).
+ * (SL38 13,5 / ML8 27 / CS77 Functional 25 mm).
  */
 export function aluProfileSection(spec) {
   const w = spec.width;
@@ -368,14 +367,22 @@ export function aluProfileSection(spec) {
   if (sub === "high_insulation") bZ = 34;
   if (sub === "super_insulated" || sub === "passivhaus") bZ = 42;
   if (typeof spec.thermalBreakWidth === "number" && spec.thermalBreakWidth > 0) {
-    bZ = spec.thermalBreakWidth;
+    bZ = Math.min(spec.thermalBreakWidth, d - aY - 10);
+  } else {
+    bZ = Math.min(bZ, d - aY - 12);
   }
-  bZ = Math.min(bZ, d - aY - 12); // binnenschaal minimaal ~12 mm
   const y1 = r1(Math.max(aY, (d - bZ) * 0.45)); // onderbrekingszone direct achter de aanslag
   const y2 = r1(Math.min(y1 + bZ, d - 10));
 
   const crossSection = bodyContour(w, d, rH, aY, { bevel: 0 });
   const innerWalls = [];
+
+  if (spec.thermallyBroken === false) {
+    innerWalls.push(rect(t, t, w - rH - 3 - t, d - t));
+    const nose = aanslagCavity(w, rH, aY, t, 0);
+    if (nose) innerWalls.push(nose);
+    return { crossSection, innerWalls, innerWallTypes: innerWalls.map(() => "chamber") };
+  }
 
   // Buitenschaalkamer
   if (y1 - 2 * t > 4) innerWalls.push(rect(t, t, w - rH - t, y1 - t));
@@ -383,8 +390,8 @@ export function aluProfileSection(spec) {
   const aanslag = aanslagCavity(w, rH, aY, t, 0);
   if (aanslag) innerWalls.push(aanslag);
   // Twee polyamide isolatorstroken (elk ~2 mm dik) overbruggen de schalen
-  innerWalls.push(rect(1.2, y1, 3.2, y2));
-  innerWalls.push(rect(w - rH - 3.2, y1, w - rH - 1.2, y2));
+  const bridges = [rect(1.2, y1, 3.2, y2), rect(w - rH - 3.2, y1, w - rH - 1.2, y2)];
+  innerWalls.push(...bridges);
   // Isolatorzone als aparte (lucht)kamer tussen de stroken
   if (w - rH - 10.4 > 4 && y2 - y1 > 4) {
     innerWalls.push(rect(5.2, y1 + 1, w - rH - 5.2, y2 - 1));
@@ -392,7 +399,7 @@ export function aluProfileSection(spec) {
   // Binnenschaalkamer (wijkt voor de klikgroef in de sponningbodem)
   if (d - y2 - 2 * t > 4) innerWalls.push(rect(t, y2 + t, w - rH - 3 - t, d - t));
 
-  return { crossSection, innerWalls };
+  return { crossSection, innerWalls, innerWallTypes: innerWalls.map(r => bridges.includes(r) ? "insulator" : "chamber") };
 }
 
 /**
@@ -436,7 +443,7 @@ export function slidingSection(spec, material) {
     y += h + t;
   }
 
-  return { crossSection, innerWalls };
+  return { crossSection, innerWalls, innerWallTypes: innerWalls.map(r => r.length === 8 ? "reinforcement" : "chamber") };
 }
 
 /**

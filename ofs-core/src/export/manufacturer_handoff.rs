@@ -136,7 +136,7 @@ fn write_bundle(project: &Project, dir: &Path) -> Result<(), String> {
                         x.material.clone(),
                         x.profile_name.clone(),
                         Some(x.net_length_mm),
-                        Some(x.gross_length_mm),
+                        production.blank_length_mm(x),
                         Some(x.miter_left_deg),
                         Some(x.miter_right_deg),
                         None,

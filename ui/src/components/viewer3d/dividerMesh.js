@@ -91,12 +91,13 @@ export function touchesPocket(footprint, pocket, bounds) {
 }
 
 // The swept pocket, flat web and end-grain all use model coordinates (y-down).
-export function meshFaces(mesh) {
+export function meshFaces(mesh, toModel) {
   const pos = mesh.geometry.getAttribute("position"), indices = mesh.geometry.index;
   const faces = [];
   for (let i=0; i<(indices?.count ?? pos.count); i+=3) {
     faces.push([i,i+1,i+2].map(j => {
       const k = indices ? indices.getX(j) : j;
+      if (toModel) return toModel(pos.getX(k),pos.getY(k),pos.getZ(k));
       return [pos.getX(k),-pos.getY(k),pos.getZ(k)+mesh.position.z];
     }));
   }

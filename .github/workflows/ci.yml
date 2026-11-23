@@ -52,6 +52,11 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: Test UI and 3D viewer
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: ui
+        run: node --test
+
       - name: Check candidate version labels
         run: node scripts/check-version.mjs
 
@@ -79,13 +84,9 @@ jobs:
       - name: Test ofs-core
         run: cargo test -p ofs-core --lib --locked
 
-      - name: Generate IFC acceptance fixture
+      - name: Check IFC panes with Open BIM Suite
         if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          cargo run -p ofs-core --example ifc_acceptance_fixture --locked -- "$RUNNER_TEMP/ofs-ifc-acceptance"
-          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/01-los-kozijn.ifc"
-          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/03-onderdelen.ifc"
-          test -s "$RUNNER_TEMP/ofs-ifc-acceptance/05-onderdelen-revisie.ifc"
+        uses: ./.github/actions/check-ifc-panes
 
       - name: Build Tauri app (no bundle)
         working-directory: src-tauri

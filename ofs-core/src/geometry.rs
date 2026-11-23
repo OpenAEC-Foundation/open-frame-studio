@@ -55,9 +55,12 @@ pub struct KozijnGeometry2D {
     /// In the same order as v_dividers followed by h_dividers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub curved_dividers: Vec<Contour>,
-    /// Actual cut pieces, including grid mullions separated at a through transom.
+    /// Finished pieces with the through member retained at each crossing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub curved_divider_timber: Vec<crate::curved_timber::CurvedDividerMember>,
+    /// Face width used to partition the optional free subdivision tree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout_divider_width: Option<f64>,
     /// Overall bounding box (outer frame)
     pub outer_rect: Rect2D,
     /// Inner opening (inside the frame)
@@ -179,8 +182,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
     let fw = kozijn.frame.frame_width;
     let ow = kozijn.frame.outer_width;
     let oh = kozijn.frame.outer_height;
-    // Divider width defaults to frame width (same profile family)
-    let divider_width = fw;
+    let divider_width = kozijn.layout_divider_width();
     let column_divider_widths: Vec<f64> = kozijn
         .grid
         .columns
@@ -222,13 +224,8 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
 
     // Free-subdivision layout (kozijn.layout) — when present it supersedes the
     // rectangular grid as the source of dividers, cells and the level-1
-    // dimension chains. The tree is laid out in the plain rectangular
-    // binnenrect with divider width = frame width, exactly mirroring the
-    // frontend canvas (layoutToRects in ui/src/lib/layout.js), so backend
-    // geometry and the canvas overlay coincide. Documented follow-ups, out of
-    // scope here: a stepped frame outline around `Buiten` leaves (the outer
-    // frame stays the full rectangle for now) and arch-aware (spring-line)
-    // placement of the tree for arched/round shapes.
+    // dimension chains. The canvas uses the same divider width and inner
+    // rectangle before the openings are intersected with the frame day.
     let frame_curve = FrameCurve::new(&kozijn.frame);
     let layout_geom = kozijn.layout.as_ref().map(|node| {
         let rect = LayoutRect {
@@ -564,7 +561,11 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         &v_dividers,
         &h_dividers,
         layout_geom.as_ref(),
+        kozijn.frame.material.is_profile_system(),
     );
+    if let Some(curve) = &curved_frame {
+        crate::curved_timber::resolve_system_heads(kozijn, &curve.day, &v_dividers, &h_dividers, &mut curved_divider_timber);
+    }
     if layout_geom
         .as_ref()
         .is_some_and(|l| l.leaves.iter().any(|leaf| leaf.vulling.is_buiten()))
@@ -587,8 +588,17 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         let cell = kozijn.cells.get(cr.cell_index).filter(|_| cells_aligned);
         let window = curved_window(&cr.rect, cr.row == 0);
         let mount;
-        (cr.fit, cr.second_fit, mount) =
-            crate::glazing_fit::glazing_fits(&window, &kozijn.frame, cell, cr.vulling.as_ref());
+        let article_overlap_limit = cell
+            .and_then(|c| c.sash_profile.as_ref())
+            .and_then(|p| crate::glazing_fit::inward_window_frame(&p.id))
+            .filter(|&reference| reference == kozijn.frame.profile.id)
+            .map(|_| {
+                sash_overlap_limit(&window, fw, &v_dividers, &h_dividers,
+                    frame_curve.as_ref().map(|_| curved_divider_timber.as_slice()))
+            });
+        (cr.fit, cr.second_fit, mount) = crate::glazing_fit::glazing_fits(
+            &window, &kozijn.frame, cell, cr.vulling.as_ref(), article_overlap_limit,
+        );
         if let Some(shape) = &frame_curve {
             let contour = shape.window(fw, &window);
             cr.opening_bounds = Some(contour.bounds());
@@ -1088,6 +1098,7 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         &corner_settings,
     );
     KozijnGeometry2D {
+        layout_divider_width: kozijn.layout.as_ref().map(|_| divider_width),
         perimeter_stop: crate::perimeter_stop::outline(
             &kozijn.frame,
             frame_curve.as_ref(),
@@ -1118,6 +1129,40 @@ pub fn compute_2d_geometry(kozijn: &Kozijn) -> KozijnGeometry2D {
         glaslat_breedte: snap.and_then(|s| s.glaslat_breedte),
         glaslat_hoogte: snap.map(|s| s.resolved_glaslat_hoogte(material)),
     }
+}
+
+/// A frame can receive the full overlap. Adjacent sashes can each use up to
+/// half a T-section. A divider outside the curved bay cannot limit its sash.
+fn sash_overlap_limit(
+    window: &Rect2D,
+    frame_width: f64,
+    posts: &[Rect2D],
+    rails: &[Rect2D],
+    curved_parts: Option<&[crate::curved_timber::CurvedDividerMember]>,
+) -> f64 {
+    let touches = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let post_side = |d: &Rect2D| touches(d.x + d.width, window.x) || touches(d.x, window.x + window.width);
+    let rail_side = |d: &Rect2D| touches(d.y + d.height, window.y) || touches(d.y, window.y + window.height);
+    if let Some(parts) = curved_parts {
+        let envelope = window.inset(-frame_width);
+        return parts.iter().filter_map(|p| {
+            let (touches_side, width) = if p.vertical {
+                let rect = &posts[p.source_index];
+                (post_side(rect), rect.width)
+            } else {
+                let rect = &rails[p.source_index];
+                (rail_side(rect), rect.height)
+            };
+            (touches_side && !p.outline.clone().clipped(&envelope).segments.is_empty()).then_some(width / 2.)
+        }).fold(frame_width, f64::min);
+    }
+    let vertical = posts.iter().filter(|d| {
+        post_side(d) && d.y < window.y + window.height && d.y + d.height > window.y
+    }).map(|d| d.width / 2.);
+    let horizontal = rails.iter().filter(|d| {
+        rail_side(d) && d.x < window.x + window.width && d.x + d.width > window.x
+    }).map(|d| d.height / 2.);
+    vertical.chain(horizontal).fold(frame_width, f64::min)
 }
 
 /// Map the free-subdivision layout geometry onto renderable dividers + cells.

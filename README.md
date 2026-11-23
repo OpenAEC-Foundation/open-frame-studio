@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.47.2
+# Open Frame Studio v2026.48.0
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 

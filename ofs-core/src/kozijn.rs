@@ -447,8 +447,21 @@ impl Kozijn {
         profile_width: Option<f64>,
         profile_depth: Option<f64>,
     ) -> Result<(), String> {
-        let width = profile_width.filter(|v| v.is_finite() && *v > 0.0);
-        let depth = profile_depth.filter(|v| v.is_finite() && *v > 0.0);
+        let mut width = profile_width.filter(|v| v.is_finite() && *v > 0.0);
+        let mut depth = profile_depth.filter(|v| v.is_finite() && *v > 0.0);
+        if let Some(article) = crate::profile::DividerArticle::CATALOG.iter()
+            .find(|a| a.id == profile.id && !self.frame.member_profiles.contains_key(a.id)) {
+            if !matches!(member_type, "divider_v" | "divider_h") || article.frame != self.frame.profile.id ||
+                article.material != self.frame.material {
+                return Err(format!("{} past als tussenprofiel bij kader {}", article.name, article.frame));
+            }
+            if width.is_some_and(|w| (w - article.width).abs() > 1e-6) ||
+                depth.is_some_and(|d| (d - article.depth).abs() > 1e-6) {
+                return Err(format!("De catalogusmaat van {} is {} × {} mm", article.name, article.width, article.depth));
+            }
+            width = Some(article.width);
+            depth = Some(article.depth);
+        }
         match member_type {
             "frame_top" => self.frame.top_profile = Some(profile),
             "frame_bottom" => self.frame.bottom_profile = Some(profile),
@@ -465,8 +478,11 @@ impl Kozijn {
                     .get_mut(index)
                     .ok_or("Tussenprofiel niet gevonden")?;
                 divider.divider_profile = Some(profile);
-                divider.divider_width =
-                    width.filter(|v| (*v - self.frame.frame_width).abs() > 1e-6);
+                // An explicitly chosen system article can have the frame's
+                // width while the standard T-section has another face width.
+                divider.divider_width = width.filter(|v| {
+                    self.frame.material.is_profile_system() || (*v - self.frame.frame_width).abs() > 1e-6
+                });
                 divider.divider_depth = depth;
                 self.fit_grid_to_frame();
             }
@@ -483,7 +499,11 @@ impl Kozijn {
         sash_depth: f64,
         snapshot: Option<crate::profile::ProfileSnapshot>,
     ) -> Result<(), String> {
-        self.cells.get(cell_index).ok_or("Cel niet gevonden")?;
+        let cell = self.cells.get(cell_index).ok_or("Cel niet gevonden")?;
+        let inward_article = crate::glazing_fit::inward_window_frame(&profile.id).is_some();
+        if inward_article && !cell.accepts_inward_window_sash() {
+            return Err(format!("Vleugelprofiel '{}' is voor een binnendraaiend raam", profile.name));
+        }
         let frame_snapshot = self.frame.profile_snapshot.as_ref().or_else(|| {
             crate::glazing_fit::catalog_snapshot(&self.frame.profile.id, &self.frame.material)
         });
@@ -499,7 +519,17 @@ impl Kozijn {
                 profile.name, self.frame.profile.name,
             ));
         }
+        // A supplier article has one cross section, including when an older
+        // client sends the system frame dimensions along with its selection.
+        let article = inward_article.then(|| crate::glazing_fit::catalog_snapshot(&profile.id, &self.frame.material)).flatten();
+        let sash_width = article.and_then(|p| p.sash_face_width).unwrap_or(sash_width);
+        let sash_depth = article.and_then(|p| p.sash_build_depth).unwrap_or(sash_depth);
         let cell = &mut self.cells[cell_index];
+        if self.frame.material.is_profile_system()
+            && cell.sash_profile.as_ref().unwrap_or(&self.frame.profile).id != profile.id
+        {
+            cell.glaslat = None;
+        }
         cell.sash_profile = Some(profile);
         cell.sash_profile_snapshot = snapshot;
         if sash_width.is_finite() && sash_width > 0.0 {
@@ -521,6 +551,92 @@ impl Kozijn {
             .get(index + 1)
             .and_then(|d| d.divider_width)
             .unwrap_or(self.frame.frame_width)
+    }
+
+    /// Face width of the frame system's standard mullion/transom.
+    pub fn default_divider_width(&self) -> f64 {
+        let frame = &self.frame;
+        if frame.material.is_profile_system() {
+            let valid = |p: &crate::profile::ProfileSnapshot| {
+                p.divider_face_width.filter(|w| w.is_finite() && *w > 0.)
+            };
+            frame.profile_snapshot.as_ref().and_then(valid)
+                .or_else(|| crate::glazing_fit::catalog_snapshot(&frame.profile.id, &frame.material).and_then(valid))
+                .unwrap_or(frame.frame_width)
+        } else {
+            frame.frame_width
+        }
+    }
+
+    pub fn layout_divider_width(&self) -> f64 {
+        match self.frame.shape.shape_type {
+            ShapeType::Round | ShapeType::Arched | ShapeType::ArchedTrapezoid => self.default_divider_width(),
+            _ => self.frame.frame_width,
+        }
+    }
+
+    /// A family name alone cannot identify stock of a different section or a project-specific article.
+    pub(crate) fn system_divider_article(&self, division: Option<&GridDivision>, width: f64) -> Option<&'static crate::profile::DividerArticle> {
+        let frame = &self.frame;
+        let stock = division.and_then(|d| d.divider_profile.as_ref());
+        let depth = division.and_then(|d| d.divider_depth).unwrap_or(frame.frame_depth);
+        crate::profile::DividerArticle::CATALOG.iter().find(|a| {
+            a.frame == frame.profile.id && a.material == frame.material
+                && (width - a.width).abs() < 1e-6 && (depth - a.depth).abs() < 1e-6
+                && !frame.member_profiles.contains_key(a.id) && !frame.member_profiles.contains_key(&frame.profile.id)
+                && stock.is_none_or(|p| p.id == a.id || p.id == a.frame || p.id == "wood-meranti-67x114")
+        })
+    }
+
+    fn new_grid_divider(&self, size: f64, width: f64) -> GridDivision {
+        GridDivision {
+            size,
+            divider_profile: Some(if let Some(article) = self.system_divider_article(None, width) {
+                article.reference()
+            } else if self.frame.material.is_profile_system() {
+                self.frame.profile.clone()
+            } else {
+                ProfileRef::default_divider()
+            }),
+            divider_width: (width != self.frame.frame_width).then_some(width),
+            divider_depth: None,
+        }
+    }
+
+    /// Old grid splits stored a Meranti placeholder on system frames and
+    /// reserved the frame width in the bay sizes. Restore the corresponding
+    /// system section and refit the bays once on opening that project.
+    fn restore_system_dividers(&mut self) {
+        if !self.frame.material.is_profile_system() || self.recovered_from_ifc {
+            return;
+        }
+        let standard = self.default_divider_width();
+        let article = self.system_divider_article(None, standard);
+        let placeholder = ProfileRef::default_divider();
+        let mut resized = false;
+        for d in self.grid.columns.iter_mut().skip(1).chain(self.grid.rows.iter_mut().skip(1)) {
+            let inherited = d.divider_profile.as_ref().is_none_or(|p| {
+                p.id == self.frame.profile.id || p.id == placeholder.id
+            });
+            if !inherited {
+                continue;
+            }
+            if let Some(a) = article.filter(|a|
+                (d.divider_width.unwrap_or(standard) - a.width).abs() < 1e-6 &&
+                (d.divider_depth.unwrap_or(self.frame.frame_depth) - a.depth).abs() < 1e-6
+            ) {
+                d.divider_profile = Some(a.reference());
+            } else if d.divider_profile.as_ref().is_none_or(|p| p.id == placeholder.id) {
+                d.divider_profile = Some(self.frame.profile.clone());
+            }
+            if d.divider_width.is_none() && standard != self.frame.frame_width {
+                d.divider_width = Some(standard);
+                resized = true;
+            }
+        }
+        if resized {
+            self.fit_grid_to_frame();
+        }
     }
 
     fn update_inherited_profiles(&mut self, previous: &ProfileRef, previous_material: &Material) {
@@ -577,6 +693,9 @@ impl Kozijn {
                 new.map(|s| &s.tussenstijl_profile),
             );
             if was_inherited {
+                if old.is_some_and(|s| column.divider_depth == Some(s.frame_depth)) {
+                    column.divider_depth = None;
+                }
                 let width = new
                     .and_then(|s| {
                         crate::glazing_fit::catalog_snapshot(&s.tussenstijl_profile.id, &s.material)
@@ -597,6 +716,9 @@ impl Kozijn {
                 new.map(|s| &s.tussendorpel_profile),
             );
             if was_inherited {
+                if old.is_some_and(|s| row.divider_depth == Some(s.frame_depth)) {
+                    row.divider_depth = None;
+                }
                 let width = new
                     .and_then(|s| {
                         crate::glazing_fit::catalog_snapshot(
@@ -610,11 +732,17 @@ impl Kozijn {
                     ((width - self.frame.frame_width).abs() > 1e-6).then_some(width);
             }
         }
-        for cell in self
-            .cells
-            .iter_mut()
-            .filter(|cell| cell.panel_type.is_operable())
-        {
+        for cell in &mut self.cells {
+            let inherited_carrier = cell.sash_profile.as_ref().is_none_or(|p| p.id == previous.id);
+            if *previous_material != self.frame.material
+                || !cell.panel_type.is_operable()
+                || inherited_carrier
+            {
+                cell.glaslat = None;
+            }
+            if !cell.panel_type.is_operable() {
+                continue;
+            }
             let old_sash = old.map(|s| {
                 if cell.panel_type == PanelType::Door {
                     &s.deurhout_profile
@@ -622,12 +750,14 @@ impl Kozijn {
                     &s.raamhout_profile
                 }
             });
-            if cell.sash_profile_snapshot.is_none()
-                && cell
-                    .sash_profile
-                    .as_ref()
-                    .is_none_or(|p| p.id == previous.id || old_sash.is_some_and(|s| s.id == p.id))
-            {
+            let selected = cell.sash_profile.as_ref();
+            let belongs_to_old_frame = selected
+                .and_then(|p| crate::glazing_fit::inward_window_frame(&p.id))
+                .is_some_and(|id| id == previous.id && id != self.frame.profile.id);
+            let inherited = cell.sash_profile_snapshot.is_none()
+                && selected.is_none_or(|p| p.id == previous.id || old_sash.is_some_and(|s| s.id == p.id));
+            if belongs_to_old_frame || inherited {
+                cell.glaslat = None;
                 cell.assign_default_sash(&self.frame, new);
             }
         }
@@ -732,6 +862,7 @@ impl Kozijn {
         }
         let geometry = crate::geometry::compute_2d_geometry(self);
         let width = self.frame.frame_width;
+        let half_divider = self.default_divider_width() / 2.;
         let (bars, sizes, end) = if horizontal {
             (
                 &geometry.h_dividers,
@@ -761,8 +892,8 @@ impl Kozijn {
                     (r.x, r.width)
                 }
             });
-            let before = position - width / 2.0 - cursor;
-            let after = next - position - width / 2.0;
+            let before = position - half_divider - cursor;
+            let after = next - position - half_divider;
             if before > 0.0 && after > 0.0 {
                 split = Some(i);
                 spans.extend([before, after]);
@@ -789,14 +920,14 @@ impl Kozijn {
         }
     }
 
-    /// Add a vertical divider (creates a new column). The new tussenstijl
-    /// occupies `frame_width` mm, which is subtracted proportionally from the
+    /// Add a vertical divider (creates a new column). Its article face width
+    /// is subtracted proportionally from the
     /// two new column sizes so that Σ(kolommen) + Σ(tussenstijlen) stays
     /// exactly the binnenmaat — the level-1 dimension chain keeps adding up
     /// to the buitenwerkse maat and the last vak no longer runs underneath
     /// the stijl.
     pub fn add_column(&mut self, position: f64) {
-        let divider_w = self.frame.frame_width;
+        let divider_w = self.default_divider_width();
         let total_existing: f64 = self.grid.columns.iter().map(|c| c.size).sum();
 
         if position > 0.0 && position < total_existing {
@@ -804,14 +935,16 @@ impl Kozijn {
             for i in 0..self.grid.columns.len() {
                 let col_end = accumulated + self.grid.columns[i].size;
                 if position > accumulated && position < col_end {
+                    if self.frame.material.is_profile_system() && self.grid.columns[i].size <= divider_w {
+                        return;
+                    }
                     self.materialize_part_ids();
                     let old_cols = self.grid.columns.len();
                     let rows = self.grid.rows.len();
                     let mut left = position - accumulated;
                     let mut right = col_end - position;
                     // Reserve room for the divider itself: shrink both halves
-                    // proportionally. Skipped when the vak is not wider than
-                    // the divider (degenerate split, sizes must stay > 0).
+                    // proportionally.
                     let span = left + right;
                     if span > divider_w {
                         let scale = (span - divider_w) / span;
@@ -819,15 +952,7 @@ impl Kozijn {
                         right *= scale;
                     }
                     self.grid.columns[i].size = left;
-                    self.grid.columns.insert(
-                        i + 1,
-                        GridDivision {
-                            size: right,
-                            divider_profile: Some(ProfileRef::default_divider()),
-                            divider_width: None,
-                            divider_depth: None,
-                        },
-                    );
+                    self.grid.columns.insert(i + 1, self.new_grid_divider(right, divider_w));
                     self.part_ids.columns.insert(i + 1, Uuid::new_v4());
                     let old_cells = std::mem::take(&mut self.cells);
                     let old_ids = std::mem::take(&mut self.part_ids.cells);
@@ -849,10 +974,10 @@ impl Kozijn {
     }
 
     /// Add a horizontal divider (creates a new row). The new tussendorpel
-    /// occupies `frame_width` mm, subtracted proportionally from the two new
+    /// occupies its article face width, subtracted proportionally from the two new
     /// row sizes — see `add_column` for the invariant.
     pub fn add_row(&mut self, position: f64) {
-        let divider_w = self.frame.frame_width;
+        let divider_w = self.default_divider_width();
         let total_existing: f64 = self.grid.rows.iter().map(|r| r.size).sum();
 
         if position > 0.0 && position < total_existing {
@@ -860,6 +985,9 @@ impl Kozijn {
             for i in 0..self.grid.rows.len() {
                 let row_end = accumulated + self.grid.rows[i].size;
                 if position > accumulated && position < row_end {
+                    if self.frame.material.is_profile_system() && self.grid.rows[i].size <= divider_w {
+                        return;
+                    }
                     self.materialize_part_ids();
                     let cols = self.grid.columns.len();
                     let old_rows = self.grid.rows.len();
@@ -873,15 +1001,7 @@ impl Kozijn {
                         bottom *= scale;
                     }
                     self.grid.rows[i].size = top;
-                    self.grid.rows.insert(
-                        i + 1,
-                        GridDivision {
-                            size: bottom,
-                            divider_profile: Some(ProfileRef::default_divider()),
-                            divider_width: None,
-                            divider_depth: None,
-                        },
-                    );
+                    self.grid.rows.insert(i + 1, self.new_grid_divider(bottom, divider_w));
                     self.part_ids.rows.insert(i + 1, Uuid::new_v4());
                     let old_cells = std::mem::take(&mut self.cells);
                     let old_ids = std::mem::take(&mut self.part_ids.cells);
@@ -1146,6 +1266,41 @@ impl Default for Cell {
 }
 
 impl Cell {
+    fn accepts_inward_window_sash(&self) -> bool {
+        matches!(self.panel_type, PanelType::TurnTilt | PanelType::Turn | PanelType::Tilt)
+            && self.opening_direction != Some(OpeningDirection::Outward)
+    }
+
+    fn template_sash<'a>(&self, sj: &'a crate::template::KozijnSjabloon) -> &'a ProfileRef {
+        if self.panel_type == PanelType::Door {
+            &sj.deurhout_profile
+        } else if crate::glazing_fit::inward_window_frame(&sj.raamhout_profile.id).is_some()
+            && !self.accepts_inward_window_sash()
+        {
+            &sj.stijl_profile
+        } else {
+            &sj.raamhout_profile
+        }
+    }
+
+    fn template_sash_dimensions(&self, sj: &crate::template::KozijnSjabloon) -> (f64, f64) {
+        if self.panel_type == PanelType::Door && !sj.material.is_profile_system() {
+            return (sj.frame_width, sj.frame_depth);
+        }
+        if crate::glazing_fit::inward_window_frame(&sj.raamhout_profile.id).is_some() {
+            let selected = self.template_sash(sj);
+            let spec = crate::glazing_fit::catalog_snapshot(&selected.id, &sj.material);
+            // A door, slider or outward sash cannot inherit the physical face
+            // of the template's dedicated inward-opening article.
+            let width = if selected.id == sj.stijl_profile.id { sj.frame_width } else { sj.sash_width };
+            return (
+                spec.and_then(|p| p.sash_face_width).unwrap_or(width),
+                spec.and_then(|p| p.sash_build_depth).unwrap_or(sj.sash_depth),
+            );
+        }
+        (sj.sash_width, sj.sash_depth)
+    }
+
     /// Create a cell with glazing preset from a sjabloon
     pub fn default_with_glazing(preset: &crate::template::GlazingPreset) -> Self {
         Self {
@@ -1162,18 +1317,28 @@ impl Cell {
 
     /// Resolve the same sash stock when changing a cell in the desktop or web editor.
     pub fn change_panel_type(&mut self, panel_type: PanelType, frame: &Frame) {
+        self.change_panel_opening(panel_type, self.opening_direction, frame);
+    }
+
+    pub(crate) fn change_panel_opening(&mut self, panel_type: PanelType, direction: Option<OpeningDirection>, frame: &Frame) {
+        let was_inward_window = self.accepts_inward_window_sash();
         let change_stock = (self.panel_type == PanelType::Door) != (panel_type == PanelType::Door);
         let has_stock = self.sash_profile.is_some()
             || self.sash_profile_snapshot.is_some()
             || self.sash_width.is_some()
             || self.sash_depth.is_some();
         self.panel_type = panel_type;
+        self.opening_direction = direction;
         if !panel_type.is_operable() {
             self.sash_profile = None;
             self.sash_profile_snapshot = None;
             self.sash_width = None;
             self.sash_depth = None;
-        } else if change_stock || !has_stock {
+        } else if change_stock || !has_stock || self.sash_profile.as_ref().is_some_and(|profile| {
+            (!self.accepts_inward_window_sash() && crate::glazing_fit::inward_window_frame(&profile.id).is_some())
+                || (!was_inward_window && self.accepts_inward_window_sash() && frame.material.is_profile_system()
+                    && profile.id == frame.profile.id && self.sash_profile_snapshot.is_none())
+        }) {
             let templates = crate::template::builtin_sjablonen();
             let stock = templates
                 .iter()
@@ -1190,31 +1355,26 @@ impl Cell {
         if frame.material.is_profile_system() {
             let stored = frame.profile_snapshot.as_ref();
             let catalog = crate::glazing_fit::catalog_snapshot(&frame.profile.id, &frame.material);
-            self.sash_profile = Some(
-                preset
-                    .map_or(&frame.profile, |s| {
-                        if self.panel_type == PanelType::Door {
-                            &s.deurhout_profile
-                        } else {
-                            &s.raamhout_profile
-                        }
-                    })
-                    .clone(),
-            );
+            let selected = preset.map_or(&frame.profile, |sj| self.template_sash(sj));
+            let article = (selected.id != frame.profile.id)
+                .then(|| crate::glazing_fit::catalog_snapshot(&selected.id, &frame.material)).flatten();
+            let (width, depth) = preset.map(|s| self.template_sash_dimensions(s))
+                .unwrap_or((frame.frame_width, frame.frame_depth));
+            self.sash_profile = Some(selected.clone());
             self.sash_profile_snapshot = None;
             self.sash_width = Some(
-                stored
-                    .and_then(|s| s.sash_face_width)
+                article.and_then(|p| p.sash_face_width)
+                    .or_else(|| stored.and_then(|s| s.sash_face_width))
                     .or_else(|| catalog.and_then(|s| s.sash_face_width))
                     .filter(|v| *v > 0.)
-                    .unwrap_or_else(|| preset.map_or(frame.frame_width, |s| s.sash_width)),
+                    .unwrap_or(width),
             );
             self.sash_depth = Some(
-                stored
-                    .and_then(|s| s.sash_build_depth)
+                article.and_then(|p| p.sash_build_depth)
+                    .or_else(|| stored.and_then(|s| s.sash_build_depth))
                     .or_else(|| catalog.and_then(|s| s.sash_build_depth))
                     .filter(|v| *v > 0.)
-                    .unwrap_or_else(|| preset.map_or(frame.frame_depth, |s| s.sash_depth)),
+                    .unwrap_or(depth),
             );
         } else if let Some(preset) = preset {
             self.assign_sash_from_sjabloon(preset);
@@ -1230,37 +1390,15 @@ impl Cell {
     /// Assign sash profile for operable cells (raamhout/deurhout)
     pub fn assign_sash_from_sjabloon(&mut self, sj: &crate::template::KozijnSjabloon) {
         self.sash_profile_snapshot = None;
-        match self.panel_type {
-            PanelType::TurnTilt
-            | PanelType::Turn
-            | PanelType::Tilt
-            | PanelType::Sliding
-            | PanelType::TopHung
-            | PanelType::BottomHung
-            | PanelType::LiftSlide
-            | PanelType::Pivot => {
-                self.sash_profile = Some(sj.raamhout_profile.clone());
-                self.sash_width = Some(sj.sash_width);
-                self.sash_depth = Some(sj.sash_depth);
-            }
-            PanelType::Door => {
-                self.sash_profile = Some(sj.deurhout_profile.clone());
-                self.sash_width = Some(if sj.material.is_profile_system() {
-                    sj.sash_width
-                } else {
-                    sj.frame_width
-                });
-                self.sash_depth = Some(if sj.material.is_profile_system() {
-                    sj.sash_depth
-                } else {
-                    sj.frame_depth
-                });
-            }
-            _ => {
-                self.sash_profile = None;
-                self.sash_width = None;
-                self.sash_depth = None;
-            }
+        if self.panel_type.is_operable() {
+            let (width, depth) = self.template_sash_dimensions(sj);
+            self.sash_profile = Some(self.template_sash(sj).clone());
+            self.sash_width = Some(width);
+            self.sash_depth = Some(depth);
+        } else {
+            self.sash_profile = None;
+            self.sash_width = None;
+            self.sash_depth = None;
         }
     }
 }
@@ -1405,6 +1543,18 @@ impl Material {
     pub fn is_profile_system(&self) -> bool {
         matches!(self, Self::Pvc | Self::Aluminum)
     }
+
+    pub fn label_nl(&self) -> &'static str {
+        match self {
+            Self::Wood(WoodType::Meranti) => "Meranti",
+            Self::Wood(WoodType::Accoya) => "Accoya",
+            Self::Wood(WoodType::Vuren) => "Vuren",
+            Self::Wood(WoodType::Eiken) => "Eiken",
+            Self::Aluminum => "Aluminium",
+            Self::Pvc => "Kunststof",
+            Self::WoodAluminum => "Hout-aluminium",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1473,6 +1623,9 @@ impl<'de> Deserialize<'de> for Project {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut project = Project::deserialize(deserializer)?;
         project.refresh_member_profiles();
+        for kozijn in &mut project.kozijnen {
+            kozijn.restore_system_dividers();
+        }
         Ok(project)
     }
 }
@@ -1647,6 +1800,166 @@ mod tests {
         k.cells[0].change_panel_type(PanelType::TurnTilt, &k.frame);
         assert_eq!(k.cells[0].sash_profile.as_ref().unwrap().id, profile.id);
         assert_eq!(k.cells[0].sash_depth, Some(87.));
+    }
+
+    #[test]
+    fn inward_window_articles_keep_stock_glass_and_section_dimensions_together() {
+        use crate::production::{compute_production_data, MemberType};
+
+        let template = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut frame = crate::grid::template_single_turn_tilt_sj(1200., 1500., &template);
+        for (id, width, day_offset, glass_width) in [
+            ("veka-103341", 84., 124., 992.),
+            ("veka-103340", 74., 114., 1012.),
+        ] {
+            if id == "veka-103340" {
+                let profile = ProfileRef { id: id.into(), name: "VEKA 103.340".into() };
+                // Sending the surrounding frame's dimensions must not resize the article.
+                frame.update_cell_sash_profile(0, profile, 73., 82., None).unwrap();
+            }
+            let sash = frame.cells[0].sash_profile.as_ref().unwrap();
+            assert_eq!(sash.id, id);
+            assert_eq!(frame.cells[0].sash_width, Some(width));
+            assert_eq!(frame.cells[0].sash_depth, Some(82.));
+            let geometry = crate::geometry::compute_2d_geometry(&frame);
+            let fit = geometry.cell_rects[0].fit.as_ref().unwrap();
+            assert_eq!(fit.day.x, day_offset);
+            assert_eq!(fit.system_seals.as_ref().unwrap().sealing_levels, Some(3));
+            assert_eq!(fit.glass.width, glass_width);
+            let lists = compute_production_data(&frame);
+            assert_eq!(lists.glass_list[0].width_mm, glass_width);
+            assert_eq!(lists.glass_list[0].height_mm, glass_width + 300.);
+            let top = lists.cut_list.iter().find(|p| p.member_type == MemberType::SashTop).unwrap();
+            assert!(top.profile_name.contains(&sash.name));
+            assert_eq!(top.net_length_mm, fit.day.width); // short points of the mitred rail
+            assert_eq!(fit.sash_outer.as_ref().unwrap().width, 1120.);
+            assert_eq!(top.gross_length_mm, 1132.); // long points, 2 × 4 mm weld and 4 mm kerf
+            assert_eq!(top.miter_left_deg, 45.);
+            assert_eq!(top.miter_right_deg, 45.);
+        }
+        let narrow = frame.cells[0].sash_profile.clone().unwrap();
+        frame.change_cell_opening(0, PanelType::Turn, Some(OpeningDirection::Outward)).unwrap();
+        assert_ne!(frame.cells[0].sash_profile.as_ref().unwrap().id, narrow.id);
+        assert!(frame.update_cell_sash_profile(0, narrow.clone(), 74., 82., None).is_err());
+        frame.change_cell_opening(0, PanelType::TurnTilt, Some(OpeningDirection::Right)).unwrap();
+        assert_eq!(frame.cells[0].sash_profile.as_ref().unwrap().id, "veka-103341");
+
+        // An older saved template can still refer to its original profile family.
+        let mut legacy = template;
+        legacy.raamhout_profile = legacy.stijl_profile.clone();
+        let legacy_frame = crate::grid::template_single_turn_tilt_sj(1200., 1500., &legacy);
+        assert_eq!(legacy_frame.cells[0].sash_profile.as_ref().unwrap().id, "veka-softline82");
+        assert_eq!(compute_production_data(&legacy_frame).glass_list[0].width_mm, 992.);
+    }
+
+    #[test]
+    fn old_system_splits_restore_article_width_without_changing_selected_dividers_or_part_ids() {
+        let sj = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut k = Kozijn::new_with_sjabloon("Rond", "R1", 1200., 1200., &sj);
+        k.frame.shape.shape_type = ShapeType::Round;
+        k.add_column(400.);
+        k.add_row(500.);
+        k.grid.columns[1].divider_profile = Some(ProfileRef::default_divider());
+        k.grid.columns[1].divider_width = None;
+        k.fit_grid_to_frame();
+        let chosen = ProfileRef { id: "test-t73".into(), name: "T73".into() };
+        k.update_member_profile("divider_h", Some(0), chosen, Some(73.), Some(82.)).unwrap();
+        let ratio = k.grid.columns[0].size / k.grid.columns[1].size;
+        let post_id = k.vertical_part_id(0);
+        let mut project = Project::new("Test", "");
+        project.kozijnen.push(k);
+        let loaded: Project = serde_json::from_value(serde_json::to_value(project).unwrap()).unwrap();
+        let k = &loaded.kozijnen[0];
+        assert_eq!(k.vertical_part_id(0), post_id);
+        assert_eq!(k.grid.columns[1].divider_profile.as_ref().unwrap().id, "veka-102310");
+        assert_eq!(k.grid.columns[1].divider_width, Some(94.));
+        assert_eq!(k.grid.rows[1].divider_profile.as_ref().unwrap().id, "test-t73");
+        assert_eq!(k.grid.rows[1].divider_width, Some(73.));
+        assert!((k.grid.columns[0].size / k.grid.columns[1].size - ratio).abs() < 1e-9);
+        let geometry = crate::geometry::compute_2d_geometry(k);
+        let last = &geometry.cell_rects[3].rect;
+        assert!((last.x + last.width - (1200. - sj.frame_width)).abs() < 1e-6);
+        assert!((last.y + last.height - (1200. - sj.frame_width)).abs() < 1e-6);
+        let once = serde_json::to_value(&loaded).unwrap();
+        let reloaded: Project = serde_json::from_value(once.clone()).unwrap();
+        assert_eq!(once, serde_json::to_value(&reloaded).unwrap());
+    }
+
+    #[test]
+    fn a_catalogue_t_section_keeps_its_dimensions_and_changes_article_with_the_frame() {
+        let veka = crate::template::get_sjabloon("kunststof-82-veka");
+        let cs77 = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let mut k = crate::grid::template_double_turn_tilt_sj(1200., 1500., &veka);
+        let before = serde_json::to_value(&k).unwrap();
+        assert!(k.update_member_profile("divider_v", Some(0), cs77.tussenstijl_profile.clone(), None, None).is_err());
+        assert!(k.update_member_profile("divider_v", Some(0), veka.tussenstijl_profile.clone(), Some(76.), None).is_err());
+        assert_eq!(serde_json::to_value(&k).unwrap(), before);
+        k.update_member_profile("divider_v", Some(0), veka.tussenstijl_profile, None, None).unwrap();
+        assert_eq!(k.grid.columns[1].divider_depth, Some(82.0));
+        k.apply_frame_profile(cs77.stijl_profile, Some(51.0), Some(68.0), None, Some("\"aluminum\"")).unwrap();
+        let d = &k.grid.columns[1];
+        let a = k.system_divider_article(Some(d), k.divider_face_width(true, 0)).unwrap();
+        assert_eq!(d.divider_profile.as_ref().unwrap().id, "reynaers-0083113");
+        assert_eq!((a.width, a.depth), (76.0, 68.0));
+    }
+
+    #[test]
+    fn cs77_functional_sightline_and_cuts_use_the_inward_sash_article() {
+        use crate::geometry::compute_2d_geometry;
+        use crate::production::{compute_production_data, MemberType};
+
+        let template = crate::template::get_sjabloon("aluminium-77-reynaers");
+        let single = crate::grid::template_single_turn_tilt_sj(1200., 1500., &template);
+        let cell = &single.cells[0];
+        assert_eq!(cell.sash_profile.as_ref().unwrap().id, "reynaers-0083102");
+        assert_eq!((cell.sash_width, cell.sash_depth), (Some(68.), Some(77.)));
+        let geometry = compute_2d_geometry(&single);
+        let fit = geometry.cell_rects[0].fit.as_ref().unwrap();
+        assert_eq!((fit.day.x, fit.day.y), (89., 89.)); // 51 frame + 5 joint + 33 visible sash
+        assert_eq!((fit.day.width, fit.day.height), (1022., 1322.));
+        assert_eq!(fit.sash_outer.as_ref().unwrap().width, 1158.);
+        let production = compute_production_data(&single);
+        let pane = &production.glass_list[0];
+        assert!(pane.production_ready, "{:?}", pane.production_issue);
+        assert_eq!((pane.width_mm, pane.height_mm), (1062., 1362.));
+        let rail = production.cut_list.iter().find(|cut| cut.member_type == MemberType::SashTop).unwrap();
+        assert!(rail.profile_name.contains("008.3102"));
+        assert_eq!((rail.net_length_mm, rail.gross_length_mm), (1022., 1162.));
+        assert_eq!((rail.miter_left_deg, rail.miter_right_deg), (45., 45.));
+
+        // A manually chosen article still belongs to its documented system,
+        // including when the desktop or web editor persisted its snapshot.
+        let pvc = crate::template::get_sjabloon("kunststof-82-veka");
+        let mut revision = crate::grid::template_single_turn_tilt_sj(1200., 1500., &pvc);
+        let narrow = ProfileRef { id: "veka-103340".into(), name: "VEKA 103.340".into() };
+        let stored = crate::glazing_fit::catalog_snapshot(&narrow.id, &Material::Pvc).cloned();
+        revision.update_cell_sash_profile(0, narrow.clone(), 74., 82., stored).unwrap();
+        revision.apply_frame_profile(template.stijl_profile.clone(), Some(51.), Some(68.), None, Some(r#""aluminum""#)).unwrap();
+        assert_eq!(revision.cells[0].sash_profile.as_ref().unwrap().id, "reynaers-0083102");
+        assert_eq!(compute_production_data(&revision).glass_list[0].width_mm, pane.width_mm);
+        assert!(revision.update_cell_sash_profile(0, narrow, 74., 82., None).is_err());
+
+        revision.change_cell_opening(0, PanelType::Turn, Some(OpeningDirection::Outward)).unwrap();
+        assert_eq!(revision.cells[0].sash_profile.as_ref().unwrap().id, "reynaers-cs77-standard");
+        assert_eq!(revision.cells[0].sash_width, Some(51.));
+
+        let mut double = crate::grid::template_double_turn_tilt_sj(1600., 1300., &template);
+        let geometry = compute_2d_geometry(&double);
+        let left = geometry.cell_rects[0].fit.as_ref().unwrap().sash_outer.as_ref().unwrap();
+        let right = geometry.cell_rects[1].fit.as_ref().unwrap().sash_outer.as_ref().unwrap();
+        assert_eq!(right.x - (left.x + left.width), 16.); // 76 mm divider, two 30 mm overlaps
+        assert!(compute_production_data(&double).glass_list.iter().all(|pane| pane.production_ready));
+        double.grid.columns[1].divider_width = Some(48.);
+        double.fit_grid_to_frame();
+        let geometry = compute_2d_geometry(&double);
+        for rect in &geometry.cell_rects {
+            let seals = rect.fit.as_ref().unwrap().system_seals.as_ref().unwrap();
+            assert_eq!(seals.sash_overlap_mm, Some(24.));
+            assert_eq!(seals.unmet_required_overlap_mm, Some(30.));
+        }
+        let production = compute_production_data(&double);
+        assert!(production.glass_list.iter().all(|pane| !pane.production_ready
+            && pane.production_issue.as_deref().unwrap().contains("30 mm")));
     }
 
     #[test]

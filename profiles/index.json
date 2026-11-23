@@ -23,6 +23,8 @@
       "icon": "layers",
       "files": [
         "aluminum/reynaers.json",
+        "aluminum/reynaers-sash.json",
+        "aluminum/reynaers-divider.json",
         "aluminum/schuco.json",
         "aluminum/generic.json"
       ]
@@ -34,6 +36,7 @@
       "files": [
         "pvc/gealan.json",
         "pvc/veka.json",
+        "pvc/veka-divider.json",
         "pvc/kommerling.json",
         "pvc/schuco-living.json",
         "pvc/aluplast.json",

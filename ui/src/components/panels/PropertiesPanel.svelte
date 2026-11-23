@@ -74,7 +74,7 @@
     if (!k || !geom) return null;
     if ((k.frame.shape?.shapeType ?? "rectangular") !== "rectangular" && !geom.curvedFrame) return null;
     const index = k.layout && leafId
-      ? layoutToRects(ensureIds(k.layout), geom.innerRect, k.frame.frameWidth).leaves.findIndex(l => l.node.id === leafId)
+      ? layoutToRects(ensureIds(k.layout), geom.innerRect, geom.layoutDividerWidth ?? k.frame.frameWidth).leaves.findIndex(l => l.node.id === leafId)
       : cellIndex;
     return geom.cellRects?.find(cr => cr.cellIndex === index);
   }
@@ -158,6 +158,11 @@
 
   function getMemberProfile(member) {
     if (!member || !$currentKozijn) return null;
+    if (member.type === "divider_v" || member.type === "divider_h") {
+      const piece = $currentGeometry?.curvedDividerTimber?.find(p =>
+        p.vertical === (member.type === "divider_v") && p.sourceIndex === member.index);
+      if (piece?.profile) return piece.profile;
+    }
     const override = getMemberOverride(member, $currentKozijn);
     if (override) return override;
     const frame = $currentKozijn.frame;
@@ -500,6 +505,9 @@
         {#if divider}
           <div class="divider-measures">
             <div class="field"><label>{$_("production.net")}</label><div class="value">{timberMm.format(divider.netLengthMm)} mm</div></div>
+            {#if divider.start.sawAllowanceMm > 0 || divider.end.sawAllowanceMm > 0}
+              <p class="joint-key">{$_("divider.sawExtent")}</p>
+            {/if}
             <div class="field-row">
               <div class="field"><label>{$_(divider.vertical ? "divider.top" : "divider.left")}</label><div class="value">
                 <DividerEndMeasure end={divider.start} vertical={divider.vertical} receiverName={receiverLabel($_, $currentGeometry, outgoing.find(j => j.side === "start"))} />
@@ -522,7 +530,7 @@
           </div>
         {/if}
         {#if divider && $currentKozijn.layout}
-          <div class="field"><label>{$_('member.profile')}</label><div class="value">{$currentKozijn.frame.profile.name}</div></div>
+          <div class="field"><label>{$_('member.profile')}</label><div class="value">{getMemberProfile($selectedMember)?.name}</div></div>
         {:else}
         <ProfileSelector
           label={$_('member.profile')}
@@ -560,7 +568,7 @@
           {/if}
           {#if profileDef?.ufValue}
             <div class="field">
-              <label>{$_('member.ufValue')}</label>
+              <label>{$_(profileDef.ufValueBasis === "system" ? "member.systemUfValue" : "member.ufValue")}</label>
               <div class="value">{profileDef.ufValue} W/m²K</div>
             </div>
           {/if}
@@ -568,6 +576,7 @@
             <div class="field">
               <label>{$_('member.crossSection')}</label>
               <ProfileCrossSection
+                profile={profileDef}
                 crossSection={profileDef.crossSection}
                 innerWalls={profileDef.innerWalls}
                 sponning={profileDef.sponning}
@@ -613,6 +622,7 @@
           <ProfileSelector
             label={$_(systemMaterial ? 'system.sashProfile' : 'props.sashProfile')}
             filter={systemMaterial && ["sliding", "lift_slide"].includes(selectedCell.panelType) ? "sliding_sash" : "sash"}
+            inwardWindow={["turn_tilt", "turn", "tilt"].includes(selectedCell.panelType) && selectedCell.openingDirection !== "outward"}
             material={systemMaterial}
             systemProfile={systemMaterial ? $currentKozijn.frame.profile : null}
             value={selectedCell.sashProfile}

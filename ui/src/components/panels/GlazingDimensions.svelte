@@ -15,6 +15,15 @@
   let clearance = $derived(system ? system.sashClearanceMm : fit.contours?.sashClearance);
   let minBearing = $derived(fit.beadPosition === "buiten" ? 15 : 13);
   let requiredDepth = $derived(fit.glassThickness + 2 * fit.sealThickness + minBearing);
+  let minGlass = $derived(fit.minGlassThickness);
+  let maxGlass = $derived(fit.maxGlassThickness);
+  let outsideRange = $derived((minGlass != null && fit.glassThickness + 1e-6 < minGlass) ||
+    (maxGlass != null && fit.glassThickness > maxGlass + 1e-6));
+  let thicknessRange = $derived.by(() => {
+    if (minGlass == null) return maxGlass == null ? null : `≤ ${number.format(maxGlass)}`;
+    if (maxGlass == null) return `≥ ${number.format(minGlass)}`;
+    return `${number.format(minGlass)}–${number.format(maxGlass)}`;
+  });
 </script>
 
 <div class="detail">
@@ -44,11 +53,18 @@
     <dt>{$_("glazing.daySize")}</dt><dd>{size(fit.day, fit.contours?.day)} mm</dd>
     <dt>{$_("glazing.rebateSize")}</dt><dd>{size(fit.rebate, fit.contours?.rebate)} mm</dd>
     <dt>{$_("glazing.cutSize")}</dt><dd>{size(fit.glass, fit.contours?.glass)} mm</dd>
+    {#if thicknessRange}
+      <dt>{$_("glazing.profileThicknessRange")}</dt>
+      <dd>{thicknessRange} mm</dd>
+    {/if}
     {#if arc && circleDiameter(fit.contours.glass) == null}
       <dt>{$_("glazing.glassArcRadius")}</dt><dd>{number.format(arc.radius)} mm</dd>
     {/if}
     <dt>{$_("glazing.edgeClearance")}</dt><dd>{number.format(fit.contours?.edgeClearance ?? (fit.glass.x - fit.rebate.x))} mm</dd>
   </dl>
+  {#if outsideRange}
+    <p>{$_("glazing.outsideProfileRange", { values: { thickness: number.format(fit.glassThickness) } })}</p>
+  {/if}
   {#if timber && fit.rebateDepth != null && requiredDepth > fit.rebateDepth + 0.001}
     <p>{$_("glazing.depthConflict", { values: { available: number.format(fit.rebateDepth), required: number.format(requiredDepth) } })}</p>
   {/if}

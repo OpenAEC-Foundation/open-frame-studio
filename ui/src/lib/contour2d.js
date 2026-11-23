@@ -16,6 +16,16 @@ export function contourPath(contour) {
   return path ? path + " Z" : "";
 }
 
+/** Dashed extent of the unmachined blank beyond a qualified straight end. */
+export function sawAllowancePath(piece, side) {
+  const end = piece?.[side];
+  if (!(end?.sawAllowanceMm > 0) || end.segments?.length !== 1 || end.segments[0].kind !== "line") return "";
+  const {from, to} = end.segments[0];
+  const extension = side === "start" ? -end.sawAllowanceMm : end.sawAllowanceMm;
+  const shifted = ([x, y]) => piece.vertical ? [x, y + extension] : [x + extension, y];
+  return `M${from} L${shifted(from)} L${shifted(to)} L${to}`;
+}
+
 export function openingPath(contour, rect) {
   if (contour) return contourPath(contour);
   return `M${rect.x},${rect.y}h${rect.width}v${rect.height}h${-rect.width}Z`;

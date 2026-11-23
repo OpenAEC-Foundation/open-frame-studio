@@ -10,13 +10,31 @@ use serde::{Deserialize, Serialize};
 pub struct Glaslat {
     pub position: GlaslatPosition,
     pub material: String,
-    /// Bead face width in mm (KVT minimum 13 inside / 15 outside).
+    /// Bead width in mm. Zero inherits the glazing profile dimension.
     pub width_mm: f64,
-    /// Bead height in mm (KVT minimum 17).
+    /// Bead height in mm. Zero inherits the glazing profile dimension.
     pub height_mm: f64,
     /// Mitred (verstek) corners — true = 45° mitres on all four corners.
     #[serde(default = "default_true")]
     pub mitered: bool,
+}
+
+impl Glaslat {
+    /// Older projects can retain an explicitly configured timber bead after a
+    /// switch to a clipped system. An unrecognised material can be a custom
+    /// supplier designation and is kept.
+    pub(crate) fn fits_carrier(&self, carrier: &crate::kozijn::Material) -> bool {
+        use crate::kozijn::Material;
+        if !carrier.is_profile_system() {
+            return true;
+        }
+        match self.material.trim().to_ascii_lowercase().as_str() {
+            "hout" | "wood" | "meranti" | "accoya" | "eiken" | "vuren" | "hout-aluminium" => false,
+            "aluminium" | "aluminum" | "alu" => matches!(carrier, Material::Aluminum),
+            "kunststof" | "pvc" | "pvc-u" => matches!(carrier, Material::Pvc),
+            _ => true,
+        }
+    }
 }
 
 fn default_true() -> bool {

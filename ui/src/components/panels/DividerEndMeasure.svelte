@@ -1,5 +1,6 @@
 <script>
   import { _, locale } from "svelte-i18n";
+  import VekaDividerEndSection from "./VekaDividerEndSection.svelte";
   let { end, vertical, angleDeg, radiusMm, receiverName = "" } = $props();
   let mm = $derived(new Intl.NumberFormat($locale || "nl", { maximumFractionDigits: 1 }));
   let angle = $derived(new Intl.NumberFormat($locale || "nl", { maximumFractionDigits: 2 }));
@@ -12,7 +13,11 @@
 
 <span class="end-angle">{angle.format(end?.angleDeg ?? angleDeg)}°</span>
 {#if radius != null}
-  <small>{$_("production.copeRadius", { values: { r: mm.format(radius) } })}</small>
+  <small>{$_(end?.machiningStatus ? "production.elevationRadius" : "production.copeRadius", { values: { r: mm.format(radius) } })}</small>
+{/if}
+{#if end?.machiningStatus}
+  <small class:joint-issue={end.sawAllowanceMm == null} class="machining">{$_("production.headMachining." + end.machiningStatus)}</small>
+  <VekaDividerEndSection {end} />
 {/if}
 {#each transitions as segment}
   {@const crossAxis = vertical ? 0 : 1}
@@ -35,6 +40,6 @@
 
 <style>
   small { display: block; font-size: 0.88em; margin-top: 2px; white-space: nowrap; color: var(--text-secondary); }
-  .transition, .joint-host, .joint-issue { white-space: normal; }
+  .transition, .joint-host, .joint-issue, .machining { white-space: normal; }
   .joint-issue { color: var(--amber); }
 </style>

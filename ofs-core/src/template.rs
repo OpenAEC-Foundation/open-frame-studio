@@ -70,6 +70,11 @@ impl Default for GlazingPreset {
 }
 
 /// Built-in sjablonen
+fn divider_article(id: &str) -> ProfileRef {
+    crate::profile::DividerArticle::CATALOG.iter().find(|a| a.id == id)
+        .expect("T-profile from built-in template must exist in the profile catalogue").reference()
+}
+
 pub fn builtin_sjablonen() -> Vec<KozijnSjabloon> {
     vec![
         KozijnSjabloon {
@@ -186,9 +191,9 @@ pub fn builtin_sjablonen() -> Vec<KozijnSjabloon> {
             stijl_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (kozijn)".into() },
             bovendorpel_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (kozijn)".into() },
             onderdorpel_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (onderdorpel)".into() },
-            tussenstijl_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (stijl)".into() },
-            tussendorpel_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (dorpel)".into() },
-            raamhout_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (vleugel)".into() },
+            tussenstijl_profile: divider_article("veka-102310"),
+            tussendorpel_profile: divider_article("veka-102310"),
+            raamhout_profile: ProfileRef { id: "veka-103341".into(), name: "VEKA 103.341 – raamvleugel 84 mm".into() },
             deurhout_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA Softline 82 MD (deur)".into() },
             glaslat_profile: ProfileRef { id: "veka-softline82".into(), name: "VEKA glaslat (clip)".into() },
             spouwlat_profile: ProfileRef { id: "veka-softline82".into(), name: "n.v.t. (kunststof)".into() },
@@ -232,16 +237,16 @@ pub fn builtin_sjablonen() -> Vec<KozijnSjabloon> {
         // material: Aluminum drives verstek (45°) hoeken in productie/geometrie.
         KozijnSjabloon {
             id: "aluminium-77-reynaers".into(),
-            name: "Aluminium 77mm Reynaers CS 77".into(),
-            description: "Aluminium kozijn, Reynaers ConceptSystem 77 (thermisch onderbroken). Verstek-hoeken.".into(),
+            name: "Reynaers CS 77 Functional".into(),
+            description: "Aluminium raam met een kader van 68 mm diep en een vleugel van 77 mm diep.".into(),
             material: Material::Aluminum,
             profile_series: "77".into(),
             stijl_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (kozijn)".into() },
             bovendorpel_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (kozijn)".into() },
             onderdorpel_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (onderdorpel)".into() },
-            tussenstijl_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (stijl)".into() },
-            tussendorpel_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (dorpel)".into() },
-            raamhout_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (vleugel)".into() },
+            tussenstijl_profile: divider_article("reynaers-0083113"),
+            tussendorpel_profile: divider_article("reynaers-0083113"),
+            raamhout_profile: ProfileRef { id: "reynaers-0083102".into(), name: "Reynaers 008.3102.XX – raamvleugel 68 mm".into() },
             deurhout_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers CS 77 (deur)".into() },
             glaslat_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "Reynaers glaslat (klik)".into() },
             spouwlat_profile: ProfileRef { id: "reynaers-cs77-standard".into(), name: "n.v.t. (aluminium)".into() },
@@ -249,9 +254,9 @@ pub fn builtin_sjablonen() -> Vec<KozijnSjabloon> {
             color_inside: "RAL9005".into(),
             color_outside: "RAL9005".into(),
             frame_width: 51.0,
-            frame_depth: 77.0,
-            sash_width: 51.0,
-            sash_depth: 87.0,
+            frame_depth: 68.0,
+            sash_width: 68.0,
+            sash_depth: 77.0,
         },
         KozijnSjabloon {
             id: "aluminium-75-schuco".into(),

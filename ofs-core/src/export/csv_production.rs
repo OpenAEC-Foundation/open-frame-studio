@@ -72,6 +72,7 @@ fn write_kortlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
     let mut w = create_csv(dir, "kortlijst.csv")?;
     let with_arcs = data.iter().flat_map(|p| &p.cut_list).any(|i| i.has_curved_cut());
     let with_heads = data.iter().flat_map(|p| &p.cut_list).any(|i| i.divider_start.is_some());
+    let with_system_heads = data.iter().flat_map(|p| &p.cut_list).any(|i| i.has_system_heads());
     let with_notches = data.iter().flat_map(|p| &p.cut_list).any(|i| !i.masonry_notches.is_empty());
     let with_joints = data.iter().any(|p| !p.divider_joints.is_empty());
     let arch_kinds: Vec<_> = super::arch_joints::KINDS.into_iter().filter(|&kind| super::arch_joints::present(data, kind)).collect();
@@ -81,7 +82,11 @@ fn write_kortlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
         headers[7] = "Zaaghoek_begin_graden_90_haaks";
         headers[8] = "Zaaghoek_eind_graden_90_haaks";
         headers.extend(["Buitenstraal_mm", "Buitenbooglengte_mm", "Hartstraal_mm", "Hartbooglengte_mm", "Buitenbooghoek_graden"]);
-        headers.extend(["Pasfrezen_begin_R_mm", "Pasfrezen_eind_R_mm"]);
+        headers.extend(if with_system_heads {
+            ["Kopradius_begin_in_aanzicht_mm", "Kopradius_eind_in_aanzicht_mm"]
+        } else {
+            ["Pasfrezen_begin_R_mm", "Pasfrezen_eind_R_mm"]
+        });
     }
     if with_heads {
         headers[7] = "Zaag_of_koordehoek_begin_graden_90_haaks";
@@ -106,6 +111,9 @@ fn write_kortlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
             ArchJointKind::Springing => ["Boogvoet_begin", "Boogvoet_eind"],
             ArchJointKind::RingSeam => ["Ringnaad_begin", "Ringnaad_eind"],
         });
+    }
+    if with_system_heads {
+        headers.extend(["Fabrikantbewerking_begin", "Fabrikantbewerking_eind", "PVC_zaagmaat_GLM_zonder_zaagsnede_mm"]);
     }
     write_row(&mut w, &headers)?;
     for prod in data {
@@ -168,6 +176,13 @@ fn write_kortlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
                     fields.push(prod.arch_joint_text(&item.piece_id, end, kind).unwrap_or_default());
                 }
             }
+            if with_system_heads {
+                for end in [&item.divider_start, &item.divider_end] {
+                    fields.push(end.as_ref().and_then(|e| e.machining_status)
+                        .map_or_else(String::new, |s| s.label_nl().to_owned()));
+                }
+                fields.push(item.system_saw_cut_mm().map(mm).unwrap_or_default());
+            }
             write_row(&mut w, &fields.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
     }
@@ -226,7 +241,8 @@ fn write_rubberlijst(data: &[ProductionData], dir: &str) -> Result<(), String> {
         for item in &prod.gasket_list {
             let length = if item.reference.is_some() { format!("{:.1}", item.length_mm) } else { format!("{:.0}", item.length_mm) };
             let quantity = if item.quantity > 0 { item.quantity.to_string() } else { String::new() };
-            let mut fields = vec![prod.kozijn_mark.as_str(), item.gasket_type.label_nl(), &length, &quantity];
+            let article = item.article_label_nl();
+            let mut fields = vec![prod.kozijn_mark.as_str(), &article, &length, &quantity];
             if refs {
                 fields.extend(item.reference.as_ref().map_or([""; 3], |r| [&r.piece_id, &r.profile_name, r.line.label_nl()]));
             }

@@ -37,8 +37,13 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: node scripts/check-version.mjs "$RELEASE_TAG"
+      - name: Test UI and 3D viewer
+        working-directory: ui
+        run: node --test
       - name: Test core
         run: cargo test -p ofs-core --lib --locked
+      - name: Check IFC panes with Open BIM Suite
+        uses: ./.github/actions/check-ifc-panes
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Build browser against current core

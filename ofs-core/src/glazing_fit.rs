@@ -29,6 +29,8 @@ pub struct GlazingFit {
     pub seal_thickness: f64,
     pub bead_height: f64,
     pub bead_width: f64,
+    #[serde(default)]
+    pub bead_material: String,
     pub bead_mitered: bool,
     pub bead_position: GlaslatPosition,
 }
@@ -40,9 +42,24 @@ pub struct SystemSeals {
     pub profile_name: String,
     pub hinged: bool,
     pub sealing_levels: Option<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closing_seals: Vec<ClosingSeal>,
     pub sash_overlap_mm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unmet_required_overlap_mm: Option<f64>,
     pub sash_clearance_mm: Option<f64>,
     pub meeting_gap_mm: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SealPosition { Inner, Middle, Outer }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClosingSeal {
+    pub position: SealPosition,
+    pub article_number: String,
 }
 
 pub(crate) fn compatible_profile(id: &str, material: &Material) -> bool {
@@ -111,6 +128,17 @@ fn catalog_system_id(id: &str) -> Option<&'static str> {
     SYSTEMS.binary_search_by(|row| row.0.cmp(id)).ok().map(|i| SYSTEMS[i].1)
 }
 
+/// Reference frame used for the documented inward-opening sash assembly.
+type InwardPair = (&'static str, &'static str, &'static [(SealPosition, &'static str)]);
+fn inward_window_pair(sash_id: &str) -> Option<&'static InwardPair> {
+    static PAIRS: &[InwardPair] = include!(concat!(env!("OUT_DIR"), "/inward_window_frames.rs"));
+    PAIRS.binary_search_by_key(&sash_id, |row| row.0).ok().map(|i| &PAIRS[i])
+}
+
+pub(crate) fn inward_window_frame(sash_id: &str) -> Option<&'static str> {
+    inward_window_pair(sash_id).map(|pair| pair.1)
+}
+
 /// System frame and sash articles may only be paired when their manufacturer
 /// and series are verified to match. Legacy/custom entries without a known
 /// series are accepted only when they are the same selected article.
@@ -121,6 +149,9 @@ pub fn system_profile_pair_compatible(
     sash_id: &str,
     sash_snapshot: Option<&ProfileSnapshot>,
 ) -> bool {
+    if let Some(frame) = inward_window_frame(sash_id) {
+        return frame_id == frame && catalog_snapshot(sash_id, material).is_some();
+    }
     if !material.is_profile_system() || frame_id == sash_id {
         return true;
     }
@@ -146,6 +177,31 @@ fn catalog_entry(id: &str) -> Option<&'static (&'static str, &'static str, Profi
         .map(|i| &TABLE[i])
 }
 
+/// Older snapshots store one range for the whole series. Apply any more
+/// restrictive frame/vent limit for the same article while retaining narrower
+/// saved limits. An explicitly saved role-specific range takes precedence.
+fn glazing_limits(
+    saved: Option<&ProfileSnapshot>,
+    catalog: Option<&ProfileSnapshot>,
+    vent: bool,
+) -> (Option<f64>, Option<f64>) {
+    let role = |s: &ProfileSnapshot| if vent {
+        (s.min_glass_thickness_vent, s.max_glass_thickness_vent)
+    } else {
+        (s.min_glass_thickness_fixed, s.max_glass_thickness_fixed)
+    };
+    let (saved_min, saved_max) = saved.map(role).unwrap_or_default();
+    let (article_min, article_max) = catalog.map(role).unwrap_or_default();
+    let min = saved.and_then(|s| s.min_glass_thickness)
+        .or_else(|| catalog.and_then(|s| s.min_glass_thickness));
+    let max = saved.and_then(|s| s.max_glass_thickness)
+        .or_else(|| catalog.and_then(|s| s.max_glass_thickness));
+    (
+        saved_min.or_else(|| min.into_iter().chain(article_min).reduce(f64::max)),
+        saved_max.or_else(|| max.into_iter().chain(article_max).reduce(f64::min)),
+    )
+}
+
 /// Resolve the layout leaf first. A grid cell supplies saved profile and bead
 /// settings only when the caller has established that its index matches.
 pub(crate) fn glazing_fits(
@@ -153,6 +209,7 @@ pub(crate) fn glazing_fits(
     frame: &Frame,
     cell: Option<&Cell>,
     vulling: Option<&Vakvulling>,
+    article_overlap_limit: Option<f64>,
 ) -> (Option<GlazingFit>, Option<GlazingFit>, Option<SashMount>) {
     let (sash, bead_side) = match vulling {
         Some(Vakvulling::Glas { glaslat }) => (None, glaslat.as_deref()),
@@ -253,6 +310,13 @@ pub(crate) fn glazing_fits(
     } else {
         frame_spec
     };
+    let glazing_catalog = if sash.is_some() {
+        sash_id.map_or(frame_catalog, |_| sash_catalog)
+    } else {
+        frame_catalog
+    };
+    let (min_glass_thickness, max_glass_thickness) =
+        glazing_limits(glazing_spec, glazing_catalog, sash.is_some());
     let positive = |v: &f64| v.is_finite() && *v > 0.0;
     let carrier = if sash.is_some() {
         sash_spec
@@ -305,12 +369,14 @@ pub(crate) fn glazing_fits(
         };
         system_overlap
             .unwrap_or(fallback)
-            .min(frame.frame_width.max(0.0) / 2.0)
+            .min(article_overlap_limit.unwrap_or(frame.frame_width / 2.0).max(0.0))
             .min(sash_width)
     } else {
         0.0
     };
-    let bead = cell.and_then(|c| c.glaslat.as_ref());
+    let bead = cell
+        .and_then(|c| c.glaslat.as_ref())
+        .filter(|b| b.fits_carrier(&frame.material));
     let bead_position = match bead_side {
         Some("binnen") => GlaslatPosition::Binnen,
         Some("buiten") => GlaslatPosition::Buiten,
@@ -348,6 +414,12 @@ pub(crate) fn glazing_fits(
         .or_else(|| frame_catalog.and_then(|p| p.meeting_gap))
         .filter(positive);
     let hinged = sash.as_ref().is_some_and(|s| s.hinged);
+    let closing_seals: Vec<_> = sash_id.and_then(inward_window_pair)
+        .filter(|pair| pair.1 == frame.profile.id
+            && sash.as_ref().is_some_and(|s| s.hinged && !s.outward && !s.door))
+        .into_iter().flat_map(|pair| pair.2.iter())
+        .map(|&(position, article)| ClosingSeal { position, article_number: article.to_owned() })
+        .collect();
     let system_seals = system.then(|| SystemSeals {
         profile_id: if frame_ok {
             frame.profile.id.clone()
@@ -360,13 +432,19 @@ pub(crate) fn glazing_fits(
             String::new()
         },
         hinged,
-        sealing_levels: frame_spec
+        sealing_levels: if !closing_seals.is_empty() { Some(closing_seals.len() as u8) } else { frame_spec
             .and_then(|p| p.sealing_levels)
             .or_else(|| frame_catalog.and_then(|p| p.sealing_levels))
             .filter(|v| {
-                hinged && (1..=3).contains(v) && sash_id.is_none_or(|id| id == frame.profile.id)
-            }),
+                hinged && (1..=3).contains(v) && sash_id.is_none_or(|id| {
+                    id == frame.profile.id || inward_window_frame(id) == Some(frame.profile.id.as_str())
+                })
+            }) },
+        closing_seals,
         sash_overlap_mm: system_overlap.filter(|_| hinged).map(|_| overlap),
+        unmet_required_overlap_mm: system_overlap.filter(|required| {
+            hinged && article_overlap_limit.is_some() && *required > overlap + 1e-6
+        }),
         sash_clearance_mm: known_clearance.filter(|_| hinged),
         meeting_gap_mm: known_gap.filter(|_| sash.as_ref().is_some_and(|s| s.pair)),
     });
@@ -391,12 +469,17 @@ pub(crate) fn glazing_fits(
             glass: day.inset(-cover),
             day,
             glass_thickness,
-            min_glass_thickness: glazing_spec.and_then(|s| s.min_glass_thickness),
-            max_glass_thickness: glazing_spec.and_then(|s| s.max_glass_thickness),
+            min_glass_thickness,
+            max_glass_thickness,
             rebate_depth,
             seal_thickness: 2.0,
             bead_height,
             bead_width,
+            bead_material: bead
+                .map(|b| b.material.trim())
+                .filter(|name| !name.is_empty())
+                .unwrap_or(frame.material.label_nl())
+                .to_owned(),
             bead_mitered: bead.map_or(true, |b| b.mitered),
             bead_position,
         }
@@ -434,5 +517,44 @@ pub(crate) fn glazing_fits(
         (Some(make_fit(left)), Some(make_fit(right)), mount)
     } else {
         (Some(make_fit(outer)), None, mount)
+    }
+}
+
+#[cfg(test)]
+mod glass_range_tests {
+    use super::*;
+    use crate::{kozijn::Kozijn, production::compute_production_data};
+
+    #[test]
+    fn fixed_and_opening_glass_follow_their_own_catalog_limits() {
+        let mut k = Kozijn::new("Glasbereik", "AL1", 1200., 1500.);
+        k.frame.material = Material::Aluminum;
+        k.frame.profile.id = "schuco-aws70hi".into();
+        // Projects from before the split stored the common 11–62 mm range.
+        k.frame.profile_snapshot = serde_json::from_str(r#"{"minGlassThickness":11,"maxGlassThickness":62}"#).unwrap();
+        for (thickness, fixed, vent) in [(11., true, false), (21., true, true),
+            (52., true, true), (53., false, true), (62., false, true), (63., false, false)] {
+            for (kind, expected) in [(PanelType::FixedGlass, fixed), (PanelType::TurnTilt, vent)] {
+                k.cells[0].change_panel_type(kind, &k.frame);
+                k.cells[0].glazing.thickness_mm = thickness;
+                let row = compute_production_data(&k).glass_list.remove(0);
+                assert_eq!(row.production_ready, expected, "{kind:?}, {thickness} mm: {:?}", row.production_issue);
+            }
+        }
+    }
+
+    #[test]
+    fn saved_narrower_article_and_explicit_role_ranges_survive_reopening() {
+        let catalog = catalog_snapshot("reynaers-masterline8", &Material::Aluminum);
+        let saved: ProfileSnapshot = serde_json::from_str(r#"{"maxGlassThickness":48}"#).unwrap();
+        assert_eq!(glazing_limits(Some(&saved), catalog, false).1, Some(48.));
+        let mut own = saved;
+        own.max_glass_thickness_fixed = Some(40.);
+        own.max_glass_thickness_vent = Some(46.);
+        let reopened = serde_json::from_value(serde_json::to_value(own).unwrap()).unwrap();
+        assert_eq!(glazing_limits(Some(&reopened), None, false).1, Some(40.));
+        assert_eq!(glazing_limits(Some(&reopened), None, true).1, Some(46.));
+        assert_eq!(glazing_limits(None, catalog, false).1, Some(62.));
+        assert_eq!(glazing_limits(None, catalog, true).1, Some(72.));
     }
 }

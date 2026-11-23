@@ -3,6 +3,8 @@
 **/*.rs.bk
 Cargo.lock
 !/Cargo.lock
+!/tools/ifc-ids-check/Cargo.lock
+/tools/ifc-ids-check/target/
 
 # Node / Vite
 ui/node_modules/

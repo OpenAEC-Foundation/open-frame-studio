@@ -1,3 +1,5 @@
+import { transformSectionSolids } from "./systemProfileSolids.js";
+
 /**
  * frame3d.js — pure 2D geometry helpers for the 3D kozijn builder
  * (Viewer3D.svelte).
@@ -269,6 +271,7 @@ function clipRing(ring, axis, bound, keepHigher) {
 function clipSection(section, axis, bound, keepHigher) {
   const clip = r => clipRing(r, axis, bound, keepHigher);
   return { ...section, id: [section.id, axis, bound, keepHigher].join("|"), pts: clip(section.pts),
+    solids: transformSectionSolids(section.solids, clip),
     innerWalls: (section.innerWalls || []).map(clip).filter(r => r.length >= 3) };
 }
 

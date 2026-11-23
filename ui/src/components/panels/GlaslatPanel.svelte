@@ -40,8 +40,9 @@
   let fit = $derived($currentGeometry?.cellRects?.find(c => c.cellIndex === $selectedCellIndex)?.fit);
   let gl = $derived({
     ...DEFAULT_GLASLAT,
-    ...(fit && { position: fit.beadPosition, heightMm: fit.beadHeight, widthMm: fit.beadWidth, mitered: fit.beadMitered }),
     ...(selectedCell?.glaslat || {}),
+    ...(fit && { position: fit.beadPosition, heightMm: fit.beadHeight, widthMm: fit.beadWidth, mitered: fit.beadMitered }),
+    ...(fit?.beadMaterial && { material: fit.beadMaterial }),
   });
   let material = $derived($currentKozijn?.frame?.material);
   let timber = $derived(typeof material === "object" || material === "wood_aluminum");
@@ -50,11 +51,19 @@
 
   async function update(patch) {
     if ($selectedCellIndex === null) return;
-    await updateCellGlaslat($selectedCellIndex, { ...gl, ...patch });
+    const saved = selectedCell?.glaslat;
+    // A change of side or corner treatment should not freeze clip width at
+    // today's glass thickness. A zero dimension uses the carrier profile.
+    const sameBead = saved && saved.material.trim() === gl.material;
+    const dimensions = timber ? {} : {
+      widthMm: sameBead ? saved.widthMm : 0,
+      heightMm: sameBead ? saved.heightMm : 0,
+    };
+    await updateCellGlaslat($selectedCellIndex, { ...gl, ...dimensions, ...patch });
   }
 </script>
 
-{#if visible && isGlazed}
+{#if visible && isGlazed && fit}
   <div class="glaslat-panel">
     <button class="collapse-header" onclick={() => (collapsed = !collapsed)}>
       <span class="collapse-icon" class:open={!collapsed}>&#9656;</span>
@@ -83,7 +92,7 @@
             <label>Breedte (mm)</label>
             <input
               type="number"
-              min="10"
+              min={timber ? 10 : 0.1} step="any"
               value={gl.widthMm}
               onchange={(e) => update({ widthMm: parseFloat(e.target.value) })}
             />
@@ -92,7 +101,7 @@
             <label>Hoogte (mm)</label>
             <input
               type="number"
-              min="10"
+              min={timber ? 10 : 0.1} step="any"
               value={gl.heightMm}
               onchange={(e) => update({ heightMm: parseFloat(e.target.value) })}
             />

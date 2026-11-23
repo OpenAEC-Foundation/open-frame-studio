@@ -9,6 +9,23 @@ pub struct ProfileRef {
     pub name: String,
 }
 
+pub(crate) struct DividerArticle {
+    pub id: &'static str,
+    pub frame: &'static str,
+    pub material: Material,
+    pub name: &'static str,
+    pub width: f64,
+    pub depth: f64,
+}
+
+impl DividerArticle {
+    pub(crate) const CATALOG: &'static [Self] = include!(concat!(env!("OUT_DIR"), "/divider_articles.rs"));
+
+    pub(crate) fn reference(&self) -> ProfileRef {
+        ProfileRef { id: self.id.into(), name: self.name.into() }
+    }
+}
+
 impl ProfileRef {
     pub fn default_frame() -> Self {
         Self {
@@ -49,6 +66,14 @@ pub struct ProfileSnapshot {
     pub min_glass_thickness: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_glass_thickness: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_glass_thickness_fixed: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_glass_thickness_fixed: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_glass_thickness_vent: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_glass_thickness_vent: Option<f64>,
     /// Visible face width of the system's standard mullion/transom article.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub divider_face_width: Option<f64>,
@@ -127,8 +152,7 @@ pub struct ProfileSnapshot {
 ///   profieldata te zetten.
 /// - Aluminium: systeem-specifiek 13,5-27 mm (Reynaers SlimLine 38: 13,5;
 ///   MasterLine 8: 27 per reynaers.com/ATG 3067). Fallback 25 mm = de
-///   bestaande bibliotheekwaarde voor CS 77 / Schüco AWS, waarvan de echte
-///   sponninghoogte niet publiek geverifieerd is.
+///   sponninghoogte van CS 77 Functional. Voor Schüco AWS is dit een aanname.
 pub fn norm_glasinval(material: &Material) -> f64 {
     match material {
         Material::Wood(_) | Material::WoodAluminum => 17.0,

@@ -31,6 +31,18 @@ cargo run -p ofs-core --example ifc_acceptance_fixture -- <uitvoermap>
 
 De unit- en parsercontroles toetsen structuur, maat en ID-stabiliteit. De [applicatieproef](ifc-acceptatie-revit-tekla-sketchup-hsbcad.md) toetst afzonderlijk of elk doelpakket het bestand op de juiste plek, schaal en objecthiërarchie ontvangt.
 
+### Hout-ILS-ruitregel in de releasetest
+
+Vanuit de projectmap draait dit commando dezelfde controle als GitHub.
+
+```sh
+node scripts/check-ifc-panes.mjs
+```
+
+De controle gebruikt Node.js en Rust. Cargo haalt bij de eerste uitvoering de vastgezette versie van de Open BIM Suite-validator op. Het proefproject bevat twee houten kozijnen met vaste beglazing. De validator leest de onderdelen-IFC vóór en na het toevoegen van een tussenstijl. Elke verwachte ruit moet als `IfcWindow` met `CPset_31.Onderdeel = Ruit` aanwezig zijn. De drie bestaande ruiten behouden hun GlobalId uit het OFS-model. De revisie krijgt één extra ruit met een eigen GlobalId. [IDS-regels voor de onderdelenproef](../ofs-core/examples/ifc/ruit-onderdelen.ids)
+
+Elke uitvoering schrijft verse IFC-bestanden, de verwachte GlobalIds en de JSON-rapporten naar een aparte map onder `target/ifc-ruitcontrole`. GitHub bewaart ze als artifact `ifc-ruitcontrole`. Bij afwijkingen vermeldt het rapport de betreffende IDS-regel en ruit-ID, of de ontbrekende ID. Dezelfde controle draait bij pull requests naar `main`, bij pushes naar `main` en vóór het aanmaken van een conceptrelease voor bèta of Latest. De UI-tests, waaronder de kijkkubus en de 3D-camera, draaien eveneens vóór de releasebuild.
+
 ## Gates vóór een publieke release of installer
 
 | Gate | Slaagvoorwaarde | Huidige stand |

@@ -42,7 +42,7 @@
     { id: "kunststof-82-veka", name: "Kunststof 82mm VEKA Softline", series: "82" },
     { id: "kunststof-88-kommerling", name: "Kunststof 88mm Kömmerling", series: "88" },
     // Aluminium — verstek-hoeken
-    { id: "aluminium-77-reynaers", name: "Aluminium 77mm Reynaers CS 77", series: "77" },
+    { id: "aluminium-77-reynaers", name: "Reynaers CS 77 Functional", series: "77" },
     { id: "aluminium-75-schuco", name: "Aluminium 75mm Schüco AWS 75.SI+", series: "75" },
   ];
   let customSjablonen = $state([]);

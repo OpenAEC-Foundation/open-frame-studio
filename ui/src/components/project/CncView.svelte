@@ -137,7 +137,8 @@
                 <span class="piece-id">{part.pieceId}</span>
                 <span class="part-detail">{part.profileName}</span>
                 <span class="part-detail">{$_("cnc.part.material")}: {part.material}</span>
-                <span class="part-detail">{$_("cnc.part.length")}: {part.archJoints?.some(j => j.pieceId === part.pieceId && j.issue) ? $_("archJoint.unknownGross") : fmt(part.grossLengthMm) + " mm"}</span>
+                <span class="part-detail">{$_("cnc.part.length")}: {part.grossLengthMm == null ? $_("archJoint.unknownGross") : fmt(part.grossLengthMm) + " mm"}</span>
+                {#if part.sawCutMm != null}<span class="part-detail">{$_("divider.cutAtGlm")} {fmt(part.sawCutMm)} mm</span>{/if}
                 <span class="op-count">{part.arc ? $_("cnc.arcPart") : `${part.operations?.length || 0} ${$_("cnc.part.operations")}`}</span>
                 {#if part.startCopeRadiusMm != null || part.endCopeRadiusMm != null}
                   <span class="part-detail">{$_("cnc.copedEnds")}</span>

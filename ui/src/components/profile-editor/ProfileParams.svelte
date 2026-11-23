@@ -176,7 +176,7 @@
   <div class="section">
     <div class="section-header">{$_("profileEditor.thermal") || "Thermisch"}</div>
     <label class="field">
-      <span class="label">Uf ({$_("profileEditor.ufUnit") || "W/m²K"})</span>
+      <span class="label">{profile.ufValueBasis === "system" ? $_("member.systemUfValue") : "Uf"} ({$_("profileEditor.ufUnit") || "W/m²K"})</span>
       <input type="number" value={profile.ufValue || 0} onchange={updateUf}
         min="0.5" max="5.0" step="0.1" />
     </label>

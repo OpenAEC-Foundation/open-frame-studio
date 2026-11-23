@@ -393,8 +393,7 @@ impl crate::kozijn::Kozijn {
         self.check_hardware_cell(index)?;
         let c = &mut self.cells[index];
         let previous = c.opening_direction;
-        c.change_panel_type(panel, &self.frame);
-        c.opening_direction = direction;
+        c.change_panel_opening(panel, direction, &self.frame);
         if self.frame.material.is_profile_system() {
             if let Some(set) = c.hardware_set.as_mut().filter(|s| !s.auto_selected) {
                 if set.supports_motion(panel) {

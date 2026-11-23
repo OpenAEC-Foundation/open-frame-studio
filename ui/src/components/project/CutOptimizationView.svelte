@@ -2,19 +2,22 @@
   import { _ } from "svelte-i18n";
   import { onMount } from "svelte";
   import { invoke } from "../../lib/tauri.js";
-  import { toast } from "../../stores/toast.js";
 
   let result = null;
   let loading = false;
+  let failed = false;
   let stockLength = 5800;
 
   onMount(optimize);
 
   async function optimize() {
     loading = true;
+    failed = false;
     try {
       result = await invoke("optimize_project_cut_list", { stockLengthMm: stockLength });
     } catch (e) {
+      failed = true;
+      result = null;
       console.error("Zaagoptimalisatie mislukt:", e);
     }
     loading = false;
@@ -43,17 +46,18 @@
         <input type="number" bind:value={stockLength} min="1000" max="12000" step="100" />
         <span>mm</span>
       </label>
-      <button class="action-btn primary" onclick={optimize}>Optimaliseren</button>
+      <button class="action-btn primary" onclick={optimize} disabled={loading}>Optimaliseren</button>
     </div>
   </div>
 
+  {#if result}
   <div class="summary">
     <div class="summary-card">
       <span class="summary-label">Aantal staven</span>
       <span class="summary-value">{totalBars}</span>
     </div>
     <div class="summary-card">
-      <span class="summary-label">Verschnitt</span>
+      <span class="summary-label">Restpercentage</span>
       <span class="summary-value" class:waste-good={wastePercent < 10} class:waste-ok={wastePercent >= 10 && wastePercent < 20} class:waste-poor={wastePercent >= 20}>
         {wastePercent.toFixed(1)}%
       </span>
@@ -63,6 +67,7 @@
       <span class="summary-value">{totalWasteMm.toFixed(0)} mm</span>
     </div>
   </div>
+  {/if}
 
   {#if curvedPieceIds.length}
     <p class="curved-pieces"><strong>{$_("production.bentStock")}</strong> · {curvedPieceIds.join(", ")}</p>
@@ -75,6 +80,8 @@
   {/if}
   {#if loading}
     <p class="hint">Optimaliseren...</p>
+  {:else if failed}
+    <p class="hint" role="alert">De zaagoptimalisatie is niet beschikbaar. Probeer het opnieuw.</p>
   {:else if bars.length === 0 && curvedPieceIds.length === 0 && unresolvedPieceIds.length === 0 && oversizePieceIds.length === 0}
     <p class="hint">Geen zaaggegevens beschikbaar. Voeg kozijnen toe aan het project.</p>
   {:else}
@@ -83,7 +90,12 @@
         {@const length = bar.stockLengthMm ?? stockLength}
         {@const waste = bar.remainingMm ?? bar.waste ?? 0}
         <div class="bar-row">
-          <span class="bar-label">Staaf {barIndex + 1}<small>{bar.profileName || 'Profiel'} · {bar.material || 'materiaal'}</small></span>
+          <span class="bar-label">
+            Staaf {barIndex + 1}<small>{bar.profileName || 'Profiel'} · {bar.material || 'materiaal'}</small>
+            {#if bar.colors}
+              <small class="stock-colors">{$_("props.inside")} {bar.colors.inside || "—"} · {$_("props.outside")} {bar.colors.outside || "—"}</small>
+            {/if}
+          </span>
           <div class="bar-visual">
             {#each (bar.cuts || []) as cut, cutIndex}
               {@const cutLength = cut.lengthMm ?? cut.length}
@@ -136,6 +148,7 @@
   .bar-row { display: flex; align-items: center; gap: var(--sp-2); }
   .bar-label { font-size: 11px; font-weight: 600; color: var(--text-muted); width: 180px; flex-shrink: 0; }
   .bar-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 400; }
+  .bar-label small.stock-colors { white-space: normal; }
   .bar-visual { flex: 1; display: flex; height: 28px; border-radius: 3px; overflow: hidden; background: var(--bg-surface-alt); border: 1px solid var(--border-color, #333); }
   .cut-block { display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .waste-block { display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.05) 3px, rgba(255,255,255,0.05) 6px); overflow: hidden; }

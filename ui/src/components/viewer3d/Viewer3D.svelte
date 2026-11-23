@@ -5,6 +5,8 @@
   import { buildFrameGroup } from "./frameGroup.js";
   import { inspectTimberJoints } from "./tenonMesh.js";
   import { sectionCapsAt } from "./systemSection.js";
+  import ViewCube from "./ViewCube.svelte";
+  import { VIEW_FOV, HOME_DIRECTION, anglesForDirection, orbitOrientation, dragOrbit, snapOrbit, fitDistance, applyViewerCamera } from "./viewerCamera.js";
   import { _ } from "svelte-i18n";
 
   let { visible = true } = $props();
@@ -24,6 +26,7 @@
   function toggleJoinery() {
     inspecting = !inspecting;
     if (kozijnGroup) inspectTimberJoints(kozijnGroup, inspecting, $currentKozijn?.frame?.frameDepth || 114);
+    requestRender();
   }
 
   function showSection(active, height) {
@@ -38,18 +41,21 @@
   function toggleSection() {
     sectionOn = !sectionOn;
     showSection(sectionOn,$currentKozijn.frame.outerHeight);
+    requestRender();
   }
 
   // Three.js objects
-  let renderer, scene, camera;
+  let renderer, scene, camera, perspectiveCamera, orthoCamera;
   let animationId;
   let kozijnGroup = null;
 
-  // Camera orbit state
-  let isDragging = false;
-  let previousMouse = { x: 0, y: 0 };
-  let spherical = { theta: Math.PI / 4, phi: Math.PI / 3, radius: 2500 };
-  let target = { x: 0, y: 0, z: 0 };
+  let angles = anglesForDirection(HOME_DIRECTION);
+  let orientation = $state.raw(orbitOrientation(angles));
+  let orthographic = $state(false);
+  let activeSnap, pointer;
+  let distance = 2500, aspect = 1, boundRadius = 1000;
+  let target = [0, 0, 0];
+  let framedId, autoFit = true;
 
   async function loadThreeJS() {
     try {
@@ -70,15 +76,8 @@
   function initScene() {
     if (!THREE || !canvas || !container) return;
 
-    // WebGL detection
-    const testCtx = canvas.getContext('webgl2') || canvas.getContext('webgl');
-    if (!testCtx) {
-      console.error("WebGL not available in this webview");
-      loadError = true;
-      return;
-    }
-
-    // Renderer
+    // WebGL context options are fixed on the first call to getContext.
+    // Let Three request the antialiased context and report initialization errors.
     renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -96,8 +95,10 @@
     if (typeof window !== "undefined") window.__OFS_SCENE__ = scene;
 
     // Camera
-    camera = new THREE.PerspectiveCamera(45, 1, 1, 50000);
-    updateCameraPosition();
+    perspectiveCamera = new THREE.PerspectiveCamera(VIEW_FOV);
+    orthoCamera = new THREE.OrthographicCamera();
+    camera = perspectiveCamera;
+    updateCamera();
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.5);
@@ -126,23 +127,58 @@
     // Initial sizing
     handleResize();
 
-    // Render loop
-    function animate() {
-      animationId = requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
+    renderer.domElement.addEventListener('webglcontextrestored', requestRender);
   }
 
-  function updateCameraPosition() {
+  function requestRender() {
+    if (renderer && !animationId) animationId = requestAnimationFrame(renderFrame);
+  }
+
+  function renderFrame(now) {
+    animationId = null;
+    if (activeSnap) {
+      const progress = (now - activeSnap.start) / 240;
+      setAngles(snapOrbit(activeSnap.from, activeSnap.to, progress), false);
+      if (progress >= 1) activeSnap = null;
+    }
+    renderer.render(scene, camera);
+    if (activeSnap) requestRender();
+  }
+
+  function updateCamera(redraw = true) {
     if (!camera) return;
-    const { theta, phi, radius } = spherical;
-    camera.position.set(
-      target.x + radius * Math.sin(phi) * Math.cos(theta),
-      target.y + radius * Math.cos(phi),
-      target.z + radius * Math.sin(phi) * Math.sin(theta)
-    );
-    camera.lookAt(target.x, target.y, target.z);
+    applyViewerCamera(camera, orientation, target, distance, aspect, boundRadius);
+    if (redraw) requestRender();
+  }
+
+  function setAngles(next, redraw = true) {
+    angles = next;
+    orientation = orbitOrientation(next);
+    updateCamera(redraw);
+  }
+
+  function selectView(direction) {
+    const to = anglesForDirection(direction);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      activeSnap = null;
+      setAngles(to);
+    } else {
+      activeSnap = { from: angles, to, start: performance.now() };
+      requestRender();
+    }
+  }
+
+  function homeView() {
+    autoFit = true;
+    distance = fitDistance(boundRadius, aspect);
+    updateCamera();
+    selectView(HOME_DIRECTION);
+  }
+
+  function toggleProjection() {
+    orthographic = !orthographic;
+    camera = orthographic ? orthoCamera : perspectiveCamera;
+    updateCamera();
   }
 
   function handleResize() {
@@ -151,49 +187,47 @@
     const h = container.clientHeight;
     if (w === 0 || h === 0) return;
     renderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+    aspect = w / h;
+    if (autoFit) distance = fitDistance(boundRadius, aspect);
+    updateCamera();
   }
 
-  // --- Mouse orbit controls ---
-
-  function onMouseDown(e) {
-    if (e.button === 0) {
-      isDragging = true;
-      previousMouse = { x: e.clientX, y: e.clientY };
-      e.preventDefault();
-    }
+  function orbitBy(dx, dy) {
+    activeSnap = null;
+    setAngles(dragOrbit(angles, dx, dy));
   }
 
-  function onMouseMove(e) {
-    if (!isDragging) return;
-    const dx = e.clientX - previousMouse.x;
-    const dy = e.clientY - previousMouse.y;
-    previousMouse = { x: e.clientX, y: e.clientY };
-
-    spherical.theta -= dx * 0.005;
-    spherical.phi -= dy * 0.005;
-    // Clamp phi to avoid flipping
-    spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
-
-    updateCameraPosition();
+  function onPointerDown(e) {
+    if (e.button !== 0 || pointer) return;
+    activeSnap = null;
+    pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
   }
 
-  function onMouseUp() {
-    isDragging = false;
+  function onPointerMove(e) {
+    if (e.pointerId !== pointer?.id) return;
+    orbitBy(e.clientX - pointer.x, e.clientY - pointer.y);
+    pointer.x = e.clientX;
+    pointer.y = e.clientY;
+  }
+
+  function onPointerEnd(e) {
+    if (e.pointerId === pointer?.id) pointer = null;
   }
 
   function onWheel(e) {
     e.preventDefault();
-    spherical.radius *= e.deltaY > 0 ? 1.1 : 0.9;
-    spherical.radius = Math.max(200, Math.min(15000, spherical.radius));
-    updateCameraPosition();
+    if (!e.deltaY) return;
+    autoFit = false;
+    const fitted = fitDistance(boundRadius, aspect);
+    distance = Math.max(fitted / 100, Math.min(fitted * 15, distance * 1.1 ** Math.sign(e.deltaY)));
+    updateCamera();
   }
 
   // --- 3D Kozijn Builder ---
 
-  function build3DKozijn(scene, kozijn, geometry, profiles) {
-    // Remove previous kozijn group
+  function clearFrame() {
     if (kozijnGroup) {
       scene.remove(kozijnGroup);
       kozijnGroup.traverse((child) => {
@@ -206,11 +240,20 @@
           }
         }
       });
+      kozijnGroup = null;
     }
-
     sectionCaps = null;
     renderer.clippingPlanes = [];
-    if (!kozijn || !geometry) return;
+  }
+
+  function build3DKozijn(scene, kozijn, geometry, profiles) {
+    clearFrame();
+    if (!kozijn || !geometry) {
+      framedId = null;
+      activeSnap = null;
+      requestRender();
+      return;
+    }
 
     kozijnGroup = buildFrameGroup(THREE, kozijn, geometry, profiles);
 
@@ -227,11 +270,14 @@
     if (untrack(()=>sectionOn) && ["aluminum","pvc"].includes(kozijn.frame.material)) showSection(true,kozijn.frame.outerHeight);
     if (untrack(() => inspecting)) inspectTimberJoints(kozijnGroup, true, kozijn?.frame?.frameDepth || 114);
 
-    // Adjust camera distance based on kozijn size
-    const maxDim = Math.max(size.x, size.y, size.z);
-    spherical.radius = maxDim * 1.8;
-    target = { x: 0, y: size.y / 2, z: 0 };
-    updateCameraPosition();
+    if (kozijn.id !== framedId) {
+      framedId = kozijn.id;
+      autoFit = true;
+    }
+    boundRadius = Math.max(1, size.length() / 2);
+    if (autoFit) distance = fitDistance(boundRadius, aspect);
+    target = [0, size.y / 2, 0];
+    updateCamera();
   }
 
   // --- Debug hook (numerieke verificatie 2D↔3D) ---
@@ -268,7 +314,8 @@
         });
       });
     }
-    return { meshes };
+    return { meshes, camera: camera && { position: camera.position.toArray(), up: camera.up.toArray(),
+      target: [...target], distance, projection: camera.isOrthographicCamera ? 'orthographic' : 'perspective' } };
   }
 
   // --- Reactive rebuild ---
@@ -276,7 +323,7 @@
   // without adding vertices or changing its id.
   $effect(() => {
     const k = $currentKozijn, g = $currentGeometry, profiles = $allProfiles;
-    if (scene && k && g) build3DKozijn(scene, k, g, profiles || []);
+    if (renderer) untrack(() => build3DKozijn(scene, k, g, profiles || []));
   });
 
   // --- Lifecycle ---
@@ -294,9 +341,10 @@
   $effect(() => {
     if (visible && threeLoaded && container && canvas && !renderer) {
       try {
-        initScene();
+        untrack(initScene);
+        if (!renderer) return;
         if ($currentKozijn && $currentGeometry) {
-          build3DKozijn(scene, $currentKozijn, $currentGeometry, $allProfiles || []);
+          untrack(() => build3DKozijn(scene, $currentKozijn, $currentGeometry, $allProfiles || []));
         }
         resizeObserver = new ResizeObserver(() => handleResize());
         resizeObserver.observe(container);
@@ -315,20 +363,10 @@
     if (animationId) cancelAnimationFrame(animationId);
     if (resizeObserver) resizeObserver.disconnect();
     if (renderer) {
+      renderer.domElement.removeEventListener('webglcontextrestored', requestRender);
+      clearFrame();
       renderer.dispose();
       renderer = null;
-    }
-    if (kozijnGroup) {
-      kozijnGroup.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
     }
     scene = null;
     camera = null;
@@ -339,11 +377,6 @@
   <div
     class="viewer3d-container"
     bind:this={container}
-    onmousedown={onMouseDown}
-    onmousemove={onMouseMove}
-    onmouseup={onMouseUp}
-    onmouseleave={onMouseUp}
-    onwheel={(e) => { e.preventDefault(); onWheel(e); }}
     role="region"
     aria-label="3D kozijn preview"
   >
@@ -362,7 +395,11 @@
       </div>
     {/if}
 
-    <canvas bind:this={canvas}></canvas>
+    <canvas bind:this={canvas} onpointerdown={onPointerDown} onpointermove={onPointerMove}
+      onpointerup={onPointerEnd} onlostpointercapture={onPointerEnd} onpointercancel={onPointerEnd} onwheel={onWheel}></canvas>
+    {#if !loading && !loadError && $currentKozijn}
+      <ViewCube {orientation} {orthographic} onselect={selectView} onorbit={orbitBy} onhome={homeView} ontoggleprojection={toggleProjection} />
+    {/if}
     {#if hasJoints && !loading && !loadError}
       <button class="joint-view" aria-pressed={inspecting} onmousedown={(e) => e.stopPropagation()} onclick={toggleJoinery}>
         {$_("viewer3d.inspectTenons")}
@@ -396,9 +433,12 @@
     display: block;
     width: 100%;
     height: 100%;
+    touch-action: none;
+    cursor: grab;
   }
+  canvas:active { cursor: grabbing; }
   .joint-view {
-    position: absolute; top: 12px; right: 12px;
+    position: absolute; top: 12px; left: 12px;
     padding: 6px 10px; border: 1px solid var(--border-color);
     border-radius: 4px; background: var(--bg-surface); color: var(--text-primary);
     cursor: pointer;

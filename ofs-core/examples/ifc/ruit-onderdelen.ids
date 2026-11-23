@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS">
+  <info>
+    <title>Hout-ILS ruit in de OFS-onderdelenproef</title>
+    <description>De twee proefkozijnen bevatten uitsluitend vaste beglazing. Elke IfcWindow in deze onderdelenexport vertegenwoordigt één ruit.</description>
+  </info>
+  <specifications>
+    <specification name="Iedere als ruit gemerkte component is een IfcWindow" identifier="OFS-RUIT-KLASSE" ifcVersion="IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <property dataType="IFCLABEL">
+          <propertySet><simpleValue>CPset_31</simpleValue></propertySet>
+          <baseName><simpleValue>Onderdeel</simpleValue></baseName>
+          <value><simpleValue>Ruit</simpleValue></value>
+        </property>
+      </applicability>
+      <requirements>
+        <entity><name><simpleValue>IFCWINDOW</simpleValue></name></entity>
+      </requirements>
+    </specification>
+    <specification name="Iedere IfcWindow in de onderdelenproef heeft Onderdeel Ruit" identifier="OFS-RUIT-ONDERDEEL" ifcVersion="IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWINDOW</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCLABEL" cardinality="required">
+          <propertySet><simpleValue>CPset_31</simpleValue></propertySet>
+          <baseName><simpleValue>Onderdeel</simpleValue></baseName>
+          <value><simpleValue>Ruit</simpleValue></value>
+        </property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>

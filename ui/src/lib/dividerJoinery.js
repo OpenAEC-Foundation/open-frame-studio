@@ -26,7 +26,16 @@ export function jointMemberLabel(t, geometry, member) {
 }
 
 export function cutRows(production) {
-  const rows = (production.cutList ?? []).map(cut => ({ ...cut, mark: production.kozijnMark, mortises: [] }));
+  const rows = (production.cutList ?? []).map(cut => {
+    const row = { ...cut, mark: production.kozijnMark, mortises: [] };
+    const ends = [cut.dividerStart, cut.dividerEnd];
+    if (ends.some(end => ["drawing_required", "section_drawing_required"].includes(end?.machiningStatus))) {
+      row.unknownGross = true;
+    } else if (ends.every(end => end?.sawAllowanceMm != null)) {
+      row.systemSawCutMm = cut.netLengthMm + ends[0].sawAllowanceMm + ends[1].sawAllowanceMm;
+    }
+    return row;
+  });
   const byId = new Map(rows.map(row => [row.pieceId, row]));
   for (const joint of production.dividerJoints ?? []) {
     const source = byId.get(joint.pieceId);

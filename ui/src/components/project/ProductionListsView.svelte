@@ -4,7 +4,7 @@
   import { invoke } from "../../lib/tauri.js";
   import { productionDataProject, loadProductionDataProject } from "../../stores/production.js";
   import { vliesgevels, loadVliesgevels } from "../../stores/vliesgevel.js";
-  import { memberLabel, gasketLabel } from "../../lib/labels.js";
+  import { cutMemberLabel, gasketLabel } from "../../lib/labels.js";
   import DividerEndMeasure from "../panels/DividerEndMeasure.svelte";
   import ArchEndMeasure from "../panels/ArchEndMeasure.svelte";
   import ReceivedMortises from "../panels/ReceivedMortises.svelte";
@@ -157,7 +157,7 @@
               <td>{item.mark}</td>
               <td>{item.pieceId}</td>
               <td>
-                {memberLabel($_, item.memberType, item.profileSide)}
+                {cutMemberLabel($_, item)}
                 {#if item.mortises.length}
                   <ReceivedMortises entries={item.mortises.map(m => ({ tenon: m.tenon, label: m.id, endLabel: m.corner == null ? endLabel($_, m.vertical, m.side) : archJointLabel($_, m.corner, m.kind) }))} />
                 {/if}
@@ -174,7 +174,11 @@
               <td>{item.profileName}</td>
               <td>{item.material}</td>
               <td class="num">{hasTimberArcs ? mm.format(item.netLengthMm) : Math.round(item.netLengthMm)}</td>
-              <td class="num">{item.unknownGross ? $_("archJoint.unknownGross") : hasTimberArcs ? mm.format(item.grossLengthMm) : Math.round(item.grossLengthMm)}</td>
+              <td class="num">{item.unknownGross ? $_("archJoint.unknownGross") : hasTimberArcs ? mm.format(item.grossLengthMm) : Math.round(item.grossLengthMm)}
+                {#if item.systemSawCutMm != null}
+                  <small>{$_("production.glmCut", { values: { n: mm.format(item.systemSawCutMm) } })}</small>
+                {/if}
+              </td>
               {#if hasTimberArcs}
                 <td class="num">{#if item.arc}{mm.format(item.arc.outerRadiusMm)}<small>{$_('production.centerline')} {mm.format(item.arc.centerlineRadiusMm)}</small>{:else}—{/if}</td>
                 <td class="num">{#if item.arc}{mm.format(item.arc.outerLengthMm)}<small>{$_('production.centerline')} {mm.format(item.arc.centerlineLengthMm)}</small>{:else}—{/if}</td>
@@ -220,8 +224,8 @@
                   <span class="glass-warning" title={item.productionIssue}> ⚠ {item.productionIssue}</span>
                 {/if}
               </td>
-              <td class="num">{item.cutContour ? mm.format(item.widthMm) : Math.round(item.widthMm)}</td>
-              <td class="num">{item.cutContour ? mm.format(item.heightMm) : Math.round(item.heightMm)}</td>
+              <td class="num">{mm.format(item.widthMm)}</td>
+              <td class="num">{mm.format(item.heightMm)}</td>
               <td class="num">{item.thicknessMm}</td>
               <td class="num">{item.ugValue.toFixed(1)}</td>
               <td class="num">{item.areaM2.toFixed(2)} m&sup2;</td>
@@ -289,7 +293,7 @@
           {#each allGasket as item}
             <tr>
               <td>{item.mark}</td>
-              <td>{gasketLabel($_, item.gasketType)}</td>
+              <td>{gasketLabel($_, item.gasketType)} {item.reference?.articleNumber || ''}</td>
               <td class="num">{item.reference ? mm.format(item.lengthMm) : Math.round(item.lengthMm)}</td>
               <td class="num">{item.quantity || '—'}</td>
               {#if hasSealReferences}
@@ -333,17 +337,21 @@
               <td>{item.mark}</td>
               <td>{item.pieceId} · {item.position}</td>
               <td>{item.material}</td>
-              <td class="num">{Math.round(item.widthMm)}</td>
-              <td class="num">{Math.round(item.heightMm)}</td>
-              <td class="num">{item.contourRuns?.length ? mm.format(item.totalLengthMm) : Math.round(item.totalLengthMm)}</td>
-              <td class="num">{item.contourRuns?.length ? "—" : item.mitered ? "45°" : "90°"}</td>
-              <td class="num">{item.quantity}</td>
-              {#if hasBentBeads}
-                <td class="shape-cell">
-                  {#each item.contourRuns || [] as run}
-                    <div>{mm.format(run.lengthMm)} mm {run.radiusMm == null ? "" : `(R ${mm.format(run.radiusMm)})`}</div>
-                  {/each}
-                </td>
+              {#if item.productionIssue}
+                <td class="glass-warning" colspan={hasBentBeads ? 6 : 5}>⚠ {item.productionIssue}</td>
+              {:else}
+                <td class="num">{mm.format(item.widthMm)}</td>
+                <td class="num">{mm.format(item.heightMm)}</td>
+                <td class="num">{mm.format(item.totalLengthMm)}</td>
+                <td class="num">{item.contourRuns?.length ? "—" : item.mitered ? "45°" : "90°"}</td>
+                <td class="num">{item.quantity}</td>
+                {#if hasBentBeads}
+                  <td class="shape-cell">
+                    {#each item.contourRuns || [] as run}
+                      <div>{mm.format(run.lengthMm)} mm {run.radiusMm == null ? "" : `(R ${mm.format(run.radiusMm)})`}</div>
+                    {/each}
+                  </td>
+                {/if}
               {/if}
             </tr>
           {/each}
@@ -396,7 +404,7 @@
                   <tr>
                     <td>{vgProduction.mark}</td>
                     <td>{item.pieceId}</td>
-                    <td>{memberLabel($_, item.memberType)}</td>
+                    <td>{cutMemberLabel($_, item)}</td>
                     <td>{item.profileName}</td>
                     <td>{item.material}</td>
                     <td class="num">{Math.round(item.netLengthMm)}</td>

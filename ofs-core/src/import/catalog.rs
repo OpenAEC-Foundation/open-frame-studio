@@ -307,7 +307,7 @@ fn get_float(row: &HashMap<String, String>, key: &str, default: f64) -> f64 {
 /// (KVT-tekening 14.01; DTS-folder); voor PVC de Glasfalzhöhe — 28 mm (VEKA
 /// TPI Softline 82 MD 07/2020: "Glasfalzhöhe 28"; Gealan S 9000
 /// STOLMA-sneden idem); voor aluminium de sponninghoogte van het systeem —
-/// 25 mm (bestaande bibliotheekwaarde CS 77/Schüco AWS, unverified-vlag,
+/// 25 mm (CS 77 Functional; voor andere series een voorlopige waarde,
 /// zie R1). Onbekend materiaal krijgt 0 = "niet gespecificeerd"
 /// (bibliotheekconventie): consumenten vallen dan per materiaal terug op de
 /// R1-normwaarden (`profile::norm_glasinval`) in plaats van op een gegokte

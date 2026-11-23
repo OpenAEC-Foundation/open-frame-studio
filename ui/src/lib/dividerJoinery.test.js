@@ -2,6 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { archJointLabel, cutRows, jointPaths, ringSeamCorners, selectedJoints } from "./dividerJoinery.js";
 
+test("the cut list uses both manufacturer's allowances before displaying a PVC saw length", () => {
+  const glm = {machiningStatus: "veka_md_glm", sawAllowanceMm: 25};
+  const arc = {machiningStatus: "drawing_required", radiusMm: 527};
+  const unknown = {machiningStatus: "section_drawing_required"};
+  const [straight, mixed, custom] = cutRows({cutList: [glm, arc, unknown].map(end => ({
+    netLengthMm: 480, dividerStart: glm, dividerEnd: end,
+  }))});
+  assert.equal(straight.systemSawCutMm, 530);
+  assert.equal(straight.unknownGross, undefined);
+  for (const row of [mixed, custom]) {
+    assert.equal(row.unknownGross, true);
+    assert.equal(row.systemSawCutMm, undefined);
+  }
+});
+
 test("left and right ring joints stay on the correct ends of opposite half-rings", () => {
   const upper = { role: "arc", index: 0, profileSide: "top", startCorner: 0, endCorner: 1 };
   const lower = { role: "arc", index: 1, profileSide: "bottom", startCorner: 1, endCorner: 0 };

@@ -176,6 +176,7 @@ pub fn generate_production_xlsx(
         ws.set_name("Kortlijst").map_err(|e| e.to_string())?;
         let with_arcs = production_data.iter().flat_map(|p| &p.cut_list).any(|i| i.has_curved_cut());
         let with_heads = production_data.iter().flat_map(|p| &p.cut_list).any(|i| i.divider_start.is_some());
+        let with_system_heads = production_data.iter().flat_map(|p| &p.cut_list).any(|i| i.has_system_heads());
         let with_notches = production_data.iter().flat_map(|p| &p.cut_list).any(|i| !i.masonry_notches.is_empty());
         let mut headers = vec![
             "Kozijn", "Pos.", "Onderdeel", "Profiel", "Materiaal",
@@ -185,7 +186,11 @@ pub fn generate_production_xlsx(
             headers[7] = "Beginhoek (90° haaks)";
             headers[8] = "Eindhoek (90° haaks)";
             headers.extend(["Buitenstraal (mm)", "Buitenbooglengte (mm)", "Hartstraal (mm)", "Hartbooglengte (mm)", "Buitenbooghoek (°)"]);
-            headers.extend(["Pasfrezen begin R (mm)", "Pasfrezen eind R (mm)"]);
+            headers.extend(if with_system_heads {
+                ["Kopradius begin in aanzicht (mm)", "Kopradius eind in aanzicht (mm)"]
+            } else {
+                ["Pasfrezen begin R (mm)", "Pasfrezen eind R (mm)"]
+            });
         }
         let head_col = headers.len() as u16;
         if with_heads {
@@ -204,6 +209,10 @@ pub fn generate_production_xlsx(
         }
         let arch_col = headers.len() as u16;
         for &kind in &arch_kinds { headers.extend(super::arch_joints::cut_headers(kind)); }
+        let machining_col = headers.len() as u16;
+        if with_system_heads {
+            headers.extend(["Fabrikantbewerking begin", "Fabrikantbewerking eind", "PVC zaagmaat GLM excl. zaagsnede (mm)"]);
+        }
         write_headers(ws, &headers, &hfmt)?;
 
         let mut row = 1u32;
@@ -287,10 +296,27 @@ pub fn generate_production_xlsx(
                         }
                     }
                 }
+                if with_system_heads {
+                    for (side, end) in [&item.divider_start, &item.divider_end].into_iter().enumerate() {
+                        if let Some(status) = end.as_ref().and_then(|e| e.machining_status) {
+                            ws.write_string_with_format(row, machining_col + side as u16, status.label_nl(), &df)
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                    if let Some(glm) = item.system_saw_cut_mm() {
+                        ws.write_number_with_format(row, machining_col + 2, glm, &dfc.clone().set_num_format("0.0"))
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
                 row += 1;
             }
         }
         autofit_widths(ws, &headers, row)?;
+        if with_system_heads {
+            for col in machining_col..machining_col + 3 {
+                ws.set_column_width(col, 54.0).map_err(|e| e.to_string())?;
+            }
+        }
         for col in arch_col..(arch_col + 2 * arch_kinds.len() as u16) {
             ws.set_column_width(col, 54.0).map_err(|e| e.to_string())?;
         }
@@ -389,7 +415,7 @@ pub fn generate_production_xlsx(
                 ws.write_string_with_format(row, 0, &prod.kozijn_mark, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 1, &item.piece_id, &df).map_err(|e| e.to_string())?;
                 ws.write_string_with_format(row, 2, &item.glass_type, &df).map_err(|e| e.to_string())?;
-                let dim = |v: f64| if item.cut_contour.is_some() { (v * 10.0).round() / 10.0 } else { v.round() };
+                let dim = crate::production::GlassListItem::order_dimension_mm;
                 ws.write_number_with_format(row, 3, dim(item.width_mm), &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 4, dim(item.height_mm), &dfc).map_err(|e| e.to_string())?;
                 ws.write_number_with_format(row, 5, item.thickness_mm.round(), &dfc).map_err(|e| e.to_string())?;
@@ -476,7 +502,7 @@ pub fn generate_production_xlsx(
                 let dfc = data_format_center(alt);
 
                 ws.write_string_with_format(row, 0, &prod.kozijn_mark, &df).map_err(|e| e.to_string())?;
-                ws.write_string_with_format(row, 1, item.gasket_type.label_nl(), &df).map_err(|e| e.to_string())?;
+                ws.write_string_with_format(row, 1, item.article_label_nl(), &df).map_err(|e| e.to_string())?;
                 if let Some(r) = &item.reference {
                     ws.write_number_with_format(row, 2, item.length_mm, &dfc.clone().set_num_format("0.0")).map_err(|e| e.to_string())?;
                     ws.write_string_with_format(row, 4, &r.piece_id, &df).map_err(|e| e.to_string())?;

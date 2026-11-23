@@ -118,6 +118,7 @@
   {
     "id": "veka-softline82",
     "name": "VEKA Softline 82 MD",
+    "referenceFrameArticle": "101.290",
     "manufacturer": "VEKA",
     "series": "Softline 82",
     "variant": "MD",
@@ -145,23 +146,7 @@
     "wallThickness": "Klasse A",
     "wallThicknessVisible": 2.8,
     "wallThicknessOther": 2.5,
-    "crossSection": [
-      [0, 0],
-      [73, 0],
-      [73, 15],
-      [70.3, 25],
-      [51, 25],
-      [51, 21],
-      [48, 21],
-      [48, 25],
-      [45, 25],
-      [45, 74],
-      [42, 74],
-      [42, 79],
-      [45, 79],
-      [45, 82],
-      [0, 82]
-    ],
+    "crossSection": [[0,0],[66.4,0],[69,2],[73,15.5],[70,15.5],[70,13.5],[66,13.5],[66,15.5],[57,15.5],[47,12.8],[43.5,16.4],[53.5,34.5],[53.5,36.7],[45,36.7],[45,70],[47.5,69.7],[47.5,73.5],[42,72.7],[41,74],[41,78],[42,79.5],[45,79.5],[45,77.8],[47.5,77.8],[47.5,82],[0,82],[0,80],[6.5,79.5],[6.5,69.8],[0,69.5],[0,67.7],[6.5,67.7],[6.5,56],[0,56],[0,54],[6.5,54],[6.5,14.4],[0,14],[0,12],[6.5,12],[6.5,2.5],[0,2.5]],
     "ufValue": 1.1,
     "uwTripleGlass": 0.91,
     "applicableAs": [
@@ -186,7 +171,7 @@
       "type": "binnensponning"
     },
     "sources": [
-      "VEKA Technische Produktinformationen SOFTLINE 82 MD (architekten.veka.de, 07/2020) p.1: Glasfalzhoehe 28 / Glaseinstand 20 / glas 24-52 / MD 3 dichtingsniveaus / Uf 1,1",
+      "VEKA Technische Produktinformationen SOFTLINE 82 MD, 07/2020, blz. 21–22: profielmaten en doorsnede kader 73 met vleugel 84. https://architekten.veka.de/downloads/VEKA_BR_TECHNIK2020_210x297_DE_13_AUSZUG_VEKA-SOFTLINE-82-MD.pdf",
       "VEKA SOFTLINE 82 MD p.1-2 + Baltic Technikheft p.4-9: aanzichten kozijn 73 (breed 83/106), vleugel 84 (zichtdeel 51), combinatie 124, T-stijl 94/124, stulp 74 met 8 mm naad",
       "Baltic Technikheft 82MD p.35: glaslatten cliphoogte 25 constant, breedte = 59,5 - glasdikte (art. 107.260-278)",
       "DIN EN 12608: Klasse A = zichtvlak >= 2,8 / overig >= 2,5 mm ('3 mm' bestaat niet als klassewaarde)",
@@ -197,73 +182,87 @@
       "glasinvalVastGlas"
     ],
     "dataNotes": [
+      "Kader 101.290, schematische kniklijn uit VEKA Technische Produktinformationen SOFTLINE 82 MD (07/2020), p. 22. Kamercontouren en de getoonde stalen koker zijn vereenvoudigd. Versterking volgens order en VEKA-richtlijn.",
       "glazingRebate en sponning.depth = Glasfalzhoehe (28, aanzichtrichting); glasinval = Glaseinstand (20) — de tekenlaag toont glasinval, de maatketen rekent met de Falzhoehe",
       "glasinvalVastGlas 25: vaste beglazing AD-kozijn, afgeleid uit Baltic-maattekeningen",
       "Falzluft kozijn-vleugel 12 mm afgeleid uit alle Baltic-sneden"
     ],
+    "innerWallTypes": ["chamber","chamber","chamber","chamber","chamber","chamber","chamber","reinforcement","chamber","chamber","chamber","chamber","chamber","chamber"],
     "innerWalls": [
-      [
-        [2.8, 2.8],
-        [42.2, 2.8],
-        [42.2, 8.8],
-        [2.8, 8.8]
-      ],
-      [
-        [2.8, 11.6],
-        [42.2, 11.6],
-        [42.2, 17.5],
-        [2.8, 17.5]
-      ],
-      [
-        [2.8, 20.3],
-        [42.2, 20.3],
-        [42.2, 26.3],
-        [2.8, 26.3]
-      ],
-      [
-        [2.8, 29.1],
-        [42.2, 29.1],
-        [42.2, 52.9],
-        [2.8, 52.9]
-      ],
-      [
-        [4.8, 50.9],
-        [4.8, 31.1],
-        [40.2, 31.1],
-        [40.2, 50.9],
-        [38.7, 50.9],
-        [38.7, 32.6],
-        [6.3, 32.6],
-        [6.3, 50.9]
-      ],
-      [
-        [2.8, 55.7],
-        [42.2, 55.7],
-        [42.2, 61.7],
-        [2.8, 61.7]
-      ],
-      [
-        [2.8, 64.5],
-        [42.2, 64.5],
-        [42.2, 70.4],
-        [2.8, 70.4]
-      ],
-      [
-        [2.8, 73.2],
-        [39.2, 73.2],
-        [39.2, 79.2],
-        [2.8, 79.2]
-      ],
-      [
-        [47.8, 2.8],
-        [67.5, 2.8],
-        [67.5, 19],
-        [47.8, 19]
-      ]
+      [[9,3],[25,3],[25,10],[9,10]],
+      [[27,3],[37,3],[37,8],[34.5,10],[27,10]],
+      [[39,3],[66,3],[68,7.5],[39,7.5]],
+      [[9,11.5],[34.6,11.5],[41,18.2],[9,18.2]],
+      [[9,19.5],[42,19.5],[42,25],[9,25]],
+      [[9,26.3],[42,26.3],[42,33],[9,33]],
+      [[9,34.3],[42,34.3],[42,65.3],[9,65.3]],
+      [[26,35.3],[11.7,35.3],[11.7,64.4],[41.7,64.4],[41.7,35.3],[27.2,35.3],[27.2,36.6],[40.4,36.6],[40.4,63.1],[13,63.1],[13,36.6],[26,36.6]],
+      [[9,67],[15,67],[15,72.4],[9,72.4]],
+      [[16.7,67],[34,67],[34,72.4],[16.7,72.4]],
+      [[35.6,67],[42,67],[42,69.3],[39,72.4],[35.6,72.4]],
+      [[9,73.7],[15,73.7],[15,79.2],[9,79.2]],
+      [[16.7,73.7],[34,73.7],[34,79.2],[16.7,79.2]],
+      [[35.6,73.7],[38.7,73.7],[38.7,79.2],[35.6,79.2]]
     ],
     "glasinval": 20,
     "glasinvalVastGlas": 25,
     "glaslatHeight": 25
+  },
+  {
+    "id": "veka-103340",
+    "name": "VEKA 103.340 – raamvleugel 74 mm",
+    "manufacturer": "VEKA",
+    "series": "Softline 82",
+    "variant": "MD",
+    "articleNumber": "103.340",
+    "sashInsideOffset": 19,
+    "innerWallTypes": ["chamber", "chamber", "chamber", "chamber", "chamber", "chamber"],
+    "inwardWindowFrame": "veka-softline82",
+    "material": "pvc",
+    "width": 74,
+    "depth": 82,
+    "sightline": 41,
+    "glazingRebate": 28,
+    "glasinval": 20,
+    "minGlassThickness": 24,
+    "maxGlassThickness": 52,
+    "glaslatHeight": 25,
+    "glazingBead": {"widthBase": 59.5},
+    "sponning": {"width": 15.5, "depth": 28, "type": "binnensponning"},
+    "ufValue": 1.1,
+    "applicableAs": ["sash"],
+    "sources": ["VEKA AG, Profilübersicht SOFTLINE 82, 02/2013, 2.67, https://www.fvab.se/pdf/VEKA.pdf", "VEKA AG, Technische Produktinformationen SOFTLINE 82 MD, 07/2020, p. 21–22, https://architekten.veka.de/downloads/VEKA_BR_TECHNIK2020_210x297_DE_13_AUSZUG_VEKA-SOFTLINE-82-MD.pdf"],
+    "dataNotes": ["Binnendraaiend raam in kader 101.290 van 73 mm. De nominale profielbreedte is 74 mm en de zichtbare toevoeging aan het buitenaanzicht is 41 mm.", "Schematische doorsnede met glas- en beslaggroef. Afrondingen, afdichtingen en de naar belasting te kiezen staalversterking zijn vereenvoudigd of weggelaten. Uf is de systeemwaarde."],
+    "crossSection": [[27, 0], [70, 0], [74, 15.5], [68, 15.5], [68, 12], [52, 12], [46, 17], [46, 70], [49, 70], [49, 73], [44, 73], [44, 78], [49, 78], [49, 82], [0, 82], [0, 67], [8, 67], [8, 69], [20, 69], [20, 58], [31, 58], [31, 42], [20, 42], [20, 21], [27, 18]],
+    "innerWalls": [[[40, 2.8], [68, 2.8], [70, 9], [51, 9], [44, 15], [40, 10]], [[29, 2.8], [37, 2.8], [37, 9], [30, 9]], [[30, 12], [37, 12], [42, 18], [42, 24], [23, 24], [23, 23], [29, 20]], [[23, 27], [43, 27], [43, 66], [23, 66], [23, 61], [34, 61], [34, 39], [23, 39]], [[24, 69], [41, 69], [41, 79], [24, 79]], [[3, 72], [17, 72], [17, 79], [3, 79]]]
+  },
+  {
+    "id": "veka-103341",
+    "name": "VEKA 103.341 – raamvleugel 84 mm",
+    "manufacturer": "VEKA",
+    "series": "Softline 82",
+    "variant": "MD",
+    "articleNumber": "103.341",
+    "sashInsideOffset": 19,
+    "innerWallTypes": ["chamber", "chamber", "chamber", "chamber", "chamber", "chamber"],
+    "inwardWindowFrame": "veka-softline82",
+    "material": "pvc",
+    "width": 84,
+    "depth": 82,
+    "sightline": 51,
+    "glazingRebate": 28,
+    "glasinval": 20,
+    "minGlassThickness": 24,
+    "maxGlassThickness": 52,
+    "glaslatHeight": 25,
+    "glazingBead": {"widthBase": 59.5},
+    "sponning": {"width": 15.5, "depth": 28, "type": "binnensponning"},
+    "ufValue": 1.1,
+    "applicableAs": ["sash"],
+    "sources": ["VEKA AG, Profilübersicht SOFTLINE 82, 02/2013, 2.68, https://www.fvab.se/pdf/VEKA.pdf", "VEKA AG, Technische Produktinformationen SOFTLINE 82 MD, 07/2020, p. 21–22, https://architekten.veka.de/downloads/VEKA_BR_TECHNIK2020_210x297_DE_13_AUSZUG_VEKA-SOFTLINE-82-MD.pdf"],
+    "dataNotes": ["Binnendraaiend raam in kader 101.290 van 73 mm. De nominale profielbreedte is 84 mm en de zichtbare toevoeging aan het buitenaanzicht is 51 mm.", "Schematische doorsnede met glas- en beslaggroef. Afrondingen, afdichtingen en de naar belasting te kiezen staalversterking zijn vereenvoudigd of weggelaten. Uf is de systeemwaarde."],
+    "crossSection": [[27, 0], [80, 0], [84, 15.5], [78, 15.5], [78, 12], [62, 12], [56, 17], [56, 70], [59, 70], [59, 73], [54, 73], [54, 78], [59, 78], [59, 82], [0, 82], [0, 67], [8, 67], [8, 69], [20, 69], [20, 58], [31, 58], [31, 42], [20, 42], [20, 21], [27, 18]],
+    "innerWalls": [[[40, 2.8], [78, 2.8], [80, 9], [61, 9], [54, 15], [40, 10]], [[29, 2.8], [37, 2.8], [37, 9], [30, 9]], [[30, 12], [37, 12], [52, 18], [52, 24], [23, 24], [23, 23], [29, 20]], [[23, 27], [53, 27], [53, 66], [23, 66], [23, 61], [34, 61], [34, 39], [23, 39]], [[24, 69], [51, 69], [51, 79], [24, 79]], [[3, 72], [17, 72], [17, 79], [3, 79]]]
   },
   {
     "id": "veka-softline82-ad",

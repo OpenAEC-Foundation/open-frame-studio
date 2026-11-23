@@ -12,6 +12,8 @@ pub struct CncPart {
     pub material: String,
     pub gross_length_mm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saw_cut_mm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arc: Option<crate::curved_timber::TimberArc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_cope_radius_mm: Option<f64>,
@@ -57,9 +59,9 @@ pub fn generate_cnc_parts(kozijn: &crate::kozijn::Kozijn) -> Vec<CncPart> {
         if gross.is_some() && cut.arc.is_none() && cut.start_cope_radius_mm.is_none() && planar(&cut.divider_start) && !arch_end(Start) {
             ops.push(CncOperation::CrossCut { position_mm: 0.0, angle_deg: cut.miter_left_deg });
         }
-        if let Some(position_mm) = gross.filter(|_| cut.arc.is_none() && cut.end_cope_radius_mm.is_none() && planar(&cut.divider_end) && !arch_end(End)) {
+        if let Some(blank) = gross.filter(|_| cut.arc.is_none() && cut.end_cope_radius_mm.is_none() && planar(&cut.divider_end) && !arch_end(End)) {
             ops.push(CncOperation::CrossCut {
-                position_mm,
+                position_mm: cut.system_saw_cut_mm().unwrap_or(blank),
                 angle_deg: cut.miter_right_deg,
             });
         }
@@ -70,6 +72,7 @@ pub fn generate_cnc_parts(kozijn: &crate::kozijn::Kozijn) -> Vec<CncPart> {
             profile_name: cut.profile_name.clone(),
             material: cut.material.clone(),
             gross_length_mm: gross,
+            saw_cut_mm: cut.system_saw_cut_mm(),
             arc: cut.arc.clone(),
             start_cope_radius_mm: cut.start_cope_radius_mm,
             end_cope_radius_mm: cut.end_cope_radius_mm,

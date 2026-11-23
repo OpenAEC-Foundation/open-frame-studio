@@ -389,23 +389,26 @@ export async function updateFrameColors(colorInside, colorOutside) {
   const k = get(currentKozijn);
   if (!k) return;
   pushSnapshot();
-  // Optimistically apply the colours so the drawing updates immediately. The
-  // wasm/web backend (and older bundles) echo the kozijn UNCHANGED for this
-  // command, so blindly trusting its return value reverted the pick — that was
-  // the "kleuren gaan niet mee" bug. We force the chosen colours onto whatever
-  // the backend returns; the IPC still persists them when the command exists.
+  // Keep both selectors in step when the user changes the two faces in succession.
   currentKozijn.set({ ...k, frame: { ...k.frame, colorInside, colorOutside } });
   try {
-    const updated = await invoke("update_frame_colors", {
+    await invoke("update_frame_colors", {
       id: k.id,
       colorInside,
       colorOutside,
     });
-    if (updated && updated.frame) {
-      currentKozijn.set({ ...updated, frame: { ...updated.frame, colorInside, colorOutside } });
-    }
   } catch (e) {
     console.error("Kleur opslaan mislukt:", e);
+    const current = get(currentKozijn);
+    if (current?.id === k.id && current.frame.colorInside === colorInside && current.frame.colorOutside === colorOutside) {
+      const project = await refreshProject();
+      const saved = project?.kozijnen?.find(item => item.id === k.id);
+      if (get(currentKozijn) === current) {
+        const previous = saved?.frame ?? k.frame;
+        currentKozijn.set({ ...current, frame: { ...current.frame, colorInside: previous.colorInside, colorOutside: previous.colorOutside } });
+      }
+    }
+    return;
   }
   await refreshProject();
 }

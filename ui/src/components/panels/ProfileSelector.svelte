@@ -3,11 +3,13 @@
   import { allProfiles } from "../../stores/profiles.js";
   import { resolveProfileSnapshot } from "../../lib/profileSnapshot.js";
 
-  let { value = null, filter = "", material = null, systemProfile = null, label = "Profiel", onchange = null } = $props();
+  let { value = null, filter = "", material = null, systemProfile = null, inwardWindow = false, label = "Profiel", onchange = null } = $props();
 
   let filteredProfiles = $derived(($allProfiles || []).filter(p => {
     if (material && p.material !== material) return false;
     if (!filter) return true;
+    if (p.inwardWindowFrame && (!inwardWindow || p.inwardWindowFrame !== systemProfile?.id)) return false;
+    if (p.dividerFrame && p.dividerFrame !== systemProfile?.id) return false;
     if (!(p.applicableAs || []).includes(filter) && p.id !== systemProfile?.id) return false;
     if (["sash", "sliding_sash", "divider"].includes(filter) && systemProfile && ["aluminum", "pvc"].includes(p.material)) {
       const active = ($allProfiles || []).find(candidate => candidate.id === systemProfile.id);

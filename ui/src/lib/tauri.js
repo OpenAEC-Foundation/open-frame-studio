@@ -284,6 +284,9 @@ function wasmCommand(cmd, args) {
           ? J(wasm.update_security_class(args.id, args.cellIndex, args.securityClass))
           : unavailableInWeb(cmd);
       case "update_frame_colors":
+        return typeof wasm.update_frame_colors === "function"
+          ? J(wasm.update_frame_colors(args.id, args.colorInside, args.colorOutside))
+          : unavailableInWeb(cmd);
       case "add_frame_extension":
       case "remove_frame_extension":
         return unavailableInWeb(cmd);
@@ -385,7 +388,10 @@ function wasmCommand(cmd, args) {
           ? J(wasm.generate_purchase_orders())
           : [];
       case "get_cnc_parts": return [];
-      case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
+      case "optimize_project_cut_list":
+        return typeof wasm.optimize_project_cut_list === "function"
+          ? J(wasm.optimize_project_cut_list(args?.stockLengthMm))
+          : unavailableInWeb(cmd);
       case "validate_project_ids": return [];
       case "get_glass_library": return wasm.get_glass_library ? J(wasm.get_glass_library()) : [];
       // File exports/imports need the filesystem — desktop only.
@@ -423,6 +429,7 @@ function browserFallback(cmd, args) {
     case "load_profile_library": return [];
     case "get_custom_profiles": return [];
     case "add_custom_profile":
+    case "update_frame_colors":
     case "update_perimeter_stop":
     case "update_cell_hardware":
     case "auto_select_hardware":
@@ -463,7 +470,7 @@ function browserFallback(cmd, args) {
     case "get_cost_estimate_project":
       return unavailableInWeb(cmd);
     case "get_vliesgevel_production": return vgProductionStub();
-    case "optimize_project_cut_list": return { bars: [], totalBars: 0, wastePercent: 0, totalWasteMm: 0 };
+    case "optimize_project_cut_list": return unavailableInWeb(cmd);
     case "validate_project_ids": return [];
     case "get_glass_library": return [];
     // File exports/imports need the filesystem — desktop only.

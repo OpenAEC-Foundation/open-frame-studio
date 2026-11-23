@@ -1,0 +1,13 @@
+[package]
+name = "ofs-ifc-ids-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone release test: none of these dependencies are linked into OFS.
+[workspace]
+
+[dependencies]
+bim-validator-core = { git = "https://github.com/OpenAEC-Foundation/open-bim-suite.git", rev = "6e52da7c60b1683f6f354ab88972f1db5375469e" }
+ifc-lite-core = "=25.0.1"
+serde_json = "1"

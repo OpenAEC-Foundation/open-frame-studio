@@ -24,7 +24,7 @@ Zekerheidslegenda:
 
 1. **Sponninghoogte schaalde mee met de profieldiepte** (17 → 38 mm). Oorzaak: de import-heuristiek `glazing_rebate = width × 0,36` (`ofs-core/src/import/dxf_profile.rs:145` en `catalog.rs:324`) — 67 mm breed → 24, 90 mm → 32. Die reeks is letterlijk in alle hout-JSONs terechtgekomen. Per norm is de sponninghoogte echter **vast**: hout 17 mm (KVT 12.2), PVC 18–20 mm en alu 13,5–27 mm per systeem. ●●
 2. **Glasmaat werd berekend als dagmaat − 2×4 mm** (`production.rs:11,540-548`) in plaats van sponningmaat − 2×omtrekspeling. Bij 17 mm sponning en 5 mm speling hoort glasmaat = dagmaat + 24 mm; de uitvoer bestelde dus glas **32 mm te klein per richting**. ●●
-3. **Reynaers: bouwdiepte en aanzicht verwisseld** — CS 77 stond met depth 68; actuele hoofdsystemen (MasterLine 8, SlimLine 38) ontbraken. ●
+3. **Reynaers Functionalsystemen.** De fabrikant geeft de bouwdiepte apart op voor kader en vleugel. De bijgewerkte maten staan in §4.1.
 4. **Niet-bestaande producten/maten in de bibliotheek**: Gealan "S 9000 Plus (92 mm)", glaslat 56×60, raamhout 54×67, dorpel 67×150, tussenstijl 54 mm breed, PVC-wanddikte "Klasse A (3 mm)", Deceuninck 70 mm glas in 76 mm bouwdiepte. ●●/○ per geval, zie tabellen.
 
 ---
@@ -141,12 +141,12 @@ Kernles: bij PVC zijn **Falzhöhe** (totale sponninghoogte incl. lucht) en **Gla
 
 | Grootheid | Was | Wordt | Bron | Zekerheid |
 |---|---|---|---|---|
-| Bouwdieptes | CS 77 depth 68 (2×), CS 86-HI depth 77, CP 155 depth 68 | systeemnaam = bouwdiepte: **CS 77 → 77, CS 86 → 86, CP 155 → 155** (CP 155 afgeleid uit naamconventie) | reynaers.com; naamconventie | ● / ○ (CP155) |
-| Aanzichtbreedtes (width-veld bevatte de dieptes) | 77/86/155 | opnieuw te bepalen; CS 77-aanzichten niet onderzocht → **unverified-vlag** | — | ⚠ |
+| Bouwdieptes Functional, kader / vleugel | CS 77 stond op 77 / 87 mm en CS 86-HI op 86 / 96 mm | CS 77 en CS 77 HI+ 68 / 77 mm, CS 86-HI 77 / 86 mm. CP 155 valt buiten deze correctie. | [Reynaers CS 77, technische tabel](https://www.reynaersathome.co.uk/wp-content/uploads/2021/07/REY14555-CS77-Brochure_01.pdf) · [Reynaers CS 86-HI, technische tabel](https://www.reynaers.com/resource/59494/download) | ●● |
+| Binnendraaiend Functional, minimaal aanzicht | Kader 51 mm | CS 77 Standard en CS 86-HI hebben een kader van 51 mm en een T-profiel van 76 mm. Voor de CS 77 HI+ geeft Reynaers 64 en 89 mm op. De sponninghoogte is 25 mm. | [Reynaers CS 77, technische kenmerken, voetnoot 8](https://www.aawnv.be/pdf/cs77.pdf) en de tabellen hierboven | ●● |
 | MasterLine 8 (ontbrak) | — | kozijn 77 / vleugel 87; aanzicht binnendraaiend 53+37=97 (buitendraaiend 20/118/138); **sponninghoogte 27**; glaslat 25 hoog, klik; Ω-steg PA6.6 GF25 **40 mm** (vlakke deuren 32); wanddikte 1,6–2,5; Uf 1,9/1,5/1,2 (std/HI/HI+ bij 119 mm sectie); glas ≤62 vast / ≤72 draaiend; vleugel-overlap 6, schaduwvoeg 7, vleugel 10 mm dieper; EPDM-middendichting (overlap aanslaglip 4,5) | reynaers.com ML8 technical info; ML8-bestektekst; ATG 3067 | ●● |
 | ML8 glas-minimum | — | **24** (ATG) aangehouden voor validatie; reynaers.com noemt 13 — conservatieve keuze, ATG is het keuringsdocument | ATG 3067 vs reynaers.com | conflict, keuze gedocumenteerd |
 | SlimLine 38 (ontbrak, steellook) | — | Classic kozijn 99 / vleugel 86 (Cubic 76/72, Ferro 76/86); combinatie-aanzicht ±67; **sponninghoogte 13,5**; glas 16–55; Uf 1,9 | reynaers.com SL38-pagina's; reynaersrus.com | ●● |
-| CS 77-detailwaarden (Uf 2,2/1,2/1,0, glas 63/72) | aanwezig | niet geverifieerd deze ronde → vlag | — | ⚠ |
+| Beglazing CS 77 Standard Functional | Eén systeemmaximum van 63 mm | Vast 4–52 mm, vleugel 4–63 mm volgens de technische productpagina. De specifieke glaslat en dichtingen vragen een artikeltoets. | [Reynaers CS 77, Technical information](https://www.reynaersathome.co.uk/products/cs-77-aluminium-windows-doors/) | ●● voor het systeem |
 
 SL38 (13,5) naast ML8 (27) bewijst: **sponninghoogte is systeem-specifiek, niet materiaal-generiek** — de uniforme 25 in beide alu-JSONs kon niet blijven.
 
@@ -182,7 +182,7 @@ De regels hieronder beschrijven de maatvoering. Bij rechthoekige vakken gebruike
 
 | # | Regel | Bron |
 |---|---|---|
-| **R1** | Sponninghoogte komt uit systeemdata en schaalt **nooit** mee met de profieldiepte. Hout 17 (KVT-alt 20; triple 18–20); VEKA Glaseinstand 20 (vast AD 25); Gealan 18; ML8 27; SL38 13,5; CS77/Schüco AWS onbekend → 25 met unverified-vlag. Canvas-fallback 17 blijft. | KVT 12.2; fabrikantendocs §3-4 |
+| **R1** | Sponninghoogte komt uit systeemdata. Hout 17 mm (KVT-alt 20, triple 18–20). VEKA Glaseinstand 20 mm (vast AD 25), Gealan 18 mm. Sponninghoogte ML8 27 mm, SL38 13,5 mm en CS 77 Functional 25 mm. Schüco AWS gebruikt voorlopig 25 mm. | KVT 12.2 en fabrikantendocumentatie §3-4 |
 | **R2** | Bij een houten sponning van 17 mm en 5 mm omtrekspeling per zijde is de glasmaat de dagmaat + 24 mm. Geeft het systeem de netto glasranddekking op, dan volgt de glasmaat rechtstreeks uit die dekking. Bij VEKA 82 MD met 28 mm falshoogte en 20 mm dekking blijft 8 mm speling per zijde. | KVT 12.2 en tekening 12.01; VEKA TPI Softline 82 MD |
 | **R3** | Glaslat: hoogte ≥ max(17; sponninghoogte). Tekenoffset glaslatlijn t.o.v. sponninglijn = **glaslathoogte − sponninghoogte** (0 bij 17×17-lat op 17-sponning; 11 bij 28-lat) — géén vaste 5/6 mm en niet de voetbreedte. Lengtes: horizontaal sponningmaat − 1; verticaal (binnen) sponningmaat − 2×latdikte − 1. Binnenbeglazing default bij draaiende delen; neuslat onderaan 5 mm vrij. | KVT 12.3.2; NPR 3577 |
 | **R4** | Het overdek van een scharnierende vleugel ligt in het aanzichtvlak. De expliciete profielmaat gaat voor. Het houten rekenmodel gebruikt bij ontbrekende gegevens 14 mm naar binnen (69 mm raamhout, 55 mm zichtbaar) en 17 mm naar buiten. De 29 mm aanslagsponning ligt in de bouwdiepterichting. | Profielbibliotheek; fabrieksmaten §2 |
@@ -195,9 +195,30 @@ De regels hieronder beschrijven de maatvoering. Bij rechthoekige vakken gebruike
 | **R11** | Neut: kunststof 55 hoog standaard (tot 150), breedtes 67/90; hout pas ≥50 mm boven maaiveld. Voorsponning binnendraaiende deur 6×9 mm. | DTS (KOMO 20676); KVT 11.3; TO 2024 p.12 |
 | **R12** | Import-defaults: de heuristiek `width × 0,36` is verwijderd (schaalde mee met de profielbreedte — root cause van fout #1). Catalogusimport zonder sponningkolom krijgt een vaste waarde per materiaal volgens de veldsemantiek van §7: hout/hout-alu **51** (sponningbreedte vast glas), PVC **28** (Glasfalzhöhe), alu **25** (bibliotheekwaarde, unverified per R1). Onbekend materiaal en DXF-import zonder gedetecteerde sponning schrijven **0 = niet gespecificeerd** (bibliotheekconventie), zodat consumenten per materiaal op de R1-normen terugvallen (`profile::norm_glasinval`) in plaats van op een gegokte maat. | KVT 14.01/DTS; VEKA TPI Softline 82 MD; eigen constatering (`dxf_profile.rs`, `catalog.rs`) |
 
+### T-profielen bij ronde en getoogde kozijnen
+
+| Systeem | Kader | Standaard T-artikel | Aanzicht × bouwdiepte | Breedte smalle zijde |
+|---|---|---|---:|---:|
+| VEKA SOFTLINE 82 MD | 101.290 | 102.310 | 94 × 82 mm | 44 mm |
+| Reynaers ConceptSystem 77 Functional | 008.3136.XX | 008.3113.XX | 76 × 68 mm | 26 mm |
+
+De profieldoorsneden in het model zijn vereenvoudigd uit de tekenbladen. VEKA tekent onder meer de versterking 113.001. Reynaers tekent bij artikel 008.3113.XX een T-verbinder. Artikel 008.3813.XX heeft dezelfde hoofdafmetingen maar een schroefverbinding. [VEKA, profieloverzicht blad 2.46](https://amex-baczek.com/images/system/docs/katalogi-techniczne/katalog-tech-veka-de.pdf) · [Reynaers, detail 21, blad 020](https://germansystemwindows.com/wp-content/uploads/2018/11/CS-77-win-doo-Section-Drawings-Architect-Catalogue-FR.pdf#page=24) · [BUtgb, bevestigingswijzen, §3.1](https://api.butgb-ubatc.be/api/public/file/ATG052644N_000529_1.pdf)
+
+VEKA meet het te zagen PVC op glaslijstmaat (GLM). Bij een haakse aansluiting geeft blad 4.5 voor het kader 48 mm vanaf de buitenkant. Blad 4.6 geeft voor de 94 mm brede T-stijl 22 mm vanaf de hartlijn. Beide meetpunten liggen 25 mm achter de daglijn. In een kozijn van 1200 mm met een centrale 102.310 heeft een rechte tussendorpel onder de boogaanzet daarom 480 mm zichtbare lengte en 530 mm zaagmaat. De zaagoptimalisatie reserveert bij de ingestelde snede van 4 mm in totaal 534 mm. Het voorschrift voor de bevestiging aan het kader staat op blad 5.15. Een T-op-T-verbinding vergt afzonderlijke montagecontrole. [VEKA, maataftrek kader en T-profiel](https://www.windowplus.rs/download/Softline%2082MD.pdf#page=227) · [VEKA, freesdoorsnede en verwerking van de rechte verbinding](https://www.windowplus.rs/download/Softline%2082MD.pdf#page=264)
+
+Bij een boogkop zijn de langepuntmaat, de straal en de koordehoek in het aanzicht bepaald door de daglijn en de werkelijke artikelbreedte. Een vrijgegeven contrafreesbaan voor een gebogen ontvangend kader is voor beide combinaties nog onbevestigd. Voor de rechte Reynaers-combinatie 008.3113.XX op 008.3136.XX ontbreekt eveneens een toepasbare openbare afkortmaat. De productiestap op PDF-pagina 108 van ATG 2644 noemt als aankomend profiel 008.3492.XX. De zaaglijst houdt zulke brutomaten open. [BUtgb, ATG 2644, werktekening 13.F.033](https://api.butgb-ubatc.be/api/public/file/ATG2644N.pdf#page=108) · [Reynaers, handleiding Docu Portal voor productiestappen](https://www.reynaers.nl/sites/default/files/public/2024-08/2024%20Handleiding%20Docu%20Portal%20NL.pdf)
+
+VEKA verwijst voor rondboogvensters naar de verwerkingsvoorschriften van de boogfabrikant of leverancier van de buiginstallatie. Blad 5.12 is de referentie voor de rechte aansluiting. [VEKA, rondboogvensters, blad 6.41](https://www.windowplus.rs/download/Softline%2082MD.pdf#page=327)
+
 ### Aanslagen en beslag bij kunststof en aluminium
 
-De vleugelaanslag volgt de combinatie van kozijn- en vleugelprofiel. Bij VEKA Softline 82 MD geeft 73 mm kozijn plus 84 mm vleugel met 33 mm overlap een gecombineerd aanzicht van 124 mm. Het model telt de glasrubbers per ruit en de sluitdichtingen per vleugel. De rubberlijst vermeldt voor elke netto omtrek de meetlijn. Groefpositie, rek en kniptoeslagen volgen uit de voorschriften van het gekozen rubber.
+De vleugelaanslag volgt de combinatie van kader en vleugel. In het 73 mm brede VEKA SOFTLINE 82 MD-kader 101.290 overlapt de binnendraaiende vleugel het kader met 33 mm. Met vleugel 103.340 (74 mm) is het gecombineerde aanzicht 114 mm, met vleugel 103.341 (84 mm) is dat 124 mm. [VEKA, SOFTLINE 82 MD, blad 22](https://architekten.veka.de/downloads/VEKA_BR_TECHNIK2020_210x297_DE_13_AUSZUG_VEKA-SOFTLINE-82-MD.pdf)
+
+Bij vaste beglazing vermeldt VEKA voor deze MD-kaders ook sponninginleg 109.671. De doorsnede modelleert de steun en vrije ruimte voor het glas. Afzonderlijke inlegstukken, de keuze van glasblokjes en hun plaatsing vragen de verwerkingsgegevens van de fabrikant. [VEKA, profieloverzicht 2023, blad 2.46](https://creativeds.ba/wp-content/uploads/2024/04/VEKA_Profilubersicht_100-104l_00_2023-01.pdf)
+
+Bij Reynaers CS 77 Functional geeft de combinatie 008.3136.XX en 008.3102.XX een buitenaanzicht van 89 mm, opgebouwd uit 51 mm kader, 5 mm voeg en 33 mm zichtbare vleugel. Een T-profiel van 76 mm laat bij twee naar binnen draaiende vleugels en tweemaal 30 mm overlap nog 16 mm tussen de vleugels. [Reynaers, CS 77, detail 11 op blad 012](https://germansystemwindows.com/wp-content/uploads/2018/11/CS-77-win-doo-Section-Drawings-Architect-Catalogue-FR.pdf) · [BUtgb, ATG 05/2644, figuren 1a–1b](https://api.butgb-ubatc.be/api/public/file/ATG052644N_000529_1.pdf)
+
+Het model telt de glasrubbers per ruit en de sluitdichtingen per vleugel. Bij het genoemde CS 77-paar horen middendichting 080.9655.04 en binnenaanslag 080.9450.04. De rubberlijst vermeldt voor elke netto omtrek de meetlijn. Groefpositie, rek en kniptoeslagen volgen uit de voorschriften van het gekozen rubber. [BUtgb, ATG 05/2644, tabel 7](https://api.butgb-ubatc.be/api/public/file/ATG052644N_000529_1.pdf)
 
 Een los profiel tegen de dagkant voeg je in de kozijneigenschappen toe onder **Aanslag tegen de dagkant**. Vul de profielnaam, uitsteek en lipdikte in. De kozijnmaat is de buitenmaat van het basisprofiel. Het paneel toont ook de buitenmaat inclusief aanslag. In de kortlijst hoort `AP1`, `AP2` enzovoort bij de afzonderlijke stukken. De nettolengte loopt over de buitenrand tussen de lange punten. Bij een bocht vermeldt de lijst ook de buitenstraal en de ontwikkelde booglengte. De brutolengte bevat de zaagsnede. Eventuele opspanlengte voor buigen is leveranciersafhankelijk.
 
@@ -222,7 +243,7 @@ Aanvullende productie-/validatieregels (uitbreiding, alle ●● tenzij vermeld)
 | C3 | Hypothese "glaslathoogte = sponninghoogte − steldikte" | **Verworpen** — strijdig met KVT 12.3.2 (hoogte ≥ sponninghoogte); steldikte (≥5) zit in de omtrekspeling. |
 | C4 | Schüco 70.HI dichtingsniveaus 2 vs 3 | **3** (fabrikant schueco.com, MD) met conflictnotitie; fensternorm telt glasdichtingen vermoedelijk niet mee. |
 | C5 | Gealan maxGlass 52/54 vs site-opgave 56/58 | **54 (STV)** aangehouden; nieuwe site-opgave als noot in de data. |
-| C6 | Niet publiek gevonden: Schüco-stegbreedte, AWS-sponninghoogte, CS77-sponning/aanzichten, VEKA sightline-bron | **Unverified-vlag** in de data; geen waarden verzonnen. |
+| C6 | Voorlopige maten, waaronder Schüco-stegbreedte en AWS-sponninghoogte | De catalogus markeert deze velden. Zie §4.1 voor de geverifieerde CS 77-sponninghoogte en aanzichten. |
 | C7 | ML8 glas-minimum 13 (site) vs 24 (ATG) | **24** voor validatie — conservatief; ATG is het keuringsdocument. |
 | C8 | Niet onderzocht deze ronde | Hout-Uf/glasgewichten, Gealan S 8000, VEKA Softline 70, KUBUS, Aluplast, Deceuninck (behalve de bewezen-onmogelijke 70 mm), Weekamp 56×67, HEBO-kunststof, Schüco ASS 77 PD, CP155-aanzichten → vlag "unverified", niet aangepast. |
 
