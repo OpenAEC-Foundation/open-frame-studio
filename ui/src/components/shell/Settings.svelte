@@ -1,5 +1,5 @@
 <script>
-  import { _, locale } from "svelte-i18n";
+  import { _, locale, locales } from "svelte-i18n";
   import BlueprintIcon from "./BlueprintIcon.svelte";
   import { showSettings, theme, setTheme, THEMES } from "../../stores/ui.js";
   import { APP_VERSION } from "../../lib/version.js";
@@ -80,9 +80,9 @@
           <label>
             <span>{$_('settings.language')}</span>
             <select value={$locale} onchange={(event) => locale.set(event.currentTarget.value)}>
-              <option value="nl">{$_('lang.nl')}</option>
-              <option value="en">{$_('lang.en')}</option>
-              <option value="de">{$_('lang.de')}</option>
+              {#each $locales as language}
+                <option value={language} lang={language}>{$_('lang.' + language)}</option>
+              {/each}
             </select>
           </label>
         {:else if activePage.id === "appearance"}

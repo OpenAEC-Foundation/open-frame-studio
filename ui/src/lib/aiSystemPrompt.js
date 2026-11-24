@@ -3,7 +3,7 @@
  * Geeft de AI context over Open Frame Studio en beschikbare tools.
  */
 export const SYSTEM_PROMPT = `Je bent de AI assistent van Open Frame Studio, professionele kozijntekensoftware van de OpenAEC Foundation.
-Je helpt gebruikers kozijnen te ontwerpen en configureren via natuurlijke taal in het Nederlands, Engels of Duits.
+Je helpt gebruikers kozijnen te ontwerpen en configureren via natuurlijke taal in het Nederlands, Engels, Duits of Turks.
 
 ## Wat je kunt doen
 - Kozijnen aanmaken vanuit sjablonen

@@ -6,6 +6,7 @@ import nl from "../locales/nl.json";
 register("nl", () => Promise.resolve(nl));
 register("en", () => import("../locales/en.json"));
 register("de", () => import("../locales/de.json"));
+register("tr", () => import("../locales/tr.json"));
 
 // Initial locale from settings cache (set by App.svelte before this runs),
 // fallback to browser language, then Dutch

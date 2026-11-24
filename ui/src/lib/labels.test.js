@@ -3,7 +3,20 @@ import assert from "node:assert/strict";
 import nl from "../locales/nl.json" with { type: "json" };
 import de from "../locales/de.json" with { type: "json" };
 import en from "../locales/en.json" with { type: "json" };
+import tr from "../locales/tr.json" with { type: "json" };
 import { cutMemberLabel } from "./labels.js";
+
+test("vertalingen bevatten alle labels en behouden de benoemde invulvelden", () => {
+  const keys = Object.keys(nl).sort();
+  const placeholders = message => (message.match(/\{\w+\}/g) ?? []).sort();
+  for (const [language, catalog] of Object.entries({ en, de, tr })) {
+    assert.deepEqual(Object.keys(catalog).sort(), keys, language);
+    for (const key of keys) {
+      assert.ok(catalog[key].trim(), language + ": " + key);
+      assert.deepEqual(placeholders(catalog[key]), placeholders(nl[key]), language + ": " + key);
+    }
+  }
+});
 
 test("kortlijst benoemt vleugelprofielen naar materiaal en bewaart de boogzijde", () => {
   const positions = ["sash_top", "sash_bottom", "sash_left", "sash_right"];
