@@ -102,6 +102,14 @@ jobs:
           export OFS_BROWSER="$(command -v google-chrome)"
           node scripts/smoke-platform.mjs "$RUNNER_TEMP/ofs-platform"
 
+      - name: Keep the tested SuperCloud platform bundle
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-frame-studio-supercloud-platform
+          path: ${{ runner.temp }}/ofs-platform/
+          if-no-files-found: error
+
       - name: Check Rust workspace
         run: cargo check -p ofs-core -p open-frame-studio --locked
 

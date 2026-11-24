@@ -60,7 +60,7 @@ import tempfile
 with tempfile.TemporaryDirectory() as packages:
     if importlib.util.find_spec("PIL") is None:
         subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
-                        "--only-binary=:all:", "--target", packages, "Pillow==13.0.0"],
+                        "--only-binary=:all:", "--target", packages, "Pillow==12.3.0"],
                        check=True, stdout=sys.stderr)
         sys.path.insert(0, packages)
     from PIL import Image

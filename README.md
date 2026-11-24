@@ -234,6 +234,24 @@ cd ui && npm run dev
 
 **Webbeperking:** de browser heeft geen volledige desktoppariteit. Bestandsimport/-export en meerdere project-, vliesgevel-, calculatie- en productiecommando's hebben daar nog geen echte implementatie. Gebruik de browserweergave niet als bewijs van een werkende producentenworkflow.
 
+### Een Linux-download verifiëren
+
+Voor releases met Sigstore-bijlagen download je het Linux-pakket en het gelijknamige bestand met `.sigstore.json` erachter. De releaseworkflow ondertekent de DEB, AppImage en RPM afzonderlijk. De GitHub-build vermeldt bij **Verify downloaded Linux packages** de workflow-identiteit en de broncommit. Vul de releasetag en bestandsnaam in en controleer met Cosign 3 en GitHub CLI.
+
+```bash
+read -rp 'Releasetag: ' tag
+read -rp 'Naam van het gedownloade pakket: ' package
+repo=OpenAEC-Foundation/open-frame-studio
+ref=refs/heads/main  # Gebruik refs/tags/$tag als de build door een tagpush is gestart.
+commit=$(gh api "repos/$repo/commits/$tag" --jq .sha)
+cosign verify-blob --bundle "$package.sigstore.json" \
+  --certificate-identity "https://github.com/$repo/.github/workflows/release.yml@$ref" \
+  --certificate-github-workflow-sha "$commit" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com "$package"
+```
+
+De bundel bevat het certificaat en het transparantielogbewijs. [Sigstore-documentatie voor bestandsverificatie](https://docs.sigstore.dev/cosign/verifying/verify/)
+
 ### Docker voor OpenAEC SuperCloud
 
 De [Docker-image-workflow](.github/workflows/docker-image.yml) bouwt na een geslaagde installerrelease een container **uit de `.deb` en containertemplate van diezelfde releasecommit**. De gewone Linux-desktopapp draait daarin als niet-rootgebruiker op een virtueel scherm en is via één HTTP-poort te bekijken. De workflow controleert het app-proces, `GET /gezond`, een screenshot van de stream en het geheugengebruik voordat hij de image naar GHCR pusht. De [v2026.46.1-containerproef](https://github.com/OpenAEC-Foundation/open-frame-studio/actions/runs/42686749360) is geslaagd; de [schermafdruk](docs/release-evidence/v2026.46.1-docker-stream.png) toont de gestreamde app. Een release met deze containertemplate kan ook handmatig via de workflow en zijn `tag`-invoer worden verwerkt.
@@ -260,6 +278,12 @@ Starten, modelleren, opslaan en de MCP-berekeningen werken zonder uitgaand inter
 
 ---
 
+### SDK, reken-API en SuperCloud
+
+Voor een indicatieve calculatie van een vastbeglaasd houten kozijn zijn een native SDK voor Windows en Linux en een stateloze HTTP-service beschikbaar in de bron. Dezelfde rekenkern wordt gebruikt door de desktopapp. [SDK en extern voorbeeld](ofs-sdk/README.md) · [HTTP-contract en AWS-configuratie](packaging/aws/README.md)
+
+Een SuperCloud-werkplek kan projecten via Docs openen en opslaan. De assistent kan de kozijnen uitlezen en hun oppervlakte berekenen. Dezelfde vier tools zijn beschikbaar in Claude Code. [SuperCloud-installatie en test](docs/supercloud-route-a.md) · [Claude Code instellen](packaging/mcp/README.md) · [Platform- en releasecontroles](docs/ecosystem-capability-matrix-2026.48.4.md)
+
 ## Project Structure
 
 ```
@@ -280,7 +304,8 @@ Open-Frame-Studio/
 │       ├── state.rs        # Application state
 │       └── commands/       # Tauri IPC commands
 ├── ofs-wasm/               # Browserbinding van ofs-core; eigen build nodig
-├── ofs-cloud/              # Losse API-scaffold, nog geen gedeelde projectdienst
+├── ofs-cloud/              # Headless calculatie-API en lokaal projectprototype
+├── ofs-sdk/                # Windows-DLL en Linux-library met C-ABI
 ├── ofs-web/                # Losse prototypepagina's voor configuratie/werkvloer
 ├── ui/                     # Svelte frontend
 │   └── src/

@@ -62,4 +62,6 @@ unset OFS_API_TOKEN
 
 ## Verification
 
-The local Windows x64 process test on 24 November 2026 passed the public health response, valid and invalid credentials, invalid dimensions, malformed JSON, unsupported content type, unknown fields, the request size limit and exclusion of the development project route. The two fixed-frame estimates were €330.20 for 1200 × 1400 mm and €498.62 for 2400 × 1400 mm. The script checked both totals against their line items. The `Headless API` workflow repeats the test against the Linux container and checks the CloudFormation schema. A live deployment and caller test in the intended AWS VPC are pending.
+On 24 November 2026, the local Windows x64 process and the Linux amd64 container passed the same HTTP checks for health, valid and invalid credentials, invalid dimensions, malformed JSON, unsupported content type, unknown fields, the request size limit and exclusion of the development project route. The two fixed-frame estimates were €330.20 for 1200 × 1400 mm and €498.62 for 2400 × 1400 mm. The script checked both totals against their line items. CI validated the CloudFormation schema and ran the container as a non-root user with a read-only filesystem. [Headless API build and test log](https://github.com/OpenAEC-Foundation/open-frame-studio/actions/runs/45405508273/job/138485028822)
+
+A live deployment and caller test in the intended AWS VPC are pending.
