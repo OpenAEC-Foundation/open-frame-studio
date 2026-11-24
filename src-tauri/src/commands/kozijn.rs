@@ -1,5 +1,4 @@
 use crate::state::AppState;
-use ofs_core::edge::EdgeConfig;
 use ofs_core::geometry::{compute_2d_geometry, KozijnGeometry2D};
 use ofs_core::grid;
 use ofs_core::hardware::{HardwareSet, SecurityClass};
@@ -123,18 +122,7 @@ pub fn update_edge_config(
         .find(|k| k.id == id)
         .ok_or("Kozijn niet gevonden")?;
 
-    let edge: EdgeConfig =
-        serde_json::from_str(&edge_json).map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
-
-    // Ensure edges vector has 4 entries (left, right, top, bottom)
-    while kozijn.frame.edges.len() < 4 {
-        kozijn.frame.edges.push(EdgeConfig::default());
-    }
-
-    if edge_index < 4 {
-        kozijn.frame.edges[edge_index] = edge;
-    }
-
+    kozijn.frame.set_edge_config(edge_index, &edge_json)?;
     Ok(kozijn.clone())
 }
 

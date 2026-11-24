@@ -1367,34 +1367,27 @@
   {/each}
   {/if}
 
-  <!-- Edge/spouwlat indicators (dashed outlines along frame edges) -->
-  {#if kozijn.edges?.length > 0}
-    {#each kozijn.edges as edge, ei}
-      {#if edge.spouwlat}
-        {@const eow = geometry.outerRect?.width || 0}
-        {@const eoh = geometry.outerRect?.height || 0}
-        {@const spW = edge.spouwlat.width || 100}
-        {@const spH = edge.spouwlat.height || 30}
-        <!-- Side-specific spouwlat: 0=top, 1=bottom, 2=left, 3=right -->
-        {#if ei === 0}
-          <rect x={0} y={-spH} width={eow} height={spH}
-            fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
-            stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none" />
-        {:else if ei === 1}
-          <rect x={0} y={eoh} width={eow} height={spH}
-            fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
-            stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none" />
-        {:else if ei === 2}
-          <rect x={-spW} y={0} width={spW} height={eoh}
-            fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
-            stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none" />
-        {:else if ei === 3}
-          <rect x={eow} y={0} width={spW} height={eoh}
-            fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
-            stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none" />
+  <!-- Four straight strips follow the rectangular outside faces. A shaped
+       frame's bounding box is not its wall connection contour. -->
+  {#if (kozijn.frame.shape?.shapeType ?? "rectangular") === "rectangular" && kozijn.frame.edges?.length}
+    {@const outer = geometry.outerRect}
+    <g class="spouwlatten" fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
+      stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none">
+      {#each kozijn.frame.edges as edge, i}
+        {#if edge?.spouwlat}
+          {@const batten = edge.spouwlat}
+          {#if i === 0}
+            <rect data-side="left" x={outer.x - batten.width} y={outer.y} width={batten.width} height={outer.height} />
+          {:else if i === 1}
+            <rect data-side="right" x={outer.x + outer.width} y={outer.y} width={batten.width} height={outer.height} />
+          {:else if i === 2}
+            <rect data-side="top" x={outer.x} y={outer.y - batten.height} width={outer.width} height={batten.height} />
+          {:else if i === 3}
+            <rect data-side="bottom" x={outer.x} y={outer.y + outer.height} width={outer.width} height={batten.height} />
+          {/if}
         {/if}
-      {/if}
-    {/each}
+      {/each}
+    </g>
   {/if}
 
   <!-- Frame extensions (free-form members beyond the grid) -->

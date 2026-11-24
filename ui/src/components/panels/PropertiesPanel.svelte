@@ -15,6 +15,7 @@
     updateFrameProfile,
     updateSillProfile,
     updateFrameShape,
+    updateEdgeConfig,
     updateGridSizes,
     updateFrameColors,
     calculateThermal,
@@ -58,6 +59,7 @@
   let editWidth = 0;
   let editHeight = 0;
   let thermalResult = null;
+  const battenWidths = [100, 120, 140, 160];
 
   $: if ($currentKozijn) {
     editWidth = $currentKozijn.frame.outerWidth;
@@ -739,22 +741,7 @@
           <div class="edge-row">
             <select
               value={edge?.randsponningType || "haaks"}
-              onchange={(e) => {
-                invoke("update_edge_config", {
-                  id: $currentKozijn.id,
-                  edgeIndex: ei,
-                  edgeJson: JSON.stringify({
-                    ...(edge || {}),
-                    randsponningType: e.target.value,
-                    randsponningDepth: edge?.randsponningDepth || 5,
-                    randsponningWidth: edge?.randsponningWidth || 46,
-                    sealType: edge?.sealType || "compriband",
-                    folieBinnen: edge?.folieBinnen || "geen",
-                    folieBuiten: edge?.folieBuiten || "geen",
-                    anchorSpacingMm: edge?.anchorSpacingMm || 500,
-                  })
-                }).then(k => k && currentKozijn.set(k));
-              }}
+              onchange={(e) => updateEdgeConfig(ei, { randsponningType: e.target.value })}
             >
               <option value="haaks">Haaks</option>
               <option value="kalksponning">Kalksponning</option>
@@ -762,30 +749,22 @@
               <option value="vlak">Vlak</option>
             </select>
             <select
-              value={edge?.spouwlat?.width || 100}
+              value={String(edge?.spouwlat?.width ?? "")}
               onchange={(e) => {
-                const w = parseFloat(e.target.value);
-                invoke("update_edge_config", {
-                  id: $currentKozijn.id,
-                  edgeIndex: ei,
-                  edgeJson: JSON.stringify({
-                    ...(edge || {}),
-                    randsponningType: edge?.randsponningType || "haaks",
-                    randsponningDepth: edge?.randsponningDepth || 5,
-                    randsponningWidth: edge?.randsponningWidth || 46,
-                    spouwlat: { width: w, height: 27, material: "vuren", glued: true, nailSpacingMm: 300 },
-                    sealType: edge?.sealType || "compriband",
-                    folieBinnen: edge?.folieBinnen || "geen",
-                    folieBuiten: edge?.folieBuiten || "geen",
-                    anchorSpacingMm: edge?.anchorSpacingMm || 500,
-                  })
-                }).then(k => k && currentKozijn.set(k));
+                const width = e.target.value;
+                updateEdgeConfig(ei, { spouwlat: width === "" ? null : {
+                  height: 27, material: "vuren", glued: true, nailSpacingMm: 300,
+                  ...edge?.spouwlat, width: Number(width),
+                } });
               }}
             >
-              <option value="100">SL 100</option>
-              <option value="120">SL 120</option>
-              <option value="140">SL 140</option>
-              <option value="160">SL 160</option>
+              <option value="">{$_('props.noSpouwlat')}</option>
+              {#if edge?.spouwlat && !battenWidths.includes(edge.spouwlat.width)}
+                <option value={String(edge.spouwlat.width)}>SL {edge.spouwlat.width}</option>
+              {/if}
+              {#each battenWidths as width}
+                <option value={String(width)}>SL {width}</option>
+              {/each}
             </select>
           </div>
         </div>

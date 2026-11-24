@@ -263,6 +263,19 @@ export async function updatePerimeterStop(profile) {
   await refreshGeometry(updated.id);
 }
 
+export async function updateEdgeConfig(edgeIndex, changes) {
+  const k = get(currentKozijn);
+  if (!k) return;
+  const edge = { randsponningType: "haaks", ...k.frame.edges?.[edgeIndex], ...changes };
+  pushSnapshot();
+  const updated = await invoke("update_edge_config", {
+    id: k.id, edgeIndex, edgeJson: JSON.stringify(edge),
+  });
+  currentKozijn.set(updated);
+  markDirty();
+  await refreshProject();
+}
+
 export async function updateSillProfile(profileId, profileName) {
   const k = get(currentKozijn);
   if (!k) return;

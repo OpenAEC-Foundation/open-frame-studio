@@ -847,6 +847,7 @@
   "props.extBalk": "Beam",
   "props.extNeut": "Corner block",
   "props.extSpouwlat": "Cavity batten",
+  "props.noSpouwlat": "No cavity batten",
   "props.wood": "Wood",
   "props.elliptical": "Elliptical",
   "props.triangle": "Triangle",

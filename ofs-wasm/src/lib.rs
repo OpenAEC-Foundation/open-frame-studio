@@ -348,17 +348,9 @@ pub fn update_perimeter_stop(id: &str, profile_json: &str) -> Result<String, Str
 pub fn update_edge_config(id: &str, edge_index: usize, edge_json: &str) -> Result<String, String> {
     with_project(|p| {
         let idx = find_kozijn(p, id)?;
-        let edge: ofs_core::edge::EdgeConfig =
-            serde_json::from_str(edge_json).map_err(|e| format!("Ongeldig edge JSON: {}", e))?;
         let k = &mut p.kozijnen[idx];
-        // Ensure edges vector has 4 entries (left, right, top, bottom)
-        while k.frame.edges.len() < 4 {
-            k.frame.edges.push(ofs_core::edge::EdgeConfig::default());
-        }
-        if edge_index < 4 {
-            k.frame.edges[edge_index] = edge;
-        }
-        Ok(serde_json::to_string(&p.kozijnen[idx]).unwrap())
+        k.frame.set_edge_config(edge_index, edge_json)?;
+        serde_json::to_string(k).map_err(|e| e.to_string())
     })?
 }
 

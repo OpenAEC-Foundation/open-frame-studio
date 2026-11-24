@@ -159,3 +159,39 @@ pub enum EdgePosition {
     Top,
     Bottom,
 }
+
+impl crate::kozijn::Frame {
+    pub fn set_edge_config(&mut self, index: usize, json: &str) -> Result<(), String> {
+        if index >= 4 {
+            return Err("Ongeldige kozijnzijde".into());
+        }
+        let edge = serde_json::from_str(json).map_err(|e| format!("Ongeldig edge JSON: {e}"))?;
+        while self.edges.len() < 4 {
+            self.edges.push(EdgeConfig { spouwlat: None, ..EdgeConfig::default() });
+        }
+        self.edges[index] = edge;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kozijn::Kozijn;
+
+    #[test]
+    fn setting_one_batten_leaves_other_sides_empty_after_reload() {
+        let mut k = Kozijn::new("Raam", "K01", 1000.0, 1500.0);
+        assert!(k.frame.edges.is_empty());
+        let edge = EdgeConfig::default();
+        k.frame.set_edge_config(1, &serde_json::to_string(&edge).unwrap()).unwrap();
+        let mut restored: Kozijn = serde_json::from_str(&serde_json::to_string(&k).unwrap()).unwrap();
+        let edges = &restored.frame.edges;
+        assert_eq!(edges[1].spouwlat.as_ref().unwrap().width, 100.0);
+        assert!([0, 2, 3].iter().all(|i| edges[*i].spouwlat.is_none()));
+        let removed = EdgeConfig { spouwlat: None, ..edges[1].clone() };
+        restored.frame.set_edge_config(1, &serde_json::to_string(&removed).unwrap()).unwrap();
+        assert!(restored.frame.edges.iter().all(|edge| edge.spouwlat.is_none()));
+        assert_eq!(restored.frame.edges[1].folie_binnen, edge.folie_binnen);
+    }
+}

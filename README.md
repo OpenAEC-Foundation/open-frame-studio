@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.1
+# Open Frame Studio v2026.48.2
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,10 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.2 (2026-11-24)
+
+- Een spouwlat is per zijde in te stellen en te verwijderen. De 2D-tekening toont bij rechthoekige kozijnen de spouwlat aan de gekozen zijde. Na opslaan en heropenen blijven de overige zijden leeg als daar geen spouwlat is gekozen.
 
 ## Changelog v2026.48.1 (2026-11-24)
 

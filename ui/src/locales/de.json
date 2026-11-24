@@ -847,6 +847,7 @@
   "props.extBalk": "Balken",
   "props.extNeut": "Sockelstein",
   "props.extSpouwlat": "Hohlraumleiste",
+  "props.noSpouwlat": "Keine Hohlraumleiste",
   "props.wood": "Holz",
   "props.elliptical": "Elliptisch",
   "props.triangle": "Dreieck",
