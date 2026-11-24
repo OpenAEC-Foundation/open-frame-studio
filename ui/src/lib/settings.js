@@ -7,7 +7,7 @@ import { invoke, isTauri } from "./tauri.js";
 let cache = null;
 
 const DEFAULTS = {
-  theme: "default",
+  theme: "light",
   locale: "nl",
   left_panel_width: 220,
   right_panel_width: 290,

@@ -3,10 +3,16 @@
   import ProfileLibrary from "./ProfileLibrary.svelte";
   import ProfileCanvas from "./ProfileCanvas.svelte";
   import ProfileParams from "./ProfileParams.svelte";
+  import WorkspacePanel from "../shell/WorkspacePanel.svelte";
   import ProfileToolbar from "./ProfileToolbar.svelte";
   import { profileEditor, editorProfile } from "../../stores/profileEditor.js";
 
-  let leftWidth = 260;
+  let viewportWidth = window.innerWidth;
+  let openPanel = null;
+  let showLibrary = true;
+  let showProperties = true;
+  $: compact = viewportWidth <= 760;
+  $: if (!compact) openPanel = null;
 
   // Start met leeg nieuw profiel
   if (!$editorProfile) {
@@ -14,33 +20,32 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
+
 <div class="profile-editor-view">
-  <div class="pe-sidebar" style="width:{leftWidth}px">
+  <WorkspacePanel side="left" width={260} label={$_("profileEditor.library")} open={compact ? openPanel === "left" : showLibrary}
+    ontoggle={() => { if (compact) openPanel = openPanel === "left" ? null : "left"; else showLibrary = !showLibrary; }}>
     <ProfileLibrary />
-  </div>
+  </WorkspacePanel>
 
   <div class="pe-canvas-area">
     <ProfileToolbar />
     <ProfileCanvas />
   </div>
 
-  <div class="pe-params">
+  <WorkspacePanel side="right" width={280} label={$_("workspace.properties")} open={compact ? openPanel === "right" : showProperties}
+    ontoggle={() => { if (compact) openPanel = openPanel === "right" ? null : "right"; else showProperties = !showProperties; }}>
     <ProfileParams />
-  </div>
+  </WorkspacePanel>
 </div>
 
 <style>
   .profile-editor-view {
     display: flex;
     flex: 1;
+    min-width: 0;
+    position: relative;
     overflow: hidden;
-    background: var(--bg-surface);
-  }
-
-  .pe-sidebar {
-    flex-shrink: 0;
-    border-right: var(--border-default);
-    overflow-y: auto;
     background: var(--bg-surface);
   }
 
@@ -51,11 +56,4 @@
     background: var(--editor-bg, var(--bg-surface-alt));
   }
 
-  .pe-params {
-    width: 280px;
-    flex-shrink: 0;
-    border-left: var(--border-default);
-    overflow-y: auto;
-    background: var(--bg-surface);
-  }
 </style>

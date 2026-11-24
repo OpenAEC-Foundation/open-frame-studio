@@ -18,12 +18,22 @@ export const THEMES = [
   "highContrast",
 ];
 
-const savedTheme = getSetting("theme") || "default";
-document.documentElement.setAttribute("data-theme", savedTheme);
+function applyTheme(id) {
+  const blueprintTheme = {
+    light: "light",
+    blue: "blueprint",
+    highContrast: "high-contrast-dark",
+  }[id] || "dark";
+  document.documentElement.dataset.theme = id;
+  document.documentElement.dataset.oaTheme = blueprintTheme;
+}
+
+const savedTheme = getSetting("theme") || "light";
+applyTheme(savedTheme);
 export const theme = writable(savedTheme);
 
 export function setTheme(id) {
   theme.set(id);
-  document.documentElement.setAttribute("data-theme", id);
+  applyTheme(id);
   saveSetting("theme", id);
 }

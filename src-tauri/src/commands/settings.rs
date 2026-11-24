@@ -18,7 +18,7 @@ pub struct AppSettings {
     pub right_panel_open: Option<bool>,
 }
 
-fn default_theme() -> String { "default".into() }
+fn default_theme() -> String { "light".into() }
 fn default_locale() -> String { "nl".into() }
 fn default_left_panel_width() -> f64 { 220.0 }
 fn default_right_panel_width() -> f64 { 290.0 }

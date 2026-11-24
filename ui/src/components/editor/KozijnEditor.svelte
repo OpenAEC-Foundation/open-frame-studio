@@ -1,5 +1,8 @@
 <script>
-  import { currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes, addColumn, addRow, setKozijnLayout } from "../../stores/kozijn.js";
+  import { createKozijn, currentKozijn, currentGeometry, selectedCellIndex, updateGridSizes, addColumn, addRow, setKozijnLayout } from "../../stores/kozijn.js";
+  import { fileOpen } from "../../lib/project-actions.js";
+  import { hostFileRef } from "../../stores/project.js";
+  import BlueprintIcon from "../shell/BlueprintIcon.svelte";
   import { zoom, editorPan } from "../../stores/ui.js";
   import { _ } from "svelte-i18n";
   import KozijnCanvas from "./KozijnCanvas.svelte";
@@ -230,6 +233,8 @@
   onmouseup={handleMouseUp}
   onmouseleave={handleMouseUp}
   role="application"
+  aria-label={$_("tabs.editor")}
+  tabindex="0"
 >
   {#if $currentKozijn && $currentGeometry}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -292,15 +297,13 @@
     />
   {:else}
     <div class="empty-state">
-      <div class="empty-icon">
-        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="var(--scaffold-gray)" stroke-width="1.5">
-          <rect x="8" y="8" width="48" height="48" rx="2"/>
-          <line x1="32" y1="8" x2="32" y2="56"/>
-          <line x1="8" y1="32" x2="56" y2="32"/>
-        </svg>
+      <h2>{$_("workspace.emptySelection")}</h2>
+      <div class="empty-actions">
+        <button class="primary" disabled={$hostFileRef?.readOnly} onclick={() => createKozijn($_("ribbon.newKozijn"))}>
+          <BlueprintIcon name="frame.new" />{$_("ribbon.newKozijn")}
+        </button>
+        <button onclick={fileOpen}><BlueprintIcon name="file.open" />{$_("backstage.open")}</button>
       </div>
-      <p>{$_('editor.newKozijnHint')}</p>
-      <p class="hint">{$_('editor.shortcutHint')}</p>
     </div>
   {/if}
 </div>
@@ -339,12 +342,21 @@
     color: var(--text-muted);
   }
 
-  .empty-state p {
-    font-size: 14px;
+  .empty-state h2 {
+    color: var(--oa-workspace-text);
+    font: 500 var(--oa-size-dialog-heading)/1.3 var(--oa-font-heading);
   }
-
-  .hint {
-    font-size: 12px !important;
-    opacity: 0.6;
+  .empty-actions {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: var(--oa-space-sm);
   }
+  .empty-actions button {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: var(--oa-row); padding: 0 var(--oa-space-md);
+    border: 1px solid var(--oa-border); border-radius: var(--oa-radius-small);
+    background: var(--oa-panel); color: var(--oa-text);
+  }
+  .empty-actions button:hover { background: var(--oa-hover); }
+  .empty-actions .primary { background: var(--oa-accent); color: var(--oa-text-on-accent); border-color: transparent; font-weight: 600; }
+  .empty-actions .primary:hover { background: var(--oa-accent-hover); }
+  .empty-actions button:disabled { opacity: .55; }
 </style>

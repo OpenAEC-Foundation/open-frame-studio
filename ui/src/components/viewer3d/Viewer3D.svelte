@@ -2,6 +2,7 @@
   import { onMount, onDestroy, untrack } from "svelte";
   import { currentKozijn, currentGeometry } from "../../stores/kozijn.js";
   import { allProfiles } from "../../stores/profiles.js";
+  import { theme } from "../../stores/ui.js";
   import { buildFrameGroup } from "./frameGroup.js";
   import { inspectTimberJoints } from "./tenonMesh.js";
   import { sectionCapsAt } from "./systemSection.js";
@@ -46,6 +47,7 @@
 
   // Three.js objects
   let renderer, scene, camera, perspectiveCamera, orthoCamera;
+  let gridHelper;
   let animationId;
   let kozijnGroup = null;
 
@@ -84,7 +86,6 @@
       alpha: false,
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x1a1a2e, 1);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -119,15 +120,27 @@
     const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x362e1c, 0.3);
     scene.add(hemiLight);
 
-    // Grid helper
-    const gridHelper = new THREE.GridHelper(4000, 40, 0x333355, 0x222244);
-    gridHelper.position.y = -0.5;
-    scene.add(gridHelper);
+    applyViewportColors();
 
     // Initial sizing
     handleResize();
 
     renderer.domElement.addEventListener('webglcontextrestored', requestRender);
+  }
+
+  function applyViewportColors() {
+    const styles = getComputedStyle(container);
+    const color = name => styles.getPropertyValue(name).trim();
+    renderer.setClearColor(color("--editor-bg"), 1);
+    if (gridHelper) {
+      scene.remove(gridHelper);
+      gridHelper.dispose();
+    }
+    gridHelper = new THREE.GridHelper(4000, 40, color("--border-color"), color("--editor-grid"));
+    gridHelper.material.toneMapped = false;
+    gridHelper.position.y = -0.5;
+    scene.add(gridHelper);
+    requestRender();
   }
 
   function requestRender() {
@@ -326,6 +339,12 @@
     if (renderer) untrack(() => build3DKozijn(scene, k, g, profiles || []));
   });
 
+  $effect(() => {
+    // The store change schedules this effect after the CSS theme is applied.
+    $theme;
+    if (renderer && scene && container) untrack(applyViewportColors);
+  });
+
   // --- Lifecycle ---
 
   let resizeObserver;
@@ -362,6 +381,7 @@
     }
     if (animationId) cancelAnimationFrame(animationId);
     if (resizeObserver) resizeObserver.disconnect();
+    gridHelper?.dispose();
     if (renderer) {
       renderer.domElement.removeEventListener('webglcontextrestored', requestRender);
       clearFrame();
@@ -418,7 +438,7 @@
     width: 100%;
     height: 100%;
     min-height: 200px;
-    background: var(--bg-app);
+    background: var(--editor-bg);
     overflow: hidden;
     cursor: default;
     user-select: none;

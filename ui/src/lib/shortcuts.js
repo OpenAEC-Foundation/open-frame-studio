@@ -109,11 +109,14 @@ export function registerShortcuts({ onDuplicate, onNew, onOpen, onSave, onSaveAs
     if (e.key === "Escape") {
       selectedCellIndex.set(null);
       selectedMember.set(null);
+      if (e.target.matches?.(".editor[role=application]")) {
+        document.querySelector('.ws-tab[aria-selected="true"]')?.focus();
+      }
       return;
     }
 
     // ── Tab: next/prev cell ─────────────────────────────
-    if (e.key === "Tab" && k) {
+    if (e.key === "Tab" && k && e.target.matches?.(".editor[role=application]")) {
       e.preventDefault();
       const current = get(selectedCellIndex);
       const total = k.cells.length;

@@ -4,40 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open Frame Studio — Kozijn Configurator</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, sans-serif; background: #1a1a2e; color: #e5e5e5; min-height: 100vh; }
-        .header { background: #16213e; padding: 16px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #D97706; }
-        .header h1 { font-size: 18px; color: #D97706; }
-        .header span { font-size: 12px; color: #888; }
-        .main { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .panel { background: #16213e; border-radius: 8px; padding: 20px; }
-        .panel h2 { font-size: 14px; color: #D97706; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .field { margin-bottom: 12px; }
-        .field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
-        .field input, .field select { width: 100%; padding: 8px 12px; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #e5e5e5; font-size: 14px; }
-        .field input:focus, .field select:focus { outline: none; border-color: #D97706; }
-        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .btn { padding: 10px 20px; background: #D97706; color: #1a1a2e; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 14px; width: 100%; margin-top: 16px; }
-        .btn:hover { background: #b45309; }
-        .preview { background: #0f0f23; border-radius: 8px; min-height: 400px; display: flex; align-items: center; justify-content: center; }
-        .preview svg { max-width: 100%; max-height: 400px; }
-        .preview-placeholder { color: #444; font-style: italic; }
-        .summary { margin-top: 12px; padding: 12px; background: #1a1a2e; border-radius: 4px; font-size: 12px; line-height: 1.8; }
-        .summary .price { font-size: 20px; color: #D97706; font-weight: 700; }
-    </style>
+    <link rel="stylesheet" href="./blueprint.css">
 </head>
 <body>
-    <div class="header">
+    <header class="header config-header">
+        <img src="./blueprint/icon.png" alt="" width="20" height="20">
         <h1>Open Frame Studio</h1>
-        <span>Kozijn Configurator v2026.48.0</span>
-    </div>
-    <div class="main">
+        <span>Kozijn Configurator v2026.48.1</span>
+    </header>
+    <main class="config-layout">
         <div>
             <div class="panel">
                 <h2>Kozijn configureren</h2>
                 <div class="field">
-                    <label>Type</label>
+                    <label for="type">Type</label>
                     <select id="type" onchange="updatePreview()">
                         <option value="vast">Vast glas</option>
                         <option value="draaikiepraam" selected>Draaikiepraam</option>
@@ -48,16 +28,16 @@
                 </div>
                 <div class="field-row">
                     <div class="field">
-                        <label>Breedte (mm)</label>
+                        <label for="width">Breedte (mm)</label>
                         <input type="number" id="width" value="1200" min="400" max="4000" step="10" oninput="updatePreview()">
                     </div>
                     <div class="field">
-                        <label>Hoogte (mm)</label>
+                        <label for="height">Hoogte (mm)</label>
                         <input type="number" id="height" value="1500" min="400" max="3000" step="10" oninput="updatePreview()">
                     </div>
                 </div>
                 <div class="field">
-                    <label>Materiaal</label>
+                    <label for="material">Materiaal</label>
                     <select id="material" onchange="updatePreview()">
                         <option value="meranti">Hout — Meranti</option>
                         <option value="accoya">Hout — Accoya</option>
@@ -68,16 +48,16 @@
                 </div>
                 <div class="field-row">
                     <div class="field">
-                        <label>Kleur binnen</label>
+                        <label for="colorIn">Kleur binnen</label>
                         <select id="colorIn"><option>RAL 9010 (wit)</option><option>RAL 9001 (cr&#232;me)</option><option>RAL 7016 (antraciet)</option></select>
                     </div>
                     <div class="field">
-                        <label>Kleur buiten</label>
+                        <label for="colorOut">Kleur buiten</label>
                         <select id="colorOut"><option>RAL 9010 (wit)</option><option>RAL 9001 (cr&#232;me)</option><option>RAL 7016 (antraciet)</option></select>
                     </div>
                 </div>
                 <div class="field">
-                    <label>Beglazing</label>
+                    <label for="glass">Beglazing</label>
                     <select id="glass">
                         <option value="hr++">HR++ (Ug 1.0)</option>
                         <option value="hr+++">HR+++ Triple (Ug 0.5)</option>
@@ -94,14 +74,14 @@
             </div>
         </div>
         <div>
-            <div class="panel">
+            <section class="panel drawing-panel">
                 <h2>Preview</h2>
                 <div class="preview" id="preview">
-                    <svg id="kozijn-svg" width="400" height="500" viewBox="-10 -10 420 520"></svg>
+                    <svg id="kozijn-svg" role="img" aria-label="Maattekening van het geconfigureerde kozijn" width="400" height="500" viewBox="-10 -10 420 520"></svg>
                 </div>
-            </div>
+            </section>
         </div>
-    </div>
+    </main>
     <script>
         function updatePreview() {
             const w = parseInt(document.getElementById('width').value) || 1200;
@@ -126,10 +106,10 @@
             }
 
             // Dimensions
-            svg += '<line x1="0" y1="' + (sh + 15) + '" x2="' + sw + '" y2="' + (sh + 15) + '" stroke="#888" stroke-width="0.5"/>';
-            svg += '<text x="' + (sw / 2) + '" y="' + (sh + 28) + '" text-anchor="middle" fill="#888" font-size="11">' + w + 'mm</text>';
-            svg += '<line x1="' + (sw + 15) + '" y1="0" x2="' + (sw + 15) + '" y2="' + sh + '" stroke="#888" stroke-width="0.5"/>';
-            svg += '<text x="' + (sw + 28) + '" y="' + (sh / 2) + '" text-anchor="middle" fill="#888" font-size="11" transform="rotate(-90,' + (sw + 28) + ',' + (sh / 2) + ')">' + h + 'mm</text>';
+            svg += '<line x1="0" y1="' + (sh + 15) + '" x2="' + sw + '" y2="' + (sh + 15) + '" stroke="var(--oa-text-muted)" stroke-width="0.5"/>';
+            svg += '<text x="' + (sw / 2) + '" y="' + (sh + 28) + '" text-anchor="middle" fill="var(--oa-text-secondary)" font-size="11">' + w + 'mm</text>';
+            svg += '<line x1="' + (sw + 15) + '" y1="0" x2="' + (sw + 15) + '" y2="' + sh + '" stroke="var(--oa-text-muted)" stroke-width="0.5"/>';
+            svg += '<text x="' + (sw + 28) + '" y="' + (sh / 2) + '" text-anchor="middle" fill="var(--oa-text-secondary)" font-size="11" transform="rotate(-90,' + (sw + 28) + ',' + (sh / 2) + ')">' + h + 'mm</text>';
 
             document.getElementById('kozijn-svg').innerHTML = svg;
             document.getElementById('kozijn-svg').setAttribute('viewBox', '-10 -10 ' + (sw + 50) + ' ' + (sh + 50));

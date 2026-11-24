@@ -1,286 +1,231 @@
-/* OpenAEC Foundation Design System Tokens v0.4 */
+/*! OpenAEC Foundation, Blueprint web tokens, CC BY-SA 4.0.
+ * https://github.com/OpenAEC-Foundation/OpenAEC-Blueprint/tree/2eb8a958bbfe864dea81237e8890cf2405620b7d/web
+ * https://creativecommons.org/licenses/by-sa/4.0/
+ * Font licenses are distributed alongside the WOFF2 files in public/fonts.
+ */
+@import "./openaec-tokens.css";
 
 @font-face {
-  font-family: 'Space Grotesk';
-  font-weight: 500;
+  font-family: "Inter";
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
   font-style: normal;
-  font-display: swap;
-  src: url('/fonts/SpaceGrotesk-Medium.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  src: url('/fonts/SpaceGrotesk-Bold.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Inter';
   font-weight: 400;
-  font-style: normal;
   font-display: swap;
-  src: url('/fonts/Inter-Regular.woff2') format('woff2');
 }
+
 @font-face {
-  font-family: 'Inter';
+  font-family: "Inter";
+  src: url("/fonts/Inter-Medium.woff2") format("woff2");
+  font-style: normal;
   font-weight: 500;
-  font-style: normal;
   font-display: swap;
-  src: url('/fonts/Inter-Medium.woff2') format('woff2');
 }
+
 @font-face {
-  font-family: 'Inter';
+  font-family: "Inter";
+  src: url("/fonts/Inter-SemiBold.woff2") format("woff2");
+  font-style: normal;
   font-weight: 600;
-  font-style: normal;
   font-display: swap;
-  src: url('/fonts/Inter-SemiBold.woff2') format('woff2');
 }
+
 @font-face {
-  font-family: 'Inter';
+  font-family: "Inter";
+  src: url("/fonts/Inter-Bold.woff2") format("woff2");
+  font-style: normal;
   font-weight: 700;
-  font-style: normal;
   font-display: swap;
-  src: url('/fonts/Inter-Bold.woff2') format('woff2');
 }
+
 @font-face {
-  font-family: 'JetBrains Mono';
-  font-weight: 400;
+  font-family: "Space Grotesk";
+  src: url("/fonts/SpaceGrotesk-Medium.woff2") format("woff2");
   font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
 }
 
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/fonts/SpaceGrotesk-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter AEC";
+  src: url("/fonts/InterAEC-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter AEC";
+  src: url("/fonts/InterAEC-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter AEC";
+  src: url("/fonts/InterAEC-SemiBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/NotoSans-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Sans Symbols";
+  src: url("/fonts/NotoSansSymbols-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* The Frame profile has its own shell dimensions and wrapping workspace tabs. */
 :root {
-  /* Colors — Primary */
-  --amber: #D97706;
-  --deep-forge: #36363E;
-  --signal-orange: #EA580C;
-  --warm-gold: #F59E0B;
-  --scaffold-gray: #A1A1AA;
+  --oa-shell-titlebar: 36px;
+  --oa-shell-panel-header: 26px;
+  --oa-shell-statusbar: 28px;
+  --frame-ribbon-min-height: 72px;
 
-  /* Colors — Background */
-  --blueprint-white: #FAFAF9;
-  --concrete: #F5F5F4;
-  --night-build: #2A2A32;
+  --font-body: var(--oa-font-body);
+  --font-heading: var(--oa-font-heading);
+  --font-code: var(--oa-font-mono);
 
-  /* Colors — Semantic */
-  --success: #16A34A;
-  --error: #DC2626;
-  --warning: #F59E0B;
-  --info: #2563EB;
+  --bg-app: var(--oa-frame);
+  --bg-surface: var(--oa-panel);
+  --bg-surface-alt: var(--oa-frame);
+  --bg-titlebar: var(--oa-frame);
+  --bg-ribbon: var(--oa-panel);
+  --bg-statusbar: var(--oa-statusbar);
+  --bg-canvas: var(--oa-workspace);
+  --text-primary: var(--oa-text);
+  --text-secondary: var(--oa-text-secondary);
+  --text-muted: var(--oa-text-muted);
+  --text-on-dark: var(--oa-text);
+  --text-accent: var(--oa-accent-text);
+  --border-color: var(--oa-border);
+  --border-subtle: var(--oa-border-subtle);
+  --border-default: 1px solid var(--oa-border);
+  --border-hover: 1px solid var(--oa-border-strong);
+  --border-featured: 2px solid var(--oa-selected-bar);
 
-  /* Typography */
-  --font-heading: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-code: "JetBrains Mono", monospace;
+  /* Existing workspace components use amber for text as well as filled badges. */
+  --amber: var(--oa-accent-text);
+  --night-build: var(--oa-panel);
+  --scaffold-gray: var(--oa-text-secondary);
+  --deep-forge: var(--oa-brand-deep-forge);
+  --signal-orange: var(--oa-brand-signal-orange);
+  --warm-gold: var(--oa-brand-warm-gold);
+  --success: var(--oa-success);
+  --error: var(--oa-error);
+  --warning: var(--oa-warning);
+  --info: var(--oa-info);
 
-  /* Spacing (4px base) */
-  --sp-1: 0.25rem;
-  --sp-2: 0.5rem;
-  --sp-3: 0.75rem;
-  --sp-4: 1rem;
-  --sp-5: 1.25rem;
-  --sp-6: 1.5rem;
-  --sp-8: 2rem;
-  --sp-10: 2.5rem;
-  --sp-12: 3rem;
+  --sp-1: var(--oa-space-xs);
+  --sp-2: var(--oa-space-sm);
+  --sp-3: var(--oa-space-md);
+  --sp-4: var(--oa-space-lg);
+  --sp-5: 20px;
+  --sp-6: var(--oa-space-xl);
+  --sp-8: var(--oa-space-2xl);
+  --radius-sm: var(--oa-radius-small);
+  --radius-md: var(--oa-radius-medium);
+  --radius-lg: var(--oa-radius-large);
+  --shadow-sm: var(--oa-shadow-panel);
+  --shadow-md: var(--oa-shadow-popup);
+  --shadow-lg: var(--oa-shadow-dialog);
 
-  /* Border radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-
-  /* Borders */
-  --border-default: 1px solid #E7E5E4;
-  --border-hover: 1px solid #D6D3D1;
-  --border-featured: 2px solid var(--amber);
-
-  /* Gradient */
-  --gradient-accent: linear-gradient(90deg, #D97706 0%, #F59E0B 40%, #EA580C 100%);
-
-  /* Theme — Default (Warm Dark with Amber accent) */
-  --bg-app: #36363E;
-  --bg-surface: #44444C;
-  --bg-surface-alt: #3E3E46;
-  --bg-ribbon: #44444C;
-  --bg-titlebar: #36363E;
-  --bg-statusbar: #36363E;
-  --border-color: rgba(217, 119, 6, 0.25);
-
-  --text-primary: #FAFAF9;
-  --text-secondary: rgba(250, 250, 249, 0.7);
-  --text-muted: rgba(250, 250, 249, 0.5);
-  --text-on-dark: #FAFAF9;
-  --text-accent: var(--amber);
-
-  --editor-bg: #36363E;
-  --editor-grid: #3E3E46;
-  --editor-frame: #D6D3D1;
-  --editor-glass: #1E3A5F;
-  --editor-glass-stroke: #3B82F6;
-  --editor-panel: #44403C;
-  --editor-door: #7C2D12;
-  --editor-selected: var(--amber);
-  --editor-dimension: rgba(250, 250, 249, 0.5);
+  --editor-bg: var(--oa-workspace);
+  --editor-grid: var(--oa-border-subtle);
+  --editor-frame: var(--oa-workspace-text);
+  --editor-selected: var(--oa-workspace-accent-text);
+  --editor-dimension: var(--oa-text-secondary);
+  --editor-glass: #dbeafe;
+  --editor-glass-stroke: #6590b9;
+  --editor-panel: #e7e5e4;
+  --editor-door: #fed7aa;
 }
 
-/* Light */
-[data-theme="light"] {
-  --bg-app: #f5f5f5;
-  --bg-surface: #ffffff;
-  --bg-surface-alt: #f0f0f0;
-  --bg-ribbon: #e8e6e3;
-  --bg-titlebar: #d4d1cc;
-  --bg-statusbar: #e8e6e3;
-  --border-color: #d6d3d1;
-
-  --text-primary: #1f2937;
-  --text-secondary: #57534E;
-  --text-muted: #9ca3af;
-  --text-on-dark: #1f2937;
-
-  --editor-bg: #FFFFFF;
-  --editor-grid: #F0EFED;
-  --editor-frame: var(--deep-forge);
-  --editor-glass: #DBEAFE;
-  --editor-glass-stroke: #93C5FD;
-  --editor-panel: #E7E5E4;
-  --editor-door: #FED7AA;
-  --editor-selected: var(--amber);
-  --editor-dimension: var(--scaffold-gray);
+[data-oa-theme="dark"], [data-oa-theme="blueprint"], [data-oa-theme="high-contrast-dark"] {
+  --editor-glass: #1e3a5f;
+  --editor-glass-stroke: #639ce6;
+  --editor-panel: #44403c;
+  --editor-door: #7c2d12;
 }
 
-/* Dark */
-[data-theme="dark"] {
-  --bg-app: #1a1a2e;
-  --bg-surface: #16213e;
-  --bg-surface-alt: #1e2a4a;
-  --bg-ribbon: #16213e;
-  --bg-titlebar: #0f1629;
-  --bg-statusbar: #16213e;
-  --border-color: rgba(168, 45, 110, 0.25);
-
-  --text-primary: #eaeaea;
-  --text-secondary: rgba(234, 234, 234, 0.7);
-  --text-muted: rgba(234, 234, 234, 0.45);
-  --text-on-dark: #eaeaea;
-
-  --editor-bg: #1a1a2e;
-  --editor-grid: #1e2a4a;
-  --editor-frame: #D6D3D1;
-  --editor-glass: #1E3A5F;
-  --editor-glass-stroke: #3B82F6;
-  --editor-panel: #2a2a4a;
-  --editor-door: #5a2040;
-  --editor-selected: #a82d6e;
-  --editor-dimension: rgba(234, 234, 234, 0.45);
-}
-
-/* Blue */
-[data-theme="blue"] {
-  --bg-app: #0d1b2a;
-  --bg-surface: #1b263b;
-  --bg-surface-alt: #1f3050;
-  --bg-ribbon: #1b263b;
-  --bg-titlebar: #0a1420;
-  --bg-statusbar: #1b263b;
-  --border-color: rgba(0, 119, 182, 0.3);
-
-  --text-primary: #e0e1dd;
-  --text-secondary: rgba(224, 225, 221, 0.7);
-  --text-muted: rgba(224, 225, 221, 0.45);
-  --text-on-dark: #e0e1dd;
-
-  --editor-bg: #0d1b2a;
-  --editor-grid: #152238;
-  --editor-frame: #e0e1dd;
-  --editor-glass: #0a3d62;
-  --editor-glass-stroke: #0077b6;
-  --editor-panel: #1b3050;
-  --editor-door: #2c5282;
-  --editor-selected: #0077b6;
-  --editor-dimension: rgba(224, 225, 221, 0.45);
-}
-
-/* Amber Navy */
-[data-theme="amber-navy"] {
-  --bg-app: #1a1a2e;
-  --bg-surface: #242445;
-  --bg-surface-alt: #2a2a50;
-  --bg-ribbon: #242445;
-  --bg-titlebar: #141428;
-  --bg-statusbar: #242445;
-  --border-color: rgba(217, 119, 6, 0.3);
-
-  --text-primary: #C4B199;
-  --text-secondary: rgba(196, 177, 153, 0.7);
-  --text-muted: rgba(196, 177, 153, 0.45);
-  --text-on-dark: #C4B199;
-
-  --editor-bg: #1a1a2e;
-  --editor-grid: #22223a;
-  --editor-frame: #C4B199;
-  --editor-glass: #1a2a50;
-  --editor-glass-stroke: #D97706;
-  --editor-panel: #2a2a4a;
-  --editor-door: #6b4a1a;
-  --editor-selected: var(--amber);
-  --editor-dimension: rgba(196, 177, 153, 0.45);
-}
-
-/* Warm Ember */
-[data-theme="warm-ember"] {
-  --bg-app: #3E3636;
-  --bg-surface: #4a4242;
-  --bg-surface-alt: #524a4a;
-  --bg-ribbon: #4a4242;
-  --bg-titlebar: #342e2e;
-  --bg-statusbar: #4a4242;
-  --border-color: rgba(217, 119, 6, 0.3);
-
-  --text-primary: #F5F0EB;
-  --text-secondary: rgba(245, 240, 235, 0.7);
-  --text-muted: rgba(245, 240, 235, 0.45);
-  --text-on-dark: #F5F0EB;
-
-  --editor-bg: #3E3636;
-  --editor-grid: #463e3e;
-  --editor-frame: #F5F0EB;
-  --editor-glass: #3a2a1a;
-  --editor-glass-stroke: #D97706;
-  --editor-panel: #524a42;
-  --editor-door: #7C2D12;
-  --editor-selected: var(--amber);
-  --editor-dimension: rgba(245, 240, 235, 0.45);
-}
-
-/* High Contrast */
-[data-theme="highContrast"] {
-  --bg-app: #000000;
-  --bg-surface: #0a0a0a;
-  --bg-surface-alt: #141414;
-  --bg-ribbon: #0a0a0a;
-  --bg-titlebar: #000000;
-  --bg-statusbar: #000000;
-  --border-color: #ffff00;
-
-  --text-primary: #ffffff;
-  --text-secondary: #ffffff;
-  --text-muted: #cccccc;
-  --text-on-dark: #ffffff;
-
-  --editor-bg: #000000;
-  --editor-grid: #1a1a1a;
-  --editor-frame: #ffffff;
+[data-oa-theme="high-contrast-dark"] {
+  --editor-grid: #262626;
   --editor-glass: #000066;
-  --editor-glass-stroke: #ffff00;
+  --editor-glass-stroke: var(--oa-accent);
   --editor-panel: #333333;
-  --editor-door: #ff6600;
-  --editor-selected: #ffff00;
-  --editor-dimension: #cccccc;
+  --editor-door: #ac4800;
+}
+
+/* Frame's saved color variants retain their own surfaces within the dark palette. */
+[data-theme="default"] {
+  --oa-frame: #36363e;
+  --oa-panel: #44444c;
+  --oa-field: #35353d;
+  --oa-docbar: #3e3e46;
+  --oa-statusbar: #36363e;
+  --oa-workspace: #36363e;
+  --oa-border: #62626b;
+  --oa-border-subtle: #50505a;
+  --oa-hover: #51515b;
+  --oa-pressed: #595963;
+}
+
+[data-theme="amber-navy"] {
+  --oa-frame: #1a1a2e;
+  --oa-panel: #242445;
+  --oa-raised: #303054;
+  --oa-field: #1d1d35;
+  --oa-docbar: #202039;
+  --oa-statusbar: #1a1a2e;
+  --oa-workspace: #1a1a2e;
+  --oa-border: #4b4b65;
+  --oa-border-subtle: #32324d;
+  --oa-text: #ece1d2;
+  --oa-text-secondary: #c4b199;
+  --oa-hover: #373752;
+  --oa-pressed: #40405f;
+  --editor-door: #6b4a1a;
+}
+
+[data-theme="warm-ember"] {
+  --oa-frame: #342e2e;
+  --oa-panel: #453d3d;
+  --oa-raised: #514747;
+  --oa-field: #393131;
+  --oa-docbar: #3a3333;
+  --oa-statusbar: #342e2e;
+  --oa-workspace: #3e3636;
+  --oa-border: #645756;
+  --oa-border-subtle: #514746;
+  --oa-text: #f5f0eb;
+  --oa-text-secondary: #d2c2b9;
+  --oa-hover: #524847;
+  --oa-pressed: #5d5150;
+  --editor-panel: #524a42;
 }

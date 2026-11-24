@@ -24,7 +24,7 @@ export const currentGeometry = writable(null);
 export const selectedTimberJoints = derived([currentGeometry, selectedMember], ([geometry, selected]) =>
   selectedJoints(geometry, selected));
 
-export async function createKozijn(name, mark, width, height) {
+export async function createKozijn(name, mark = "K01", width = 1200, height = 1500) {
   const k = await invoke("create_kozijn", { name, mark, width, height });
   await refreshProject();
   currentKozijn.set(k);

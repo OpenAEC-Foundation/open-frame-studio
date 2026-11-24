@@ -4,84 +4,57 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OFS Werkvloer</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, sans-serif; background: #111; color: #e5e5e5; min-height: 100vh; }
-        .header { background: #1a1a2e; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #D97706; }
-        .header h1 { font-size: 16px; color: #D97706; }
-        .tabs { display: flex; gap: 4px; padding: 8px 16px; background: #1a1a2e; }
-        .tab { padding: 8px 16px; border: none; background: transparent; color: #888; font-size: 13px; font-weight: 600; border-radius: 4px; cursor: pointer; }
-        .tab.active { background: #D97706; color: #111; }
-        .content { padding: 16px; }
-        .scan-area { text-align: center; padding: 40px 20px; }
-        .scan-btn { width: 120px; height: 120px; border-radius: 50%; background: #D97706; border: none; color: #111; font-size: 16px; font-weight: 700; cursor: pointer; }
-        .scan-btn:hover { background: #b45309; }
-        .job-list { display: flex; flex-direction: column; gap: 8px; }
-        .job-card { background: #1a1a2e; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
-        .job-mark { font-size: 16px; font-weight: 700; color: #D97706; }
-        .job-info { font-size: 12px; color: #888; }
-        .job-status { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-        .status-wacht { background: #333; color: #888; }
-        .status-bezig { background: #D97706; color: #111; }
-        .status-klaar { background: #22c55e; color: #111; }
-        .checklist { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-        .check-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #1a1a2e; border-radius: 8px; cursor: pointer; }
-        .check-item.done { opacity: 0.5; text-decoration: line-through; }
-        .checkbox { width: 24px; height: 24px; border: 2px solid #D97706; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .checkbox.checked { background: #D97706; }
-        .checkbox.checked::after { content: '\2713'; color: #111; font-weight: 700; }
-    </style>
+    <link rel="stylesheet" href="./blueprint.css">
 </head>
 <body>
-    <div class="header">
+    <header class="header">
+        <img src="./blueprint/icon.png" alt="" width="20" height="20">
         <h1>OFS Werkvloer</h1>
-        <span style="font-size:11px; color:#888">v2026.48.0</span>
-    </div>
-    <div class="tabs">
-        <button class="tab active" onclick="showTab('scan', this)">Scan</button>
-        <button class="tab" onclick="showTab('jobs', this)">Opdrachten</button>
-        <button class="tab" onclick="showTab('checklist', this)">Checklist</button>
-    </div>
-    <div class="content">
+        <span class="version">v2026.48.1</span>
+    </header>
+    <nav class="tabs" aria-label="Werkvloer">
+        <button class="tab" aria-pressed="true" aria-controls="tab-scan" onclick="showTab('scan', this)">Scan</button>
+        <button class="tab" aria-pressed="false" aria-controls="tab-jobs" onclick="showTab('jobs', this)">Opdrachten</button>
+        <button class="tab" aria-pressed="false" aria-controls="tab-checklist" onclick="showTab('checklist', this)">Checklist</button>
+    </nav>
+    <main class="workshop-content">
         <div id="tab-scan" class="scan-area">
-            <p style="color:#888; margin-bottom:24px">Scan de QR-code op het onderdeel</p>
+            <p class="scan-prompt">Scan de QR-code op het onderdeel</p>
             <button class="scan-btn" onclick="simulateScan()">SCAN</button>
-            <div id="scan-result" style="margin-top:24px"></div>
+            <div id="scan-result" aria-live="polite"></div>
         </div>
-        <div id="tab-jobs" style="display:none">
+        <div id="tab-jobs" hidden>
             <div class="job-list">
                 <div class="job-card"><div><span class="job-mark">K01</span><div class="job-info">1200x1500mm - Meranti - Draaikiepraam</div></div><span class="job-status status-bezig">Bezig</span></div>
                 <div class="job-card"><div><span class="job-mark">K02</span><div class="job-info">1800x1400mm - Meranti - Dubbel DK</div></div><span class="job-status status-wacht">Wacht</span></div>
                 <div class="job-card"><div><span class="job-mark">D01</span><div class="job-info">1000x2400mm - Accoya - Voordeur</div></div><span class="job-status status-klaar">Klaar</span></div>
             </div>
         </div>
-        <div id="tab-checklist" style="display:none">
-            <h3 style="font-size:14px; margin-bottom:12px; color:#D97706">K01 — Productie checklist</h3>
+        <div id="tab-checklist" hidden>
+            <h2>K01 — Productie checklist</h2>
             <div class="checklist">
-                <div class="check-item done" onclick="this.classList.toggle('done')"><div class="checkbox checked"></div><div><strong>Zagen</strong><br><span style="font-size:11px;color:#888">4 onderdelen afgezaagd</span></div></div>
-                <div class="check-item done" onclick="this.classList.toggle('done')"><div class="checkbox checked"></div><div><strong>Bewerken</strong><br><span style="font-size:11px;color:#888">Sponningen frezen, pennen zagen</span></div></div>
-                <div class="check-item" onclick="this.classList.toggle('done'); this.querySelector('.checkbox').classList.toggle('checked')"><div class="checkbox"></div><div><strong>Oppervlaktebehandeling</strong><br><span style="font-size:11px;color:#888">Gronden + 2x aflakken</span></div></div>
-                <div class="check-item" onclick="this.classList.toggle('done'); this.querySelector('.checkbox').classList.toggle('checked')"><div class="checkbox"></div><div><strong>Assemblage</strong><br><span style="font-size:11px;color:#888">Verlijmen, klemmen, drogen</span></div></div>
-                <div class="check-item" onclick="this.classList.toggle('done'); this.querySelector('.checkbox').classList.toggle('checked')"><div class="checkbox"></div><div><strong>Beglazing</strong><br><span style="font-size:11px;color:#888">HR++ 4-16-4 plaatsen</span></div></div>
-                <div class="check-item" onclick="this.classList.toggle('done'); this.querySelector('.checkbox').classList.toggle('checked')"><div class="checkbox"></div><div><strong>Afwerking &amp; controle</strong><br><span style="font-size:11px;color:#888">Beslag afhangen, eindcontrole</span></div></div>
+                <label class="check-item"><input type="checkbox" checked><span><strong>Zagen</strong><small>4 onderdelen afgezaagd</small></span></label>
+                <label class="check-item"><input type="checkbox" checked><span><strong>Bewerken</strong><small>Sponningen frezen, pennen zagen</small></span></label>
+                <label class="check-item"><input type="checkbox"><span><strong>Oppervlaktebehandeling</strong><small>Gronden + 2x aflakken</small></span></label>
+                <label class="check-item"><input type="checkbox"><span><strong>Assemblage</strong><small>Verlijmen, klemmen, drogen</small></span></label>
+                <label class="check-item"><input type="checkbox"><span><strong>Beglazing</strong><small>HR++ 4-16-4 plaatsen</small></span></label>
+                <label class="check-item"><input type="checkbox"><span><strong>Afwerking &amp; controle</strong><small>Beslag afhangen, eindcontrole</small></span></label>
             </div>
         </div>
-    </div>
+    </main>
     <script>
         function showTab(name, btn) {
-            document.querySelectorAll('[id^="tab-"]').forEach(function(el) { el.style.display = 'none'; });
-            document.querySelectorAll('.tab').forEach(function(el) { el.classList.remove('active'); });
-            document.getElementById('tab-' + name).style.display = 'block';
-            btn.classList.add('active');
+            document.querySelectorAll('[id^="tab-"]').forEach(el => { el.hidden = el.id !== "tab-" + name; });
+            document.querySelectorAll(".tab").forEach(tab => tab.setAttribute("aria-pressed", String(tab === btn)));
         }
         function simulateScan() {
             document.getElementById('scan-result').innerHTML =
-                '<div style="background:#1a1a2e; border-radius:8px; padding:16px; text-align:left; margin-top:12px">' +
-                '<div style="font-size:18px; font-weight:700; color:#D97706">K01-SL</div>' +
-                '<div style="font-size:12px; color:#888; margin-top:4px">Stijl Links - KVT 67x114mm</div>' +
-                '<div style="font-size:14px; margin-top:8px">Netto: <strong>1366mm</strong> - Bruto: <strong>1406mm</strong></div>' +
-                '<div style="font-size:12px; color:#888; margin-top:4px">Verstek: 90\u00B0 / 90\u00B0 - Pen: 20mm</div>' +
-                '<div style="font-size:12px; color:#22c55e; margin-top:8px">\u2713 Afgezaagd - \u2713 Bewerkt - \u25CB Oppervlak</div>' +
+                '<div class="scan-card">' +
+                '<strong class="job-mark">K01-SL</strong>' +
+                '<p class="job-info">Stijl Links - KVT 67x114mm</p>' +
+                '<p class="scan-measures">Netto: <strong>1366mm</strong> - Bruto: <strong>1406mm</strong></p>' +
+                '<p class="job-info">Verstek: 90\u00B0 / 90\u00B0 - Pen: 20mm</p>' +
+                '<p class="scan-status">\u2713 Afgezaagd - \u2713 Bewerkt - \u25CB Oppervlak</p>' +
                 '</div>';
         }
     </script>

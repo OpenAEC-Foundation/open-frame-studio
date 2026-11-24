@@ -1,5 +1,6 @@
 <script>
   import { _ } from "svelte-i18n";
+  import BlueprintIcon from "../shell/BlueprintIcon.svelte";
   import { onMount } from "svelte";
   import { kozijnen } from "../../stores/project.js";
   import { selectKozijn, removeKozijn, currentKozijn } from "../../stores/kozijn.js";
@@ -47,34 +48,35 @@
   }
 </script>
 
+{#snippet projectItem(mark, name, width, height, summary, active, select, remove)}
+  <div class="item">
+    <button class="card" class:active aria-pressed={active} onclick={select}>
+      <span class="card-header">
+        <span class="mark">{mark}</span>
+        <span class="name">{name}</span>
+      </span>
+      <span class="card-info">
+        <span>{width} × {height} mm</span>
+        <span class="cells">{summary}</span>
+      </span>
+    </button>
+    <button class="delete-btn" onclick={remove} title={$_("project.delete") + " · " + mark}
+      aria-label={$_("project.delete") + " · " + mark}>
+      <BlueprintIcon name="edit.delete" />
+    </button>
+  </div>
+{/snippet}
+
 <div class="overview">
   <h3>{$_('project.kozijnen')}</h3>
   {#if !$kozijnen || $kozijnen.length === 0}
     <p class="empty">{$_('project.noKozijnen')}</p>
   {:else}
     <div class="list">
-      {#each $kozijnen as kozijn}
-        <div
-          class="card"
-          class:active={!$currentVliesgevel && $currentKozijn?.id === kozijn.id}
-          onclick={() => openKozijn(kozijn.id)}
-          role="button"
-          tabindex="0"
-        >
-          <div class="card-header">
-            <span class="mark">{kozijn.mark}</span>
-            <span class="name">{kozijn.name}</span>
-            <button
-              class="delete-btn"
-              onclick={(e) => { e.stopPropagation(); removeKozijn(kozijn.id); }}
-              title={$_('project.delete')}
-            >x</button>
-          </div>
-          <div class="card-info">
-            <span>{kozijn.frame.outerWidth} x {kozijn.frame.outerHeight} mm</span>
-            <span class="cells">{cellSummary(kozijn)}</span>
-          </div>
-        </div>
+      {#each $kozijnen as kozijn (kozijn.id)}
+        {@render projectItem(kozijn.mark, kozijn.name, kozijn.frame.outerWidth, kozijn.frame.outerHeight,
+          cellSummary(kozijn), !$currentVliesgevel && $currentKozijn?.id === kozijn.id,
+          () => openKozijn(kozijn.id), () => removeKozijn(kozijn.id))}
       {/each}
     </div>
   {/if}
@@ -83,27 +85,9 @@
     <h3 class="section-title">{$_('vliesgevel.title')}</h3>
     <div class="list">
       {#each $vliesgevels as vg (vg.id)}
-        <div
-          class="card"
-          class:active={$currentVliesgevel?.id === vg.id}
-          onclick={() => selectVliesgevel(vg.id)}
-          role="button"
-          tabindex="0"
-        >
-          <div class="card-header">
-            <span class="mark">{vg.mark}</span>
-            <span class="name">{vg.name}</span>
-            <button
-              class="delete-btn"
-              onclick={(e) => { e.stopPropagation(); removeVliesgevel(vg.id); }}
-              title={$_('project.delete')}
-            >x</button>
-          </div>
-          <div class="card-info">
-            <span>{Math.round(vg.overallWidth)} x {Math.round(vg.overallHeight)} mm</span>
-            <span class="cells">{vg.panels.length} {$_('vliesgevel.panels')}</span>
-          </div>
-        </div>
+        {@render projectItem(vg.mark, vg.name, Math.round(vg.overallWidth), Math.round(vg.overallHeight),
+          vg.panels.length + " " + $_("vliesgevel.panels"), $currentVliesgevel?.id === vg.id,
+          () => selectVliesgevel(vg.id), () => removeVliesgevel(vg.id))}
       {/each}
     </div>
   {/if}
@@ -146,9 +130,11 @@
     gap: 1px;
   }
 
+  .item { position: relative; }
+
   .card {
     text-align: left;
-    padding: 6px 10px;
+    padding: 6px 28px 6px 10px;
     background: transparent;
     border: none;
     border-left: 2px solid transparent;
@@ -162,8 +148,8 @@
   }
 
   .card.active {
-    background: var(--bg-surface-alt);
-    border-left-color: var(--amber);
+    background: var(--oa-selected);
+    border-left-color: var(--oa-selected-bar);
   }
 
   .card-header {
@@ -174,8 +160,8 @@
   }
 
   .mark {
-    background: var(--amber);
-    color: var(--night-build);
+    background: var(--oa-frame);
+    color: var(--oa-text);
     padding: 0 5px;
     border-radius: 2px;
     font-size: 10px;
@@ -199,15 +185,17 @@
     font-size: 11px;
     color: var(--text-muted);
     border-radius: 2px;
-    display: none;
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    opacity: 0;
+    display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
   }
 
-  .card:hover .delete-btn {
-    display: flex;
-  }
+  .item:hover .delete-btn, .item:focus-within .delete-btn { opacity: 1; }
 
   .delete-btn:hover {
     background: var(--error);
@@ -219,6 +207,9 @@
     justify-content: space-between;
     font-size: 10px;
     color: var(--text-muted);
+    gap: 4px;
+    flex-wrap: wrap;
+    font-weight: 400;
     padding-left: 1px;
   }
 

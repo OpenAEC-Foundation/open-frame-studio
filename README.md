@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.0
+# Open Frame Studio v2026.48.1
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -36,7 +36,7 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 - **Werkplaatstekening** — A3 workshop drawings with title block and OpenAEC branding
 - **Blender/Bonsai Integration** — Send kozijnen directly to Blender via TCP socket for IFC modeling
 - **Undo/Redo** — Full snapshot-based undo/redo with Ctrl+Z / Ctrl+Y
-- **Dark & Light Theme** — OpenAEC Design System with Amber accent (#D97706)
+- **OpenAEC Blueprint layout** — Frame Studio’s ribbon, workspace tabs, project explorer and properties panel follow the [Frame shell profile](https://github.com/OpenAEC-Foundation/OpenAEC-Blueprint/blob/2eb8a958bbfe864dea81237e8890cf2405620b7d/design/frame-layout-review.html). New installations start in light mode. Existing theme and panel preferences are retained.
 
 ### Materialen
 
@@ -48,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.1 (2026-11-24)
+
+- De twintig werkruimten gebruiken de Frame-specifieke OpenAEC Blueprint. Het lint groepeert opdrachten bij een smal venster en onthoudt welke groepen en tabbladen de gebruiker zichtbaar houdt.
+- De 2D-editor en de 3D-viewer delen de projectverkenner en het eigenschappenpaneel. Bij wisselen van thema volgen de achtergrond en het raster van de 3D-viewer de nieuwe kleuren. De camerastand blijft behouden.
+- Nieuwe installaties starten in het lichte thema. Een bestaande themakeuze en opgeslagen paneelbreedtes blijven beschikbaar. De zelfstandige configurator, werkvloer en AR-preview gebruiken dezelfde vormgeving.
 
 ## Changelog v2026.47.2 (2026-11-20)
 

@@ -1,248 +1,119 @@
 <script>
+  import { onMount } from "svelte";
   import { _ } from "svelte-i18n";
+  import BlueprintIcon from "./BlueprintIcon.svelte";
   import { showSettings } from "../../stores/ui.js";
   import { undo, redo, canUndo, canRedo } from "../../stores/history.js";
-  import { confirmUnsavedChanges } from "../../lib/project-actions.js";
-  import { isDirty } from "../../stores/project.js";
-  import { APP_VERSION } from "../../lib/version.js";
+  import { isDirty, project, projectPath } from "../../stores/project.js";
+  import { fileSave } from "../../lib/project-actions.js";
+  import { closeApplication, openProjectLink } from "../../lib/shell-actions.js";
+  import { isTauri, isPlatformBuild } from "../../lib/tauri.js";
 
-  let appWindow = null;
+  let appWindow;
   let maximized = false;
   let platform = "windows";
-  const isTauri = typeof window !== "undefined" && window.__TAURI_INTERNALS__;
+  $: documentName = $projectPath?.split(/[\\/]/).pop() || $project?.projectInfo?.name;
 
-  if (isTauri) {
-    import("@tauri-apps/api/window").then(async (mod) => {
-      appWindow = mod.getCurrentWindow();
+  onMount(() => {
+    if (!isTauri) return;
+    let disposed = false;
+    let unlisten;
+    async function connect() {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const { invoke } = await import("@tauri-apps/api/core");
+      appWindow = getCurrentWindow();
+      try { platform = await invoke("get_platform"); } catch {}
       maximized = await appWindow.isMaximized();
-      appWindow.onResized(async () => {
+      unlisten = await appWindow.onResized(async () => {
         maximized = await appWindow.isMaximized();
       });
-    });
-    import("@tauri-apps/api/core").then(async (mod) => {
-      try { platform = await mod.invoke("get_platform"); } catch {}
-    });
-  }
-
-  async function toggleMaximize() {
-    if (!appWindow) return;
-    await appWindow.toggleMaximize();
-    maximized = await appWindow.isMaximized();
-  }
-
-  function minimize() { appWindow?.minimize(); }
-  async function close() {
-    if (!(await confirmUnsavedChanges())) return;
-    if (isTauri) {
-      try {
-        const { exit } = await import("@tauri-apps/plugin-process");
-        exit(0);
-      } catch (e1) {
-        console.warn("exit() failed:", e1);
-        try {
-          await appWindow?.destroy();
-        } catch (e2) {
-          console.warn("destroy() failed:", e2);
-          try {
-            await appWindow?.close();
-          } catch {
-            window.close();
-          }
-        }
-      }
+      if (disposed) unlisten();
     }
-  }
+    connect();
+    return () => { disposed = true; unlisten?.(); };
+  });
 </script>
 
-<div class="titlebar" data-tauri-drag-region>
-  <div class="titlebar-left">
-    <img class="app-icon" src="/icon.png" alt="Open Frame Studio" />
-    <button class="settings-btn" onclick={() => showSettings.set(true)}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-      </svg>
+<header class="titlebar" data-tauri-drag-region>
+  <div class="quick">
+    <img class="app-icon" src={import.meta.env.BASE_URL + "icon.png"} alt="" />
+    <span class="divider"></span>
+    <button class="action" title={$_('backstage.save') + ' (Ctrl+S)'} aria-label={$_('backstage.save')} onclick={fileSave}>
+      <BlueprintIcon name="file.save" />
     </button>
-    <div class="titlebar-sep"></div>
-    <button class="titlebar-action" onclick={undo} disabled={!$canUndo}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 5.5h6.5a4 4 0 0 1 0 8H6"/>
-        <path d="M6 2.5L3 5.5l3 3"/>
-      </svg>
+    <button class="action" title={$_('profileEditor.undo') + ' (Ctrl+Z)'} aria-label={$_('profileEditor.undo')} onclick={undo} disabled={!$canUndo}>
+      <BlueprintIcon name="edit.undo" />
     </button>
-    <button class="titlebar-action" onclick={redo} disabled={!$canRedo}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 5.5H6.5a4 4 0 0 0 0 8H10"/>
-        <path d="M10 2.5l3 3-3 3"/>
-      </svg>
+    <button class="action" title={$_('ribbon.redo') + ' (Ctrl+Y)'} aria-label={$_('ribbon.redo')} onclick={redo} disabled={!$canRedo}>
+      <BlueprintIcon name="edit.redo" />
     </button>
   </div>
 
-  <div class="titlebar-center" data-tauri-drag-region>
-    <span class="subtitle">{$isDirty ? '* ' : ''}{$_('app.name')} <span class="version">v{APP_VERSION}</span></span>
+  <div class="caption" data-tauri-drag-region>
+    {#if documentName}<span class="document" title={documentName} data-tauri-drag-region>{documentName}</span>{/if}
+    {#if $isDirty}<span class="dirty" role="img" aria-label={$_('shell.unsaved')} title={$_('shell.unsaved')}></span>{/if}
+    {#if documentName}<span class="divider"></span>{/if}
+    <strong data-tauri-drag-region>{$_('app.name')}</strong>
   </div>
 
-  {#if isTauri && platform !== "linux"}
-  <div class="titlebar-controls">
-    <button class="ctrl-btn" onclick={(e) => { e.preventDefault(); minimize(e); }}>
-      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 5.5h10" stroke="currentColor" stroke-width="1"/></svg>
+  <div class="utilities">
+    {#if !isPlatformBuild}
+      <button class="action feedback" title={$_('backstage.reportIssue')} onclick={() => openProjectLink("/issues/new")}>
+        <BlueprintIcon name="feedback.github-issue" /><span>{$_('shell.feedback')}</span>
+      </button>
+    {/if}
+    <button class="action" title={$_('settings.title') + ' (Ctrl+,)'} aria-label={$_('settings.title')} onclick={() => showSettings.set(true)}>
+      <BlueprintIcon name="ui.settings" />
     </button>
-    <button class="ctrl-btn" onclick={(e) => { e.preventDefault(); toggleMaximize(e); }}>
-      {#if maximized}
-        <svg width="12" height="12" viewBox="0 0 12 12">
-          <path d="M3 3v-2h8.5v8.5h-2" stroke="currentColor" stroke-width="1" fill="none"/>
-          <path d="M0.5 3h8.5v8.5h-8.5z" stroke="currentColor" stroke-width="1" fill="var(--bg-titlebar, #1a1a1a)"/>
+    {#if isTauri && platform !== "linux"}
+      <span class="divider"></span>
+      <button class="ctrl" title={$_('shell.minimize')} aria-label={$_('shell.minimize')} onclick={() => appWindow?.minimize()}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10" stroke="currentColor"/></svg>
+      </button>
+      <button class="ctrl" title={$_(maximized ? 'shell.restore' : 'shell.maximize')} aria-label={$_(maximized ? 'shell.restore' : 'shell.maximize')} onclick={() => appWindow?.toggleMaximize()}>
+        <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" fill="none" aria-hidden="true">
+          {#if maximized}<path d="M3 3V1.5h7.5V9H9M1.5 3.5h7v7h-7z"/>{:else}<rect x="1.5" y="1.5" width="9" height="9"/>{/if}
         </svg>
-      {:else}
-        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1.5 1.5h9v9h-9z" stroke="currentColor" stroke-width="1" fill="none"/></svg>
-      {/if}
-    </button>
-    <button class="ctrl-btn close" onclick={(e) => { e.preventDefault(); close(e); }}>
-      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-    </button>
+      </button>
+      <button class="ctrl close" title={$_('shell.exit')} aria-label={$_('shell.exit')} onclick={closeApplication}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8m0-8l-8 8" stroke="currentColor"/></svg>
+      </button>
+    {/if}
   </div>
-  {/if}
-</div>
+</header>
 
 <style>
   .titlebar {
-    display: flex;
+    flex: 0 0 var(--oa-shell-titlebar);
+    height: var(--oa-shell-titlebar);
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
     align-items: center;
-    justify-content: space-between;
-    height: 36px;
+    gap: 8px;
+    padding-inline: 8px 4px;
+    border-bottom: 1px solid var(--border-color);
     background: var(--bg-titlebar);
-    color: var(--text-on-dark);
-    padding: 0 var(--sp-2);
-    -webkit-app-region: drag;
+    color: var(--text-primary);
     user-select: none;
-    -webkit-user-select: none;
   }
-
-  .titlebar-left {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    -webkit-app-region: no-drag;
-  }
-
-  .app-icon {
-    width: 18px;
-    height: 18px;
-    margin-left: var(--sp-2);
-  }
-
-  .settings-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    color: var(--scaffold-gray);
-    border-radius: var(--radius-sm);
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .settings-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-on-dark);
-  }
-
-  .titlebar-sep {
-    width: 1px;
-    height: 16px;
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .titlebar-action {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    color: var(--scaffold-gray);
-    border-radius: var(--radius-sm);
-    transition: background 0.15s, color 0.15s;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  .titlebar-action:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-on-dark);
-  }
-
-  .titlebar-action:disabled {
-    opacity: 0.3;
-  }
-
-  .file-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-1);
-    padding: var(--sp-1) var(--sp-3);
-    color: var(--text-on-dark);
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: var(--radius-sm);
-    transition: background 0.15s;
-  }
-
-  .file-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .title {
-    font-family: var(--font-heading);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--amber);
-  }
-
-  .titlebar-center {
-    flex: 1;
-    text-align: center;
-    -webkit-app-region: drag;
-  }
-
-  .subtitle {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-on-dark);
-  }
-
-  .version {
-    font-size: 9px;
-    opacity: 0.5;
-    vertical-align: baseline;
-    margin-left: 2px;
-    letter-spacing: 0.5px;
-  }
-
-  .titlebar-controls {
-    display: flex;
-    gap: 2px;
-    -webkit-app-region: no-drag;
-  }
-
-  .ctrl-btn {
-    display: flex;
-    align-items: center;
-    user-select: none;
-    -webkit-user-select: none;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    color: var(--scaffold-gray);
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .ctrl-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-on-dark);
-  }
-
-  .ctrl-btn.close:hover {
-    background: var(--error);
-    color: white;
+  .quick, .utilities, .caption { display: flex; align-items: center; min-width: 0; }
+  .quick, .utilities { gap: 2px; width: fit-content; }
+  .utilities { justify-self: end; }
+  .app-icon { width: 20px; height: 20px; object-fit: contain; margin-inline: 2px; }
+  .divider { width: 1px; height: 14px; flex: none; margin-inline: 4px; background: var(--border-color); }
+  .caption { justify-content: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+  .caption strong { font: 600 13px var(--font-heading); }
+  .document { font: 500 12px var(--font-body); overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
+  .dirty { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-accent); }
+  .action, .ctrl { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+  .action { width: 28px; height: 28px; border-radius: 4px; }
+  .feedback { width: auto; gap: 5px; padding-inline: 6px; font-size: 12px; font-weight: 400; }
+  .ctrl { width: 36px; height: 36px; }
+  .action:hover:not(:disabled), .ctrl:hover { color: var(--text-primary); background: var(--oa-hover); }
+  .action:disabled { opacity: .4; }
+  .ctrl.close:hover { background: var(--error); color: white; }
+  @media (max-width: 700px) {
+    .feedback { width: 28px; }
+    .feedback span, .caption strong, .caption .divider { display: none; }
   }
 </style>

@@ -1,5 +1,4 @@
-/* Open Frame Studio — Global Styles */
-
+/* Open Frame Studio shared desktop and browser controls */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -12,67 +11,129 @@ html, body, #app {
 }
 
 body {
-  font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.5;
+  font: var(--oa-weight-regular) var(--oa-size-body)/1.45 var(--font-body);
   color: var(--text-primary);
   background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
-h1, h2, h3 {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
-h4, h5, h6 {
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 500;
+  font-weight: var(--oa-weight-medium);
+  letter-spacing: var(--oa-letter-spacing-heading);
 }
 
-code, pre {
+code, pre, kbd {
   font-family: var(--font-code);
-  font-size: 0.875rem;
+}
+
+button, input, select, textarea {
+  color: inherit;
+  font: inherit;
 }
 
 button {
   cursor: default;
-  font-family: var(--font-body);
-  font-weight: 600;
-  border: none;
   background: none;
-  color: inherit;
+  border: 0;
 }
 
-input, select {
-  font-family: var(--font-body);
-  font-size: 14px;
+input, select, textarea {
+  accent-color: var(--oa-accent);
 }
 
-/* Scrollbar styling */
+input:not([type="button"]), textarea, [contenteditable="true"] {
+  user-select: text;
+}
+
+#app :focus-visible {
+  outline: 2px solid var(--oa-focus);
+  outline-offset: 1px;
+}
+
+/* Project screens and property panes share the same fields and numeric types. */
+#app :where(input:not([type]), input:is([type="text"], [type="number"], [type="search"], [type="password"], [type="url"], [type="email"]), select, textarea) {
+  background-color: var(--oa-field);
+  color: var(--oa-text);
+}
+
+#app :where(input[type="number"], .num, .num-head, .summary-value, .kpi-val) {
+  font-family: var(--oa-font-numbers);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .action-btn {
+  min-height: var(--oa-row);
+  padding: var(--oa-space-xs) var(--oa-space-md);
+  border-radius: var(--oa-radius-small);
+  font-weight: var(--oa-weight-medium);
+}
+
+#app .action-btn:hover:not(:disabled) {
+  background: var(--oa-hover);
+  border-color: var(--oa-border-strong);
+}
+
+#app :is(.action-btn.primary, .btn-primary, button.save-btn, button.send-btn) {
+  background: var(--oa-accent);
+  border-color: transparent;
+  color: var(--oa-text-on-accent);
+}
+
+#app :is(.action-btn.primary, .btn-primary, button.save-btn, button.send-btn):hover:not(:disabled) {
+  background: var(--oa-accent-hover);
+  color: var(--oa-text-on-accent);
+}
+
+#app :is(.action-btn.primary, .btn-primary, button.save-btn, button.send-btn):active:not(:disabled) {
+  background: var(--oa-accent-pressed);
+}
+
+#app .table-container thead th {
+  background: var(--oa-frame);
+  color: var(--oa-text-secondary);
+  border-bottom: 1px solid var(--oa-border);
+}
+
+#app .table-container tbody tr {
+  border-bottom-color: var(--oa-border-subtle);
+}
+
+#app .table-container tbody tr:hover {
+  background: var(--oa-hover);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-surface-alt);
+  background: var(--oa-frame);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scaffold-gray);
-  border-radius: var(--radius-sm);
+  background: var(--oa-border-strong);
+  border-radius: var(--oa-radius-small);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--oa-text-secondary);
 }
 
-/* Application layout */
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

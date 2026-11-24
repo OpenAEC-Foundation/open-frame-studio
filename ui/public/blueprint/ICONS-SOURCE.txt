@@ -1,0 +1,4 @@
+OpenAEC Foundation B2 icons for Open Frame Studio, revision 107.
+frame.svg is distributed unchanged under LGPL-3.0-only (ICONS-LICENSE.txt).
+Source: https://github.com/OpenAEC-Foundation/OpenAEC-Blueprint/blob/2eb8a958bbfe864dea81237e8890cf2405620b7d/web/icons/frame.svg
+SHA-256: 534e0e7da4735d0f55b3a1c9220adc224a86117d692e9c57cb479f27ed646b87
