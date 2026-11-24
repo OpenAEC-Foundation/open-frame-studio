@@ -15,6 +15,8 @@ import {
 import { invoke, isTauri } from "./tauri.js";
 import { getOpenAecHost, listHostProjects, openHostProjectIfCurrent, writeHostProject } from "./platformHost.js";
 import { toast } from "../stores/toast.js";
+import { chooseDocsFile } from "./docsDialog.js";
+import { desktopDialogs } from "./desktopDialogs.js";
 
 function clearKozijnSelection() {
   currentKozijn.set(null);
@@ -25,7 +27,7 @@ function clearKozijnSelection() {
 }
 
 async function getDialogs() {
-  if (isTauri) return await import("@tauri-apps/plugin-dialog");
+  if (isTauri) return desktopDialogs();
   return {
     open: async () => prompt("File path:"),
     save: async () => prompt("Save path:", "project.ofs"),
@@ -85,15 +87,8 @@ export async function fileOpen() {
         toast.error("Geen .ofs-projecten in deze Docs-map gevonden");
         return false;
       }
-      const choices = files.map((file, index) => `${index + 1}. ${file.name}`).join("\n");
-      const answer = window.prompt(`Kies een projectnummer uit Docs:\n${choices}`, "1");
-      if (answer === null) return false;
-      const index = Number(answer) - 1;
-      if (!Number.isInteger(index) || index < 0 || index >= files.length) {
-        toast.error("Kies een geldig projectnummer");
-        return false;
-      }
-      return await openHostFileById(files[index].id);
+      const id = await chooseDocsFile({ mode: "open", files });
+      return id ? await openHostFileById(id) : false;
     } catch (error) {
       toast.error(`Docs openen mislukt: ${error?.message || error}`);
       return false;
@@ -150,12 +145,7 @@ export async function fileSave() {
       const token = projectSaveToken();
       const json = await invoke("save_project");
       const saved = await writeHostProject(host, json, { current });
-      const stillOpen = finishHostSave(token, saved);
-      if (!stillOpen) {
-        toast.success(`Docs-kopie opgeslagen: ${saved.name}; intussen is een ander project geopend`);
-        return true;
-      }
-      toast.success(`Opgeslagen in Docs: ${saved.name}`);
+      reportHostSave(token, saved);
       return true;
     } catch (error) {
       toast.error(`Docs opslaan mislukt: ${error?.message || error}`);
@@ -182,21 +172,23 @@ export async function fileSave() {
   return false;
 }
 
+function reportHostSave(token, saved) {
+  const stillOpen = finishHostSave(token, saved.id ? saved : null);
+  if (!saved.id) toast.success(`Gedownload: ${saved.name}`);
+  else if (stillOpen) toast.success(`Opgeslagen in Docs: ${saved.name}`);
+  else toast.success(`Docs-kopie opgeslagen: ${saved.name}`);
+}
+
 export async function fileSaveAs() {
   const host = getOpenAecHost();
   if (host) {
-    const name = window.prompt("Naam voor het nieuwe Docs-project:", get(hostFileRef)?.name || "project.ofs");
+    const name = await chooseDocsFile({ mode: "save", name: get(hostFileRef)?.name || "project.ofs" });
     if (name === null) return false;
     try {
       const token = projectSaveToken();
       const json = await invoke("save_project");
       const saved = await writeHostProject(host, json, { name });
-      const stillOpen = finishHostSave(token, saved);
-      if (!stillOpen) {
-        toast.success(`Docs-kopie opgeslagen: ${saved.name}; intussen is een ander project geopend`);
-        return true;
-      }
-      toast.success(`Opgeslagen in Docs: ${saved.name}`);
+      reportHostSave(token, saved);
       return true;
     } catch (error) {
       toast.error(`Docs Opslaan als mislukt: ${error?.message || error}`);

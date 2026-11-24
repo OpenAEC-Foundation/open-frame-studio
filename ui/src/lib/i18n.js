@@ -1,4 +1,5 @@
-import { register, init, getLocaleFromNavigator, locale } from "svelte-i18n";
+import { register, init, getLocaleFromNavigator, locale, locales } from "svelte-i18n";
+import { get } from "svelte/store";
 import { saveSetting, getSetting } from "./settings.js";
 import nl from "../locales/nl.json";
 
@@ -8,9 +9,11 @@ register("en", () => import("../locales/en.json"));
 register("de", () => import("../locales/de.json"));
 register("tr", () => import("../locales/tr.json"));
 
-// Initial locale from settings cache (set by App.svelte before this runs),
-// fallback to browser language, then Dutch
-const initial = getSetting("locale") || getLocaleFromNavigator()?.split("-")[0] || "nl";
+// Stored preferences and the browser can name a language the app does not ship.
+const supported = get(locales);
+const initial = [getSetting("locale"), getLocaleFromNavigator()]
+  .map(value => typeof value === "string" ? value.toLowerCase().split("-")[0] : null)
+  .find(language => supported.includes(language)) || "nl";
 
 init({
   fallbackLocale: "nl",

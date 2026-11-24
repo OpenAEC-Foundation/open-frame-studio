@@ -12,6 +12,12 @@ import {
 
 const bytes = (text) => new TextEncoder().encode(text);
 
+test("host download outside a Docs folder has no document id", async () => {
+  const host = { save: async (_bytes, { name }) => ({ id: "", name, version: 0 }) };
+  const saved = await writeHostProject(host, "{}", { name: "download" });
+  assert.deepEqual(saved, { id: "", name: "download.ofs", version: 0, readOnly: false });
+});
+
 test("opens UTF-8 OFS bytes and preserves the host version and read-only flag", async () => {
   const json = '{"projectInfo":{"name":"René"}}';
   const host = {

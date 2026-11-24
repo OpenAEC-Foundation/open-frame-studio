@@ -24,7 +24,7 @@ const actual = {
 };
 
 const lock = read("Cargo.lock");
-for (const name of ["ofs-core", "ofs-wasm", "ofs-cloud", "open-frame-studio"]) {
+for (const name of ["ofs-core", "ofs-wasm", "ofs-cloud", "ofs-sdk", "open-frame-studio"]) {
   actual[`Cargo.lock:${name}`] = lock.match(new RegExp(`\\[\\[package\\]\\]\\s+name = "${name}"\\s+version = "([^"]+)"`))?.[1];
 }
 

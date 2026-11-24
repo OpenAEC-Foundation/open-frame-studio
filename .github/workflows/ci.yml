@@ -60,6 +60,21 @@ jobs:
       - name: Check candidate version labels
         run: node scripts/check-version.mjs
 
+      - name: Build headless API and native library
+        if: runner.os != 'macOS'
+        run: cargo build --locked -p ofs-cloud -p ofs-sdk
+
+      - name: Run external SDK consumer and package its ABI
+        if: runner.os != 'macOS'
+        run: python ofs-sdk/package.py target/debug ofs-sdk.zip
+
+      - name: Keep the tested native SDK
+        if: runner.os != 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ofs-sdk-${{ runner.os }}-x64
+          path: ofs-sdk.zip
+
       - name: Build frontend
         if: matrix.platform != 'ubuntu-22.04'
         working-directory: ui
@@ -76,6 +91,25 @@ jobs:
         working-directory: ui
         run: npm run build:web
 
+      - name: Test SuperCloud Docs and MCP in a sandboxed browser
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: ui
+        run: |
+          node --test ../packaging/mcp/stdio.test.mjs
+          ./node_modules/.bin/vite build --mode platform --base ./ --outDir "$RUNNER_TEMP/ofs-platform"
+          npm install --prefix "$RUNNER_TEMP/ofs-browser-test" --no-save --package-lock=false --ignore-scripts playwright-core@1.65.1
+          export OFS_PLAYWRIGHT="$RUNNER_TEMP/ofs-browser-test/node_modules/playwright-core"
+          export OFS_BROWSER="$(command -v google-chrome)"
+          node scripts/smoke-platform.mjs "$RUNNER_TEMP/ofs-platform"
+
+      - name: Keep the tested SuperCloud platform bundle
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-frame-studio-supercloud-platform
+          path: ${{ runner.temp }}/ofs-platform/
+          if-no-files-found: error
+
       - name: Check Rust workspace
         run: cargo check -p ofs-core -p open-frame-studio --locked
 
@@ -91,3 +125,13 @@ jobs:
       - name: Build Tauri app (no bundle)
         working-directory: src-tauri
         run: cargo build --locked
+
+      - name: Install and start the unsigned Windows candidate on the clean runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Push-Location src-tauri
+          ../ui/node_modules/.bin/tauri.cmd bundle --debug --ci --bundles nsis --no-sign --no-binary-patching
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          ./scripts/test-windows-install.ps1 -UnsignedDebugCandidate

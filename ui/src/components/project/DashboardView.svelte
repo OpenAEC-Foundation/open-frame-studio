@@ -2,6 +2,7 @@
   import { _ } from "svelte-i18n";
   import { kozijnen } from "../../stores/project.js";
   import { panelLabel } from "../../lib/labels.js";
+  import { frameEnvelopeAreaM2 } from "../../lib/frameArea.js";
 
   // Frontend-only analytics: aggregates directly from the kozijnen store, so it
   // shows real figures in every mode (no backend/wasm round-trip needed).
@@ -28,7 +29,7 @@
   $: cellCount = allCells.length;
 
   $: totalAreaM2 = round2(
-    list.reduce((s, k) => s + ((k.frame?.outerWidth || 0) * (k.frame?.outerHeight || 0)) / 1e6, 0)
+    list.reduce((s, k) => s + (frameEnvelopeAreaM2(k.frame) ?? 0), 0)
   );
 
   $: escapeCount = allCells.filter((c) => c.isEscape).length;
@@ -59,7 +60,7 @@
     const m = new Map();
     for (const k of list) {
       const label = materialLabel(k.frame?.material);
-      const a = ((k.frame?.outerWidth || 0) * (k.frame?.outerHeight || 0)) / 1e6;
+      const a = frameEnvelopeAreaM2(k.frame) ?? 0;
       m.set(label, (m.get(label) || 0) + a);
     }
     return [...m.entries()].map(([label, area]) => ({ label, area: round2(area) })).sort((a, b) => b.area - a.area);

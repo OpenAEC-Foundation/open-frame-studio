@@ -1,5 +1,5 @@
 <script>
-  import { setContext, tick } from "svelte";
+  import { onMount, setContext, tick } from "svelte";
   import { _ } from "svelte-i18n";
   import { activeRibbonTab, showAppMenu } from "../../stores/ui.js";
   import { getSetting, saveSetting } from "../../lib/settings.js";
@@ -14,6 +14,11 @@
   };
   const defaults = { minimized: false, hiddenTabs: [], hiddenGroups: [] };
   let preferences = $state({ ...defaults, ...getSetting("ribbon_layout") });
+  onMount(() => {
+    const restore = () => { preferences = { ...defaults, ...getSetting("ribbon_layout") }; };
+    window.addEventListener("ofs-workspace-settings-loaded", restore);
+    return () => window.removeEventListener("ofs-workspace-settings-loaded", restore);
+  });
   let visibleTabs = $derived(Object.keys(tabs).filter(id => !preferences.hiddenTabs.includes(id)));
   let widths = $state({});
   let bandWidth = $state(0);

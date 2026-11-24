@@ -4,6 +4,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+/// Set by the container launcher, which validates and resolves OPENAEC_OPEN
+/// inside its mounted workspace before starting the application.
+#[tauri::command]
+pub fn get_container_startup() -> Option<serde_json::Value> {
+    (std::env::var("OPENAEC_FRAME_CONTAINER").as_deref() == Ok("1")).then(|| {
+        serde_json::json!({
+            "workspace": "/openaec",
+            "project": std::env::var("OPENAEC_OPEN").ok().filter(|value| !value.is_empty()),
+        })
+    })
+}
+
 #[tauri::command]
 pub fn new_project(
     state: State<'_, AppState>,

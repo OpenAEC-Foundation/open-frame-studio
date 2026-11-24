@@ -1,9 +1,10 @@
 /** Transport-neutral, read-only OFS assistant tools.
  *
- * A browser adapter and a future desktop MCP transport can pass the same
- * project snapshot and selection into runFrameTool. No tool mutates the model.
+ * The browser adapter and the desktop MCP transport pass snapshots and
+ * selection into the same dispatcher.
  */
 import toolDefinitions from "./mcp-tools.json" with { type: "json" };
+import { frameEnvelopeAreaM2 } from "./frameArea.js";
 
 const MAX_OUTPUT_LENGTH = 30_000;
 const MAX_LIST_LIMIT = 50;
@@ -100,7 +101,7 @@ function stand(project, context) {
 }
 
 function kozijnen(project, args) {
-  if (args.query !== undefined && typeof args.query !== "string") {
+  if (args.query !== undefined && (typeof args.query !== "string" || args.query.length > 200)) {
     throw new FrameToolError("ongeldige_argumenten", "query moet tekst zijn");
   }
   const offset = args.offset ?? 0;
@@ -120,14 +121,19 @@ function kozijnen(project, args) {
   };
 }
 
-function kozijnDetail(project, args, context) {
-  if (args.id !== undefined && (typeof args.id !== "string" || !args.id.trim())) {
+function selectKozijn(project, args, context) {
+  if (args.id !== undefined && (typeof args.id !== "string" || !args.id.trim() || args.id.length > 80)) {
     throw new FrameToolError("ongeldige_argumenten", "id moet een niet-lege tekst zijn");
   }
   const id = args.id || context.selectedKozijnId;
   if (!id) throw new FrameToolError("geen_kozijn_geselecteerd", "geef een id op of selecteer een kozijn");
   const kozijn = project.kozijnen.find((item) => item.id === id);
   if (!kozijn) throw new FrameToolError("kozijn_niet_gevonden", text(id, 80));
+  return kozijn;
+}
+
+function kozijnDetail(project, args, context) {
+  const kozijn = selectKozijn(project, args, context);
   const cells = Array.isArray(kozijn.cells) ? kozijn.cells : [];
   const byPanelType = Object.create(null);
   for (const cell of cells) {
@@ -177,7 +183,20 @@ function kozijnDetail(project, args, context) {
   };
 }
 
-/** Pure dispatcher used by the browser bridge and future desktop MCP transport. */
+function envelopeArea(project, args, context) {
+  const frames = args.id === undefined ? project.kozijnen : [selectKozijn(project, args, context)];
+  let areaM2 = 0;
+  let missingDimensions = 0;
+  for (const kozijn of frames) {
+    const area = frameEnvelopeAreaM2(kozijn.frame);
+    if (area === null) missingDimensions++;
+    else areaM2 += area;
+  }
+  return { method: "outerWidth × outerHeight", unit: "m²", frameCount: frames.length,
+    missingDimensions, areaM2: Number(areaM2.toFixed(6)) };
+}
+
+/** Pure dispatcher used by the browser and desktop transports. */
 export function runFrameTool(name, args, context) {
   if (!frameToolNames().includes(name)) throw new FrameToolError("onbekende_tool", text(name, 80));
   const project = requireProject(context);
@@ -186,6 +205,7 @@ export function runFrameTool(name, args, context) {
     case "frame_stand": result = stand(project, context); requireArgs(args, []); break;
     case "frame_kozijnen": result = kozijnen(project, requireArgs(args, ["query", "offset", "limit"])); break;
     case "frame_kozijn": result = kozijnDetail(project, requireArgs(args, ["id"]), context); break;
+    case "frame_oppervlakte": result = envelopeArea(project, requireArgs(args, ["id"]), context); break;
   }
   if (JSON.stringify(result).length > MAX_OUTPUT_LENGTH) {
     throw new FrameToolError("antwoord_te_groot", "verklein de selectie of filters");

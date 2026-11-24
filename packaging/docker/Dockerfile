@@ -5,16 +5,8 @@
 # the browser on one HTTP port. A tool copies this folder unchanged and only
 # passes its package and program as build arguments; see README.md here.
 #
-#   docker build \
-#     --build-arg APP_DEB=openaec-blueprint_2026.44.1_amd64.deb \
-#     --build-arg APP_COMMAND=/usr/bin/openaec-blueprint \
-#     --build-arg APP_NAME=openaec-blueprint --build-arg APP_TITLE="OpenAEC Blueprint" \
-#     --build-arg APP_VERSION=2026.44.1 \
-#     --build-arg APP_SOURCE=https://github.com/OpenAEC-Foundation/OpenAEC-Blueprint \
-#     -t ghcr.io/openaec-foundation/openaec-blueprint:2026.44.1 .
-#
-# The build context holds this folder's files, the .deb and an optional setup.d/
-# folder with the tool's own start scripts.
+# From the checkout matching the DEB, prepare the app and its MCP runtime:
+#   bash packaging/docker/build-image.sh . /path/to/package.deb "$(mktemp -d)"
 FROM debian:bookworm-slim
 
 ARG APP_DEB
@@ -42,7 +34,7 @@ LABEL org.opencontainers.image.title="${APP_TITLE}" \
 # load at run time; the software renderer needs no GPU.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      tini procps python3 ca-certificates \
+      tini procps python3 nodejs ca-certificates \
       xvfb x11vnc matchbox-window-manager novnc websockify \
       libx11-6 libx11-xcb1 libxcb1 libxcursor1 libxi6 libxrandr2 \
       libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libfreetype6 fonts-dejavu-core \
@@ -64,6 +56,8 @@ RUN mkdir -p /opt/openaec/web /opt/openaec/setup.d \
 COPY index.html /opt/openaec/web/index.html
 COPY openaec-start openaec-gezond /opt/openaec/
 COPY setup.d/ /opt/openaec/setup.d/
+COPY mcp-runtime/ /opt/ofs/
+COPY mcp-http.mjs /opt/ofs/packaging/docker/mcp-http.mjs
 
 # A regular user; the user's files in /openaec, the app's settings in /config.
 RUN useradd --uid 1000 --create-home --home-dir /home/openaec --shell /bin/bash openaec \

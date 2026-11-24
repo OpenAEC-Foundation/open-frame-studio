@@ -1,0 +1,11 @@
+[package]
+name = "ofs-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ofs-core = { path = "../ofs-core", default-features = false }

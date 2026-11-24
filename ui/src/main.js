@@ -1,5 +1,5 @@
 import { loadSettings } from "./lib/settings.js";
-import { initWasm, isPlatformBuild } from "./lib/tauri.js";
+import { initWasm, invoke, isPlatformBuild, isTauri } from "./lib/tauri.js";
 
 let bootReady;
 let siteToolsPromise;
@@ -25,6 +25,22 @@ async function boot() {
   await loadSettings();
   await initWasm();
   await import("./lib/i18n.js");
+  if (isTauri) {
+    const container = await invoke("get_container_startup");
+    if (container) {
+      const { setDialogWorkspace } = await import("./lib/desktopDialogs.js");
+      setDialogWorkspace(container.workspace);
+      if (container.project) {
+        try {
+          const { openProject } = await import("./stores/project.js");
+          await openProject(container.project);
+        } catch (error) {
+          const { toast } = await import("./stores/toast.js");
+          toast.error(String(error));
+        }
+      }
+    }
+  }
   const { mount } = await import("svelte");
   const App = (await import("./App.svelte")).default;
   mount(App, { target: document.getElementById("app") });

@@ -1,0 +1,53 @@
+name: Container smoke test
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/container-smoke.yml'
+      - '.github/workflows/docker-image.yml'
+      - 'packaging/docker/**'
+      - 'packaging/mcp/**'
+      - 'src-tauri/src/commands/project.rs'
+      - 'src-tauri/src/commands/settings.rs'
+      - 'ui/src/main.js'
+      - 'ui/src/lib/desktopDialogs*'
+      - 'ui/src/lib/frameTools.js'
+      - 'ui/src/lib/frameArea.js'
+      - 'ui/src/lib/mcp-tools.json'
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Prepare frontend
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+      - name: Build candidate Linux package
+        working-directory: src-tauri
+        run: ../ui/node_modules/.bin/tauri build --bundles deb --config '{"build":{"beforeBuildCommand":""}}'
+      - name: Test managed container from candidate package
+        run: |
+          node --test packaging/docker/mcp-http.test.mjs
+          bash packaging/docker/build-image.sh . target/release/bundle/deb/*.deb "$RUNNER_TEMP/ofs-docker"
+          number=$(node -p "require('./ui/package.json').version")
+          bash packaging/docker/test-container.sh "open-frame-studio:$number" /usr/bin/open-frame-studio "$RUNNER_TEMP/ofs-test"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-container-test
+          path: ${{ runner.temp }}/ofs-test/
+          if-no-files-found: warn

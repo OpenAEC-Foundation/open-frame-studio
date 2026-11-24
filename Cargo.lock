@@ -2624,8 +2624,10 @@ version = "2026.48.4"
 dependencies = [
  "axum",
  "chrono",
+ "ofs-core",
  "serde",
  "serde_json",
+ "subtle",
  "tokio",
  "tower-http",
  "uuid",
@@ -2644,6 +2646,13 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "ofs-sdk"
+version = "2026.48.4"
+dependencies = [
+ "ofs-core",
 ]
 
 [[package]]
@@ -4137,6 +4146,12 @@ dependencies = [
  "rustversion",
  "syn 2.0.117",
 ]
+
+[[package]]
+name = "subtle"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "swift-rs"

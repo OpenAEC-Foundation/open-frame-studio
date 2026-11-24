@@ -93,7 +93,7 @@ jobs:
               tag_name: version,
               target_commitish: context.sha,
               name: `Open Frame Studio ${version}`,
-              body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE)`,
+              body: `## Open Frame Studio ${version}\n\nParametric window frame design software for the construction industry.\n\n### Downloads\n- **Windows (System)**: Download the \`*_x64-setup.exe\` installer (requires admin)\n- **Windows (User)**: Download the \`*_x64_user-setup.exe\` installer (no admin required)\n- **macOS**: Download the \`.dmg\` file (universal — supports Intel and Apple Silicon)\n- **Linux**: Download the \`.deb\` package or \`.AppImage\`\n\n### Features\n- Parametric window frame design with grid editor\n- IFC / DXF / PDF / glTF export\n- Profile database (wood, PVC, aluminum)\n- Production lists & cost calculation\n- Blender/Bonsai integration\n- Multi-language (NL / EN / DE / TR)`,
               draft: true,
               prerelease: '${{ steps.get-version.outputs.prerelease }}' === 'true'
             });
@@ -235,7 +235,7 @@ jobs:
           console.log('Cleared beforeBuildCommand and beforeDevCommand');
 
       - name: Build Tauri app
-        if: matrix.target != 'windows-user'
+        if: runner.os != 'Windows'
         uses: tauri-apps/tauri-action@action-v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -244,16 +244,49 @@ jobs:
           args: ${{ matrix.args }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
 
-      - name: Build Tauri app (user installer)
-        if: matrix.target == 'windows-user'
-        uses: tauri-apps/tauri-action@action-v0.6.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: src-tauri
-          args: ${{ matrix.args }}
+      - name: Install the Linux DEB and start its GUI
+        if: matrix.target == 'linux'
+        shell: bash
+        run: bash scripts/test-linux-install.sh "$GITHUB_WORKSPACE"/target/release/bundle/deb/*.deb
 
-      - name: Authenticode sign Windows exe and installer
+      - name: Mount the macOS DMG and start the installed universal app
+        if: matrix.target == 'macos'
+        shell: bash
+        run: bash scripts/test-macos-install.sh "$GITHUB_WORKSPACE"/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: Build the Windows application before signing
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        run: ../ui/node_modules/.bin/tauri.cmd build --ci --no-bundle -- --locked
+
+      - name: Build native SDK
+        if: runner.os != 'macOS'
+        run: cargo build -p ofs-sdk --locked --release
+
+      - name: Sign Windows application and SDK before packaging
+        if: contains(matrix.target, 'windows')
+        uses: azure/trusted-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          cache-dependencies: false
+          files: |
+            ${{ github.workspace }}/target/release/open-frame-studio.exe
+            ${{ github.workspace }}/target/release/ofs_sdk.dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Bundle the signed Windows application
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        run: ../ui/node_modules/.bin/tauri.cmd bundle --ci --bundles nsis --no-binary-patching
+
+      - name: Sign the Windows installer
         if: contains(matrix.target, 'windows')
         uses: azure/trusted-signing-action@v1
         with:
@@ -271,25 +304,12 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Sign main executable
-        if: contains(matrix.target, 'windows')
-        uses: azure/trusted-signing-action@v1
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: ${{ secrets.AZURE_ENDPOINT }}
-          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
-          cache-dependencies: false
-          files-folder: ${{ github.workspace }}/target/release
-          files-folder-filter: exe
-          files-folder-depth: 1
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+      - name: Test the installed application and timestamped signatures on the clean runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-install.ps1
 
-      - name: Re-upload signed system installer
+      - name: Upload signed system installer
         if: matrix.target == 'windows-system'
         shell: pwsh
         env:
@@ -326,14 +346,78 @@ jobs:
           gh release upload $VERSION "$NEW_PATH" --clobber --repo "${{ github.repository }}"
           Write-Host "Uploaded user installer: $NEW_NAME"
 
-  verify-assets:
+      - name: Test and upload the native SDK
+        if: matrix.target == 'linux' || matrix.target == 'windows-system'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          python ofs-sdk/package.py target/release "$RUNNER_TEMP/ofs-sdk.zip"
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then os=windows; else os=linux; fi
+          name="Open.Frame.Studio_SDK_${TAG#v}_${os}_x64.zip"
+          mv "$RUNNER_TEMP/ofs-sdk.zip" "$RUNNER_TEMP/$name"
+          gh release upload "$TAG" "$RUNNER_TEMP/$name" --repo "$GITHUB_REPOSITORY" --clobber
+
+  sign-linux-packages:
     needs: [create-release, build]
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3, Cosign v3.1.4
+      - name: Sign the DEB, AppImage and RPM already attached to this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir unsigned \
+            --pattern '*.deb' --pattern '*.AppImage' --pattern '*.rpm'
+          shopt -s nullglob
+          bundles=()
+          for extension in deb AppImage rpm; do
+            packages=(unsigned/*."$extension")
+            [[ ${#packages[@]} == 1 && -s ${packages[0]} ]] || {
+              echo "::error::Expected one non-empty Linux $extension asset in $TAG"; exit 1;
+            }
+            pkg=${packages[0]}
+            cosign sign-blob --yes --bundle "$pkg.sigstore.json" "$pkg"
+            bundles+=("$pkg.sigstore.json")
+          done
+          gh release upload "$TAG" "${bundles[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+
+  verify-assets:
+    needs: [create-release, sign-linux-packages]
     permissions:
       # GitHub treats assets of a draft release as write-protected resources.
       contents: write
     runs-on: ubuntu-latest
 
     steps:
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Verify downloaded Linux packages and signature bundles before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir verify \
+            --pattern '*.deb' --pattern '*.AppImage' --pattern '*.rpm' --pattern '*.sigstore.json'
+          cd verify
+          identity="$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF"
+          for pkg in *.deb *.AppImage *.rpm; do
+            cosign verify-blob --bundle "$pkg.sigstore.json" \
+              --certificate-identity "$identity" \
+              --certificate-github-workflow-sha "$GITHUB_SHA" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$pkg"
+            sha256sum "$pkg" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "Sigstore workflow identity: $identity (commit $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
       - name: Require all installer assets before publication
         uses: actions/github-script@v8
         env:
@@ -352,6 +436,9 @@ jobs:
               ['macOS universal DMG', /_universal\.dmg$/],
               ['Linux DEB', /\.deb$/],
               ['Linux AppImage', /\.AppImage$/],
+              ['Linux RPM', /\.rpm$/],
+              ['SDK Windows x64', /_SDK_.*_windows_x64\.zip$/],
+              ['SDK Linux x64', /_SDK_.*_linux_x64\.zip$/],
             ];
             const missing = expected.filter(([, pattern]) => !assets.some(asset => pattern.test(asset.name) && asset.size > 0));
             if (missing.length) {

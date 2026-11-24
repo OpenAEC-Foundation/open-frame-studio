@@ -1,0 +1,74 @@
+name: Published desktop installers
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/distribution-audit.yml'
+      - 'scripts/test-*-install.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Public Open Frame Studio release tag
+        default: v2026.48.4
+        required: true
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, suffix: x64_user-setup.exe }
+          - { runner: macos-15, suffix: universal.dmg }
+          - { runner: macos-15-intel, suffix: universal.dmg }
+          - { runner: ubuntu-22.04, suffix: amd64.deb }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      AUDIT_TAG: ${{ inputs.tag || 'v2026.48.4' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Download and verify the public release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET_SUFFIX: ${{ matrix.suffix }}
+        run: |
+          $tag = $env:AUDIT_TAG
+          if ($tag -cnotmatch '^v20[0-9]{2}\.([1-9]|[1-4][0-9]|5[0-3])\.(0|[1-9][0-9]*)$') { throw 'Expected vYYYY.W.N' }
+          $repo = 'OpenAEC-Foundation/open-frame-studio'
+          $release = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.draft -or !$release.published_at -or $release.tag_name -cne $tag) { throw 'Published release required' }
+          $version = $tag.Substring(1)
+          $name = "Open.Frame.Studio_${version}_$env:ASSET_SUFFIX"
+          $assets = @($release.assets | Where-Object name -CEQ $name)
+          if ($assets.Count -ne 1 -or $assets[0].digest -cnotmatch '^sha256:[0-9a-f]{64}$') { throw "Missing asset or SHA-256: $name" }
+          $file = Join-Path $env:RUNNER_TEMP $name
+          gh release download $tag --repo $repo --pattern $name --output $file
+          if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ("sha256:$hash" -cne $assets[0].digest -or (Get-Item -LiteralPath $file).Length -ne $assets[0].size) { throw "Corrupt asset: $name" }
+          "### $tag ($env:RUNNER_OS)" >> $env:GITHUB_STEP_SUMMARY
+          "Verified release download: [$name]($($assets[0].browser_download_url)), SHA-256 $hash" >> $env:GITHUB_STEP_SUMMARY
+          "OFS_AUDIT_FILE=$file" >> $env:GITHUB_ENV
+          "OFS_EXPECTED_VERSION=$version" >> $env:GITHUB_ENV
+      - uses: actions/setup-node@v6
+        if: runner.os == 'Windows'
+        with:
+          node-version: '22'
+      - name: Install the Windows user edition and open its editor
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-install.ps1 -PublishedInstaller $env:OFS_AUDIT_FILE -PublishedTag $env:AUDIT_TAG
+      - name: Mount the universal DMG and launch the app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/test-macos-install.sh "$OFS_AUDIT_FILE"
+      - name: Install the DEB and verify its window under Xvfb
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          bash scripts/test-linux-install.sh "$OFS_AUDIT_FILE"
