@@ -15,7 +15,7 @@ program=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$installed/Cont
 binary="$installed/Contents/MacOS/$program"
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$installed/Contents/Info.plist")
 [[ $version == "${OFS_EXPECTED_VERSION:-$version}" ]]
-lipo -verify_arch arm64 x86_64 "$binary"
+lipo "$binary" -verify_arch arm64 x86_64
 echo "Installed DMG app version $version, architectures $(lipo -archs "$binary")." >> "$GITHUB_STEP_SUMMARY"
 # Record the identity and notarization result of this actual copy.
 # The current distribution contract permits an unstapled DMG.
