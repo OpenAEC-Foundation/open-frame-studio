@@ -31,7 +31,7 @@ const project = {
 
 test("definitions and exported tool names come from the single JSON source", () => {
   assert.deepEqual(frameToolDefinitions(), definitionsFile);
-  assert.deepEqual(frameToolNames(), ["frame_stand", "frame_kozijnen", "frame_kozijn"]);
+  assert.deepEqual(frameToolNames(), ["frame_stand", "frame_kozijnen", "frame_kozijn", "frame_oppervlakte"]);
   const definitions = frameToolDefinitions();
   definitions[0].name = "changed";
   assert.equal(frameToolNames()[0], "frame_stand");
@@ -81,4 +81,14 @@ test("unknown tools, extra arguments and absent projects fail explicitly", () =>
   assert.throws(() => runFrameTool("frame_delete", {}, { project }), /onbekende_tool/);
   assert.throws(() => runFrameTool("frame_stand", { mutate: true }, { project }), /ongeldige_argumenten/);
   assert.throws(() => runFrameTool("frame_stand", {}, { project: null }), /geen_project/);
+});
+
+test("dashboard area uses the frame envelope and reports incomplete dimensions", () => {
+  assert.equal(runFrameTool("frame_oppervlakte", { id: "k-2" }, { project }).areaM2, 1.8);
+  const model = { ...project, kozijnen: [...project.kozijnen, { frame: {} }] };
+  const result = runFrameTool("frame_oppervlakte", {}, { project: model });
+  assert.equal(result.areaM2, 5.4);
+  assert.equal(result.missingDimensions, 1);
+  assert.equal(result.frameCount, 4);
+  assert.throws(() => runFrameTool("frame_oppervlakte", { id: "" }, { project }), /ongeldige_argumenten/);
 });

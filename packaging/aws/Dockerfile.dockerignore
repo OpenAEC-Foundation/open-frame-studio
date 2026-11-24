@@ -1,0 +1,16 @@
+**
+!Cargo.toml
+!Cargo.lock
+!ofs-cloud/Cargo.toml
+!ofs-cloud/src/**
+!ofs-core/Cargo.toml
+!ofs-core/build.rs
+!ofs-core/src/**
+!profiles/**/*.json
+# Cargo resolves the other workspace members; only their manifests and targets are needed.
+!ofs-sdk/Cargo.toml
+!ofs-sdk/src/lib.rs
+!ofs-wasm/Cargo.toml
+!ofs-wasm/src/lib.rs
+!src-tauri/Cargo.toml
+!src-tauri/src/main.rs

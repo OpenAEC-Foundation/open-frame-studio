@@ -1,6 +1,6 @@
 <script>
   let { name, size = 16 } = $props();
-  const sprite = import.meta.env.BASE_URL + "blueprint/frame.svg";
+  const sprite = import.meta.env.MODE === "platform" ? "" : import.meta.env.BASE_URL + "blueprint/frame.svg";
 </script>
 
 <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" focusable="false">

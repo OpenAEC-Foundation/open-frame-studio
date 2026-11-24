@@ -29,6 +29,7 @@ fn main() {
             commands::project::open_project,
             commands::project::save_project,
             commands::project::get_project,
+            commands::project::get_container_startup,
             // Kozijn commands
             commands::kozijn::create_kozijn,
             commands::kozijn::create_kozijn_from_template,

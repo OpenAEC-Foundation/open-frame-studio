@@ -72,10 +72,10 @@ const MIN_ESCAPE_OPENING: f64 = 600.0;
 /// outside the frame snapshot, so they are not judged here.
 const MIN_REBATE_HEIGHT_WOOD: f64 = 17.0;
 
-const MIN_WIDTH: f64 = 200.0;
-const MIN_HEIGHT: f64 = 200.0;
-const MAX_WIDTH: f64 = 6000.0;
-const MAX_HEIGHT: f64 = 4000.0;
+pub(crate) const MIN_WIDTH: f64 = 200.0;
+pub(crate) const MIN_HEIGHT: f64 = 200.0;
+pub(crate) const MAX_WIDTH: f64 = 6000.0;
+pub(crate) const MAX_HEIGHT: f64 = 4000.0;
 const MIN_CELL_SIZE: f64 = 100.0;
 
 fn validate_curved_frame(

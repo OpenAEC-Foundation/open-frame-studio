@@ -77,42 +77,26 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ofs-docker"
-          # Pin the container recipe to the same commit as the installer.
-          cp -a release-source/packaging/docker/. "$RUNNER_TEMP/ofs-docker/"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir "$RUNNER_TEMP/ofs-docker"
-          mapfile -t packages < <(find "$RUNNER_TEMP/ofs-docker" -maxdepth 1 -type f -name '*.deb')
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir "$RUNNER_TEMP/ofs-deb"
+          mapfile -t packages < <(find "$RUNNER_TEMP/ofs-deb" -maxdepth 1 -type f -name '*.deb')
           if [[ ${#packages[@]} -ne 1 ]]; then
             echo "::error::Expected exactly one Linux .deb release asset, found ${#packages[@]}"
-            exit 1
-          fi
-          dpkg-deb --fsys-tarfile "${packages[0]}" | tar -tf - > "$RUNNER_TEMP/ofs-deb-files.txt"
-          if ! grep -Eq '^(\./)?usr/bin/open-frame-studio$' "$RUNNER_TEMP/ofs-deb-files.txt"; then
-            echo "::error::The .deb does not contain /usr/bin/open-frame-studio"
             exit 1
           fi
           echo "name=$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build the graphical app image from the release installer
         env:
-          NUMBER: ${{ steps.release.outputs.number }}
           APP_DEB: ${{ steps.deb.outputs.name }}
         run: |
           set -euo pipefail
-          docker build "$RUNNER_TEMP/ofs-docker" -t "open-frame-studio:${NUMBER}" \
-            --build-arg APP_DEB="$APP_DEB" \
-            --build-arg APP_COMMAND=/usr/bin/open-frame-studio \
-            --build-arg APP_NAME=open-frame-studio \
-            --build-arg APP_TITLE='Open Frame Studio' \
-            --build-arg APP_VERSION="$NUMBER" \
-            --build-arg APP_SOURCE="https://github.com/$GITHUB_REPOSITORY" \
-            --build-arg APP_DESCRIPTION='Open Frame Studio desktop application streamed to the browser'
+          bash packaging/docker/build-image.sh release-source "$RUNNER_TEMP/ofs-deb/$APP_DEB" "$RUNNER_TEMP/ofs-docker"
 
       - name: Test health, process, stream, and idle memory
         env:
           NUMBER: ${{ steps.release.outputs.number }}
         run: |
-          bash packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
+          bash release-source/packaging/docker/test-container.sh "open-frame-studio:${NUMBER}" \
             /usr/bin/open-frame-studio "$RUNNER_TEMP/ofs-docker-test"
 
       - name: Upload smoke-test evidence

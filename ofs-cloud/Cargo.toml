@@ -5,6 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ofs-core = { path = "../ofs-core", default-features = false }
+subtle = "2.6"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde.workspace = true

@@ -238,15 +238,25 @@ cd ui && npm run dev
 
 De [Docker-image-workflow](.github/workflows/docker-image.yml) bouwt na een geslaagde installerrelease een container **uit de `.deb` en containertemplate van diezelfde releasecommit**. De gewone Linux-desktopapp draait daarin als niet-rootgebruiker op een virtueel scherm en is via één HTTP-poort te bekijken. De workflow controleert het app-proces, `GET /gezond`, een screenshot van de stream en het geheugengebruik voordat hij de image naar GHCR pusht. De [v2026.46.1-containerproef](https://github.com/OpenAEC-Foundation/open-frame-studio/actions/runs/42686749360) is geslaagd; de [schermafdruk](docs/release-evidence/v2026.46.1-docker-stream.png) toont de gestreamde app. Een release met deze containertemplate kan ook handmatig via de workflow en zijn `tag`-invoer worden verwerkt.
 
-De GHCR-image is gepubliceerd, maar een anonieme pull van `2026.46.1` kreeg op 9 november 2026 een `403`. Voor de opdracht hieronder is voorlopig toegang tot de package en een `docker login ghcr.io` nodig; [issue #8](https://github.com/OpenAEC-Foundation/open-frame-studio/issues/8) houdt publieke bereikbaarheid open.
-
-Na publicatie van de image:
+De [containerrun voor v2026.48.3](https://github.com/OpenAEC-Foundation/open-frame-studio/actions/runs/45372052645) publiceerde de linux/amd64-image met Cosign-handtekening, bouwattest en SPDX-SBOM. Het gemeten rustgeheugen was 379,6 MiB. Op 24 november 2026 vereiste GHCR aanmelding voor een pull-token. Gebruik een account met leestoegang en `docker login ghcr.io`. [Issue #8](https://github.com/OpenAEC-Foundation/open-frame-studio/issues/8)
 
 ```bash
-docker run -p 127.0.0.1:3000:3000 -v "$PWD":/openaec -v ofs-config:/config ghcr.io/openaec-foundation/open-frame-studio:2026.46.1
+docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD":/openaec -v ofs-config:/config ghcr.io/openaec-foundation/open-frame-studio:latest
 ```
 
-Open dan `http://localhost:3000`. `/openaec` bevat gebruikersbestanden; `/config` bewaart instellingen. `OPENAEC_SCREEN` stelt de virtuele schermmaat in (standaard `1920x1080`) en `OPENAEC_RESTART=0` schakelt automatisch herstarten van de app uit. De stream heeft zelf geen aanmelding: plaats hem bij servergebruik achter de authenticatieproxy van de SuperCloud. De huidige app leest nog geen startbestand uit een CLI-argument en levert geen MCP-server; `OPENAEC_OPEN` en `OPENAEC_MCP` zijn voor Open Frame Studio dus nog niet beschikbaar. De image-tag `latest` wordt alleen bij een volledige release bijgewerkt.
+Open `http://localhost:3000`. De tag `latest` volgt de laatste volledige containerrelease. Voor reproduceerbare installaties kun je de versie of digest uit de releasenotities gebruiken. De desktop draait als UID 1000. Geef deze gebruiker schrijftoegang tot de gemounte werkmap. Plaats de stream bij servergebruik achter de authenticatieproxy van de SuperCloud.
+
+| Instelling in deze bronversie | Gebruik |
+| --- | --- |
+| `/openaec`, `/config` | Openen, opslaan en exporteren beginnen in de werkmap. Het configuratievolume bewaart de voorkeuren. |
+| `OPENAEC_OPEN` | Opent een leesbaar `.ofs`-bestand onder `/openaec`, bijvoorbeeld `-e OPENAEC_OPEN='Projecten/Voordeur.ofs'`. Opslaan werkt hetzelfde bestand bij. |
+| `OPENAEC_LANG`, `OPENAEC_THEME` | Starttaal `nl`, `en`, `de` of `tr` (ook regiocodes zoals `en-GB`). Kies `default`, `light`, `dark`, `blue`, `amber-navy`, `warm-ember` of `highContrast` als thema. Een ingestelde waarde geldt bij iedere start. Bij weglaten gelden de opgeslagen voorkeuren. |
+| `OPENAEC_SCREEN`, `OPENAEC_RESTART` | Schermmaat (standaard `1920x1080`) en automatisch herstarten van de app (`1` aan, `0` uit). |
+| `OPENAEC_MCP_TOKEN_FILE` | Activeert de alleen-lezen MCP-service. Mount een alleen-lezen secret, bijvoorbeeld in `/run/secrets/ofs-mcp`, en geef dit pad door. Een token van `openssl rand -hex 32` is geschikt. |
+
+Verbind de SuperCloud-assistent binnen het afgeschermde containernetwerk met `http://<containernaam>:3001/mcp` en de header `Authorization: Bearer <token>`. Publiceer alleen de streampoort. De MCP-service leest per aanvraag de laatst opgeslagen versie van het startbestand en gebruikt dezelfde `frame_*`-tools als de desktopadapter. Voor een andere projectkoppeling start je een container met de gewenste `OPENAEC_OPEN`. De HTTP-route accepteert serververkeer zonder browser-Origin.
+
+Starten, modelleren, opslaan en de MCP-berekeningen werken zonder uitgaand internetverkeer. Updates komen via de containerimage. De optionele assistent gebruikt op aanvraag het ingestelde modelendpoint (standaard `localhost:11434`), de Blender-koppeling gebruikt `127.0.0.1:9876` en de help- en feedbackknoppen openen GitHub. De [containertest voor pull requests](.github/workflows/container-smoke.yml) controleert de grafische sessie, het opslaan van het startproject en een MCP-aanroep in een container met het externe netwerk uitgeschakeld.
 
 ---
 

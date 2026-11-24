@@ -55,7 +55,7 @@ export async function listHostProjects(host) {
   if (typeof host.list !== "function") throw new Error("Docs ondersteunt de bestandslijst niet");
   const files = await host.list();
   if (!Array.isArray(files)) throw new Error("Docs leverde geen geldige bestandslijst");
-  return files.filter((file) => typeof file?.id === "string" && /\.ofs$/i.test(file?.name || ""));
+  return files.filter((file) => typeof file?.id === "string" && file.id && typeof file.name === "string" && /\.ofs$/i.test(file.name));
 }
 
 export async function writeHostProject(host, json, { current = null, name = null } = {}) {
@@ -70,5 +70,9 @@ export async function writeHostProject(host, json, { current = null, name = null
       ? { id: current.id, expectedVersion: current.version }
       : { name: "project.ofs" };
   const saved = await host.save(encoder.encode(json), options);
+  if (saved?.id === "" && typeof saved.name === "string" && saved.name) {
+    // A host without a Docs folder delivers a download with an empty identifier.
+    return { id: "", name: saved.name, version: saved.version, readOnly: false };
+  }
   return fileRef(saved, false);
 }

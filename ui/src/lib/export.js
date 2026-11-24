@@ -11,6 +11,7 @@ import { currentKozijn, selectKozijn } from "../stores/kozijn.js";
 import { project, refreshProject, markDirty } from "../stores/project.js";
 import { refreshCustomProfiles } from "../stores/profiles.js";
 import { ifcPreflight } from "./ifcSupport.js";
+import { desktopDialogs } from "./desktopDialogs.js";
 
 // In web mode file export/import commands resolve to null (no filesystem);
 // be honest about it instead of showing a success toast. In Tauri mode
@@ -28,12 +29,12 @@ function importUnavailable(result) {
 }
 
 async function getSaveDialog() {
-  if (isTauri) return await import("@tauri-apps/plugin-dialog");
+  if (isTauri) return desktopDialogs();
   return { save: async (opts) => prompt("Save path:", opts?.defaultPath || "file") };
 }
 
 async function getOpenDialog() {
-  if (isTauri) return await import("@tauri-apps/plugin-dialog");
+  if (isTauri) return desktopDialogs();
   return { open: async () => prompt("File path:") };
 }
 

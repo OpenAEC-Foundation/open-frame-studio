@@ -32,11 +32,11 @@ fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 pub fn load_settings(app: tauri::AppHandle) -> Result<String, String> {
     let path = settings_path(&app)?;
-    if path.exists() {
+    let content = if path.exists() {
         let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         // Validate JSON parses, return as-is
         let _: AppSettings = serde_json::from_str(&content).unwrap_or_default();
-        Ok(content)
+        content
     } else {
         let defaults = AppSettings {
             theme: default_theme(),
@@ -48,8 +48,43 @@ pub fn load_settings(app: tauri::AppHandle) -> Result<String, String> {
         };
         let json = serde_json::to_string_pretty(&defaults).map_err(|e| e.to_string())?;
         std::fs::write(&path, &json).map_err(|e| e.to_string())?;
-        Ok(json)
+        json
+    };
+    if std::env::var("OPENAEC_FRAME_CONTAINER").as_deref() != Ok("1") {
+        return Ok(content);
     }
+    let locale = std::env::var("OPENAEC_FRAME_LOCALE").ok();
+    let theme = std::env::var("OPENAEC_THEME").ok();
+    let configured = apply_container_preferences(&content, locale.as_deref(), theme.as_deref())?;
+    if configured != content {
+        std::fs::write(path, &configured).map_err(|e| e.to_string())?;
+    }
+    Ok(configured)
+}
+
+fn apply_container_preferences(
+    content: &str,
+    locale: Option<&str>,
+    theme: Option<&str>,
+) -> Result<String, String> {
+    let mut settings: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| e.to_string())?;
+    let values = settings.as_object_mut().ok_or("Invalid settings object")?;
+    let mut changed = false;
+    for (key, value) in [("locale", locale), ("theme", theme)] {
+        if let Some(value) = value.filter(|s| !s.is_empty()) {
+            if values.get(key).and_then(serde_json::Value::as_str) == Some(value) {
+                continue;
+            }
+            values.insert(key.into(), value.into());
+            changed = true;
+        }
+    }
+    Ok(if changed {
+        settings.to_string()
+    } else {
+        content.to_owned()
+    })
 }
 
 #[tauri::command]
@@ -59,4 +94,24 @@ pub fn save_settings(app: tauri::AppHandle, settings_json: String) -> Result<(),
         .map_err(|e| format!("Invalid settings: {}", e))?;
     let path = settings_path(&app)?;
     std::fs::write(&path, &settings_json).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_container_preferences;
+
+    #[test]
+    fn container_overrides_preserve_other_preferences_and_omit_unset_values() {
+        let stored = r#"{"theme":"blue","locale":"de","unrelated":17}"#;
+        assert_eq!(apply_container_preferences(stored, Some("de"), None).unwrap(), stored);
+        let configured = apply_container_preferences(stored, Some("tr"), Some("")).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(&configured).unwrap();
+        assert_eq!(settings["theme"], "blue");
+        assert_eq!(settings["locale"], "tr");
+        assert_eq!(settings["unrelated"], 17);
+        let configured = apply_container_preferences(stored, None, Some("dark")).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(&configured).unwrap();
+        assert_eq!(settings["locale"], "de");
+        assert_eq!(settings["theme"], "dark");
+    }
 }

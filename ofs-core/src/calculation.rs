@@ -94,6 +94,19 @@ impl Default for PriceTable {
     }
 }
 
+/// Quick estimate for one standard rectangular, fixed timber frame at catalogue rates.
+pub fn estimate_fixed_frame(width_mm: f64, height_mm: f64) -> Option<CostEstimate> {
+    use crate::validation::{MAX_HEIGHT, MAX_WIDTH, MIN_HEIGHT, MIN_WIDTH};
+
+    if !(MIN_WIDTH..=MAX_WIDTH).contains(&width_mm)
+        || !(MIN_HEIGHT..=MAX_HEIGHT).contains(&height_mm)
+    {
+        return None;
+    }
+    let frame = Kozijn::new("Fixed frame", "K01", width_mm, height_mm);
+    Some(estimate_cost(&frame, &PriceTable::default()))
+}
+
 // ── Cost Estimation ────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

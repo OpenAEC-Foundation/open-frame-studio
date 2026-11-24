@@ -18,10 +18,12 @@ mkdir -p "$out"
 files=$(mktemp -d)
 chmod 777 "$files"
 name="openaec-test-$$"
+managed="$name-managed"
 
 finish() {
   docker logs "$name" >"$out/container.log" 2>&1 || true
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker logs "$managed" >"$out/managed.log" 2>&1 || true
+  docker rm -fv "$name" "$managed" >/dev/null 2>&1 || true
 }
 trap finish EXIT
 
@@ -79,4 +81,19 @@ echo "The container stops cleanly"
 docker stop -t 15 "$name" >/dev/null
 code=$(docker inspect -f '{{.State.ExitCode}}' "$name")
 [ "$code" = 0 ] || [ "$code" = 143 ] || { echo "::error::the container ended with code $code"; exit 1; }
+
+echo "Opening and saving a mounted document with the managed settings, offline"
+project="SuperCloud project.ofs"
+cat >"$files/$project" <<'JSON'
+{"formatVersion":"1.3","projectInfo":{"name":"Container smoke","number":"TEST","address":"","client":""},"kozijnen":[]}
+JSON
+test_token=$(mktemp)
+openssl rand -hex 32 >"$test_token"
+chmod 444 "$test_token"
+docker run -d --name "$managed" --network none -v "$files:/openaec" \
+  --mount "type=bind,source=$test_token,target=/run/secrets/ofs-mcp,readonly" \
+  -e OPENAEC_OPEN="$project" -e OPENAEC_LANG=en-GB -e OPENAEC_THEME=blue \
+  -e OPENAEC_MCP_TOKEN_FILE=/run/secrets/ofs-mcp "$image" >/dev/null
+docker exec -i "$managed" python3 - < "$(dirname "$0")/check-managed.py"
+rm -f "$test_token"
 echo "All container tests passed"

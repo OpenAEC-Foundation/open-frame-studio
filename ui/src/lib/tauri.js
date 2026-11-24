@@ -86,6 +86,7 @@ export async function invoke(cmd, args) {
 // ── Shared demo/fallback shapes ─────────────────────────────
 
 function unavailableInWeb(cmd) {
+  if (isPlatformBuild) throw new Error("niet_in_browser: " + cmd);
   console.warn(`[web] desktopfunctie niet beschikbaar: ${cmd}`);
   throw new Error("Deze functie is niet beschikbaar in de webversie. Gebruik de desktopapp.");
 }
@@ -302,8 +303,8 @@ function wasmCommand(cmd, args) {
       case "load_profile_library":
         return unavailableInWeb(cmd);
       case "get_sjablonen": return loadWebSjablonen();
-      case "save_custom_sjabloon": return saveWebSjabloon(args?.sjabloonJson);
-      case "delete_custom_sjabloon": return deleteWebSjabloon(args?.sjabloonId);
+      case "save_custom_sjabloon": return isPlatformBuild ? unavailableInWeb(cmd) : saveWebSjabloon(args?.sjabloonJson);
+      case "delete_custom_sjabloon": return isPlatformBuild ? unavailableInWeb(cmd) : deleteWebSjabloon(args?.sjabloonId);
 
       case "get_all_vliesgevels": return [];
       case "get_vliesgevel_production": return vgProductionStub();
@@ -320,6 +321,7 @@ function wasmCommand(cmd, args) {
       case "vliesgevel_remove_mullion":
       case "vliesgevel_remove_transom":
       case "vliesgevel_update_panel":
+        if (isPlatformBuild) return unavailableInWeb(cmd);
         console.warn(`[web] vliesgevel command not available in web mode: ${cmd}`);
         return null;
       case "get_cost_estimate":
@@ -341,6 +343,7 @@ function wasmCommand(cmd, args) {
 
       case "send_to_blender":
       case "check_blender_connection":
+        if (isPlatformBuild) return unavailableInWeb(cmd);
         return "not_available";
 
       // Read-only views may be empty; edits must not claim to be saved.
@@ -395,15 +398,16 @@ function wasmCommand(cmd, args) {
       case "validate_project_ids": return [];
       case "get_glass_library": return wasm.get_glass_library ? J(wasm.get_glass_library()) : [];
       // File exports/imports need the filesystem — desktop only.
-      case "export_cnc_gcode": return null;
-      case "export_labels_pdf": return null;
-      case "export_quotation_pdf": return null;
-      case "import_ifc_file": return null;
+      case "export_cnc_gcode":
+      case "export_labels_pdf":
+      case "export_quotation_pdf":
+      case "import_ifc_file":
       case "compare_ifc_roundtrip":
       case "compare_ifc_files":
-        return null;
+        return isPlatformBuild ? unavailableInWeb(cmd) : null;
 
       default:
+        if (isPlatformBuild) return unavailableInWeb(cmd);
         console.warn(`[web] unhandled WASM command: ${cmd}`, args);
         return null;
     }

@@ -235,7 +235,7 @@ jobs:
           console.log('Cleared beforeBuildCommand and beforeDevCommand');
 
       - name: Build Tauri app
-        if: matrix.target != 'windows-user'
+        if: runner.os != 'Windows'
         uses: tauri-apps/tauri-action@action-v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -244,16 +244,109 @@ jobs:
           args: ${{ matrix.args }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
 
-      - name: Build Tauri app (user installer)
-        if: matrix.target == 'windows-user'
-        uses: tauri-apps/tauri-action@action-v0.6.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: src-tauri
-          args: ${{ matrix.args }}
+      - name: Install the Linux DEB and start its GUI
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=("$GITHUB_WORKSPACE"/target/release/bundle/deb/*.deb)
+          [[ ${#debs[@]} == 1 ]]
+          sudo apt-get install -y xvfb xauth xdotool "${debs[0]}"
+          xvfb-run -a env GDK_BACKEND=x11 bash -eu <<'SMOKE'
+          /usr/bin/open-frame-studio >"$RUNNER_TEMP/ofs-linux-launch.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          timeout 60s xdotool search --sync --all --onlyvisible --pid "$pid" --name "Open Frame Studio" || {
+            cat "$RUNNER_TEMP/ofs-linux-launch.log"; exit 1;
+          }
+          echo "A window belonging to the installed DEB is running"
+          SMOKE
 
-      - name: Authenticode sign Windows exe and installer
+      - name: Mount the macOS DMG and start the installed universal app
+        if: matrix.target == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=("$GITHUB_WORKSPACE"/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          [[ ${#dmgs[@]} == 1 ]]
+          mountpoint=$(mktemp -d "$RUNNER_TEMP/ofs-dmg.XXXXXX")
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "${dmgs[0]}"
+          trap 'hdiutil detach "$mountpoint" >/dev/null || true' EXIT
+          apps=("$mountpoint"/*.app)
+          [[ ${#apps[@]} == 1 ]]
+          installed="$RUNNER_TEMP/Installed Open Frame Studio.app"
+          ditto "${apps[0]}" "$installed"
+          hdiutil detach "$mountpoint"
+          trap - EXIT
+          program=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$installed/Contents/Info.plist")
+          lipo -verify_arch arm64 x86_64 "$installed/Contents/MacOS/$program"
+          # Record the identity and notarization result of this actual copy.
+          # The current distribution contract permits an unstapled DMG.
+          codesign -dv --verbose=2 "$installed" 2>&1 || true
+          if codesign --verify --deep --strict "$installed"; then
+            echo "macOS: codesign verified the installed app's bundle signature." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "macOS: codesign did not validate the installed app's bundle signature." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if xcrun stapler validate "$installed"; then
+            echo "macOS: a notarization ticket was validated on the installed app." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "macOS: no validated stapled notarization ticket on the installed app." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          "$installed/Contents/MacOS/$program" >"$RUNNER_TEMP/ofs-macos-launch.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          swift - "$pid" <<'SWIFT'
+          import AppKit
+          import Darwin
+          let pid = pid_t(CommandLine.arguments[1])!
+          let deadline = Date().addingTimeInterval(45)
+          while Date() < deadline {
+              if let app = NSRunningApplication(processIdentifier: pid), app.isFinishedLaunching && !app.isTerminated {
+                  print("macOS registered the installed application as fully launched")
+                  exit(0)
+              }
+              if kill(pid, 0) != 0 { break }
+              RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+          }
+          exit(1)
+          SWIFT
+
+      - name: Build the Windows application before signing
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        run: ../ui/node_modules/.bin/tauri.cmd build --ci --no-bundle -- --locked
+
+      - name: Build native SDK
+        if: runner.os != 'macOS'
+        run: cargo build -p ofs-sdk --locked --release
+
+      - name: Sign Windows application and SDK before packaging
+        if: contains(matrix.target, 'windows')
+        uses: azure/trusted-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          cache-dependencies: false
+          files: |
+            ${{ github.workspace }}/target/release/open-frame-studio.exe
+            ${{ github.workspace }}/target/release/ofs_sdk.dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Bundle the signed Windows application
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        run: ../ui/node_modules/.bin/tauri.cmd bundle --ci --bundles nsis --no-binary-patching
+
+      - name: Sign the Windows installer
         if: contains(matrix.target, 'windows')
         uses: azure/trusted-signing-action@v1
         with:
@@ -271,25 +364,12 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Sign main executable
-        if: contains(matrix.target, 'windows')
-        uses: azure/trusted-signing-action@v1
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: ${{ secrets.AZURE_ENDPOINT }}
-          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
-          cache-dependencies: false
-          files-folder: ${{ github.workspace }}/target/release
-          files-folder-filter: exe
-          files-folder-depth: 1
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+      - name: Test the installed application and timestamped signatures on the clean runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-install.ps1
 
-      - name: Re-upload signed system installer
+      - name: Upload signed system installer
         if: matrix.target == 'windows-system'
         shell: pwsh
         env:
@@ -326,6 +406,20 @@ jobs:
           gh release upload $VERSION "$NEW_PATH" --clobber --repo "${{ github.repository }}"
           Write-Host "Uploaded user installer: $NEW_NAME"
 
+      - name: Test and upload the native SDK
+        if: matrix.target == 'linux' || matrix.target == 'windows-system'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          python ofs-sdk/package.py target/release "$RUNNER_TEMP/ofs-sdk.zip"
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then os=windows; else os=linux; fi
+          name="Open.Frame.Studio_SDK_${TAG#v}_${os}_x64.zip"
+          mv "$RUNNER_TEMP/ofs-sdk.zip" "$RUNNER_TEMP/$name"
+          gh release upload "$TAG" "$RUNNER_TEMP/$name" --repo "$GITHUB_REPOSITORY" --clobber
+
   verify-assets:
     needs: [create-release, build]
     permissions:
@@ -352,6 +446,8 @@ jobs:
               ['macOS universal DMG', /_universal\.dmg$/],
               ['Linux DEB', /\.deb$/],
               ['Linux AppImage', /\.AppImage$/],
+              ['SDK Windows x64', /_SDK_.*_windows_x64\.zip$/],
+              ['SDK Linux x64', /_SDK_.*_linux_x64\.zip$/],
             ];
             const missing = expected.filter(([, pattern]) => !assets.some(asset => pattern.test(asset.name) && asset.size > 0));
             if (missing.length) {

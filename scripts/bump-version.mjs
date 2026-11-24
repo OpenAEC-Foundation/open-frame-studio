@@ -91,7 +91,7 @@ edit("ui/package.json", /("version":\s*")[^"]+(")/, `$1${next}$2`);
 // 3. Tauri bundle metadata.
 edit("src-tauri/tauri.conf.json", /("version":\s*")[^"]+(")/, `$1${next}$2`);
 // 4. Keep the workspace package entries and npm root package in sync.
-for (const name of ["ofs-core", "ofs-wasm", "ofs-cloud", "open-frame-studio"]) {
+for (const name of ["ofs-core", "ofs-wasm", "ofs-cloud", "ofs-sdk", "open-frame-studio"]) {
   edit("Cargo.lock", new RegExp(`(\\[\\[package\\]\\]\\s+name = "${name}"\\s+version = ")[^"]+(")`), `$1${next}$2`);
 }
 const packageLockPath = join(root, "ui/package-lock.json");

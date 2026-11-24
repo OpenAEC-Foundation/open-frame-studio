@@ -1,0 +1,43 @@
+name: Headless API
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/headless-api.yml'
+      - 'packaging/aws/**'
+      - 'Cargo.*'
+      - '*/Cargo.toml'
+      - 'ofs-cloud/**'
+      - 'ofs-core/**'
+      - 'profiles/**'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validate ECS template
+        run: |
+          python -m pip install --quiet cfn-lint==1.61.0
+          cfn-lint packaging/aws/fargate.yml
+      - name: Build private headless image
+        run: docker build --platform linux/amd64 -f packaging/aws/Dockerfile -t ofs-api:test .
+      - name: Exercise HTTP contract as a non-root container
+        run: |
+          export OFS_API_TOKEN="$(openssl rand -hex 32)"
+          id=$(docker run -d --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1::3456 -e OFS_API_TOKEN ofs-api:test)
+          trap 'docker rm -f "$id" >/dev/null' EXIT
+          endpoint="http://$(docker port "$id" 3456/tcp)"
+          for attempt in {1..20}; do
+            curl -fsS "$endpoint/api/v1/health" >/dev/null && break
+            sleep 1
+          done
+          test "$(docker exec "$id" id -u)" != 0
+          node packaging/aws/smoke.mjs "$endpoint"

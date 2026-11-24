@@ -1,12 +1,14 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { get } from "svelte/store";
-  import { _, isLoading } from "svelte-i18n";
+  import { _, isLoading, locale, locales } from "svelte-i18n";
   import TitleBar from "./components/shell/TitleBar.svelte";
   import Ribbon from "./components/shell/Ribbon.svelte";
   import StatusBar from "./components/shell/StatusBar.svelte";
   import AppMenu from "./components/shell/AppMenu.svelte";
   import Settings from "./components/shell/Settings.svelte";
+  import DocsDialog from "./components/shell/DocsDialog.svelte";
+  import { docsDialog } from "./lib/docsDialog.js";
   import Toast from "./components/shell/Toast.svelte";
   import WorkspaceTabs from "./components/shell/WorkspaceTabs.svelte";
   import WorkspacePanel from "./components/shell/WorkspacePanel.svelte";
@@ -39,8 +41,9 @@
   import { loadProject } from "./stores/project.js";
   import { loadProfiles } from "./stores/profiles.js";
   import { registerUndoRedoShortcuts } from "./stores/history.js";
-  import { activeWorkspaceView, showAppMenu, showSettings } from "./stores/ui.js";
-  import { getSetting, saveSetting } from "./lib/settings.js";
+  import { activeWorkspaceView, showAppMenu, showSettings, setTheme, theme, THEMES } from "./stores/ui.js";
+  import { connectHostSettings, getSetting, saveSetting } from "./lib/settings.js";
+  import { hostPreferences } from "./lib/hostWorkspaceSettings.js";
   import { isWeb, isPlatformBuild, getWebRuntimeMode } from "./lib/tauri.js";
   import { hostFileRef, isDirty } from "./stores/project.js";
   import { getOpenAecHost } from "./lib/platformHost.js";
@@ -130,21 +133,47 @@
     }
   }
 
+  function applyHostPreferences() {
+    const host = getOpenAecHost();
+    if (!host) return;
+    const preferences = hostPreferences(host, get(locales));
+    const nextLocale = preferences.locale || getSetting("locale");
+    const nextTheme = preferences.theme || getSetting("theme");
+    if (get(locales).includes(nextLocale) && nextLocale !== get(locale)) locale.set(nextLocale);
+    if (THEMES.includes(nextTheme) && nextTheme !== get(theme)) setTheme(nextTheme);
+  }
+
+  async function hostReady() {
+    const host = getOpenAecHost();
+    if (!host) return;
+    await connectHostSettings(host);
+    applyHostPreferences();
+    leftWidth = getSetting("left_panel_width");
+    rightWidth = getSetting("right_panel_width");
+    leftOpen = getSetting("left_panel_open");
+    rightOpen = getSetting("right_panel_open");
+    window.dispatchEvent(new Event("ofs-workspace-settings-loaded"));
+    await openInitialHostProject();
+  }
+
   onMount(async () => {
     await loadProject();
     await loadProfiles();
-    window.addEventListener("openaec-host-ready", openInitialHostProject);
-    await openInitialHostProject();
+    window.addEventListener("openaec-host-ready", hostReady);
+    window.addEventListener("openaec-host-preferences", applyHostPreferences);
+    await hostReady();
     cleanupShortcuts = registerUndoRedoShortcuts();
   });
 
   onDestroy(() => {
-    window.removeEventListener("openaec-host-ready", openInitialHostProject);
+    window.removeEventListener("openaec-host-ready", hostReady);
+    window.removeEventListener("openaec-host-preferences", applyHostPreferences);
     if (cleanupShortcuts) cleanupShortcuts();
   });
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} onkeydown={handlePanelShortcut} />
+{#if $docsDialog}{#key $docsDialog}<DocsDialog options={$docsDialog} />{/key}{/if}
 
 {#if $isLoading}
   <div class="app-loading" role="status">Open Frame Studio…</div>

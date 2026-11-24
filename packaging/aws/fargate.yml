@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private Open Frame Studio estimate API on ECS Fargate
+Parameters:
+  Cluster:
+    Type: String
+    Description: Existing ECS cluster name or ARN
+  Vpc:
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two private IPv4 subnets in different availability zones
+  ClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group of API callers in the VPC
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: Existing private hosted zone associated with the VPC
+  ApiHostname:
+    Type: String
+    Description: Fully qualified API name in the private hosted zone, covered by the certificate
+  CertificateArn:
+    Type: String
+    Description: ARN of an ACM certificate in this region
+  EcrRepository:
+    Type: String
+    Description: Name of an existing private ECR repository in this account and region
+  ImageDigest:
+    Type: String
+    AllowedPattern: 'sha256:[a-f0-9]{64}'
+  TokenSecretArn:
+    Type: String
+    Description: ARN of a plaintext Secrets Manager secret encrypted with the default AWS-managed key
+Resources:
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 14
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PullImageReadTokenWriteLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:BatchGetImage]
+                Resource: !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EcrRepository}'
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref TokenSecretArn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt Logs.Arn
+  TaskGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private estimate API tasks
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+  LoadBalancerGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private HTTPS entry to the estimate API
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, SourceSecurityGroupId: !Ref ClientSecurityGroup }
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 3456, ToPort: 3456, DestinationSecurityGroupId: !Ref TaskGroup }
+  TaskIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref TaskGroup
+      IpProtocol: tcp
+      FromPort: 3456
+      ToPort: 3456
+      SourceSecurityGroupId: !Ref LoadBalancerGroup
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internal
+      Type: application
+      Subnets: !Ref PrivateSubnets
+      SecurityGroups: [!Ref LoadBalancerGroup]
+  Targets:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3456
+      HealthCheckPath: /api/v1/health
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates: [{ CertificateArn: !Ref CertificateArn }]
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref Targets }]
+  Dns:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiHostname
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+  Task:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu: '256'
+      Memory: '512'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      RuntimePlatform: { CpuArchitecture: X86_64, OperatingSystemFamily: LINUX }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.${AWS::URLSuffix}/${EcrRepository}@${ImageDigest}'
+          Essential: true
+          ReadonlyRootFilesystem: true
+          PortMappings: [{ ContainerPort: 3456, Protocol: tcp }]
+          Secrets: [{ Name: OFS_API_TOKEN, ValueFrom: !Ref TokenSecretArn }]
+          HealthCheck:
+            Command: [CMD, wget, -q, -T, '3', -O, /dev/null, 'http://127.0.0.1:3456/api/v1/health']
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: [Listener, TaskIngress]
+    Properties:
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref Task
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref TaskGroup]
+          Subnets: !Ref PrivateSubnets
+      LoadBalancers: [{ ContainerName: api, ContainerPort: 3456, TargetGroupArn: !Ref Targets }]
+Outputs:
+  Endpoint:
+    Value: !Sub 'https://${ApiHostname}'
+  ServiceName:
+    Value: !GetAtt Service.Name
+  LogGroup:
+    Value: !Ref Logs
