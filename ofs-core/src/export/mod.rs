@@ -316,6 +316,73 @@ mod tests {
     }
 
     #[test]
+    fn workshop_pdf_prints_grid_and_local_dividers_with_labels_in_elevation_order() {
+        use crate::kozijn::PanelType;
+        use crate::layout::{glas, paneel, raam, split_col, split_row, VakChild};
+
+        let mut grid = Kozijn::new("Raster", "G", 1200., 1200.);
+        grid.add_column(380.);
+        grid.add_row(410.);
+        grid.cells[0].panel_type = PanelType::TurnTilt;
+        grid.cells[2].panel_type = PanelType::Panel;
+
+        let mut local = Kozijn::new("Plaatselijke tussenstijl", "L", 1200., 1200.);
+        local.layout = Some(split_col(vec![
+            VakChild { size: 410., node: split_row(vec![
+                VakChild { size: 380., node: raam("draaikiep") },
+                VakChild { size: 619., node: glas() },
+            ]) },
+            VakChild { size: 589., node: paneel() },
+        ]));
+
+        for (frame, top_label, bottom_label) in [
+            (grid, "V1  DK", "V3  P"), (local, "V1  Raam", "V3  PN"),
+        ] {
+            let path = std::env::temp_dir().join(format!("ofs-werkplaats-{}.pdf", uuid::Uuid::new_v4()));
+            pdf::generate_workshop_pdf(&frame, &crate::kozijn::Project::new("Afdrukproef", ""), path.to_str().unwrap()).unwrap();
+            let doc = lopdf::Document::load(&path).unwrap();
+            fs::remove_file(path).unwrap();
+            let content = doc.get_page_content(doc.get_pages()[&1]).unwrap();
+            let ops = lopdf::content::Content::decode(&content).unwrap().operations;
+            let coords = |op: &lopdf::content::Operation| {
+                [f64::from(op.operands[0].as_float().unwrap()), f64::from(op.operands[1].as_float().unwrap())]
+            };
+            let mut path = Vec::new();
+            let mut filled = Vec::new();
+            let mut cursor = [0.; 2];
+            let mut captions = std::collections::HashMap::new();
+            for op in &ops {
+                match op.operator.as_str() {
+                    "m" => { path.clear(); path.push(coords(op)); }
+                    "l" => path.push(coords(op)),
+                    "B" | "b" | "f" | "f*" => filled.push(std::mem::take(&mut path)),
+                    "Td" => cursor = coords(op),
+                    "Tj" => { captions.insert(op.operands[0].as_str().unwrap(), cursor); }
+                    _ => {}
+                }
+            }
+            // A 1200 mm square fits at 1:8 on the A3 elevation centred at (210, 168.5) mm.
+            let pt = 72. / 25.4;
+            let to_pdf = |x, y| [(210. + (x - 600.) / 8.) * pt, (168.5 - (y - 600.) / 8.) * pt];
+            let near = |a: &[f64; 2], b: &[f64; 2]| (a[0]-b[0]).abs() < 0.02 && (a[1]-b[1]).abs() < 0.02;
+            let geometry = crate::geometry::compute_2d_geometry(&frame);
+            assert_eq!((geometry.h_dividers.len(), geometry.v_dividers.len()), (1, 1));
+            for r in geometry.h_dividers.iter().chain(&geometry.v_dividers) {
+                let corners = [to_pdf(r.x, r.y), to_pdf(r.x + r.width, r.y),
+                    to_pdf(r.x + r.width, r.y + r.height), to_pdf(r.x, r.y + r.height)];
+                assert!(filled.iter().any(|ring| ring.len() == 4 &&
+                    corners.iter().all(|corner| ring.iter().any(|point| near(point, corner)))),
+                    "{}: divider missing from filled PDF paths: {r:?}", frame.mark);
+            }
+            let top = captions[top_label.as_bytes()];
+            let bottom = captions[bottom_label.as_bytes()];
+            let transom = &geometry.h_dividers[0];
+            assert!(top[1] > to_pdf(0., transom.y)[1]);
+            assert!(bottom[1] < to_pdf(0., transom.y + transom.height)[1]);
+        }
+    }
+
+    #[test]
     fn workshop_pdf_draws_the_head_intersections_at_print_scale() {
         let sj = crate::template::get_sjabloon("kunststof-82-veka");
         let mut k = Kozijn::new_with_sjabloon("Rond", "R", 1200., 1200., &sj);

@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.2
+# Open Frame Studio v2026.48.3
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,10 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.3 (2026-11-24)
+
+- De liggende A3-werkplaatstekening neemt tussenstijlen en tussendorpels uit het 2D-aanzicht over. Bij rechthoekige kozijnen staan vaknummer en vulling op de overeenkomstige plaats, ook bij een plaatselijke vakverdeling.
 
 ## Changelog v2026.48.2 (2026-11-24)
 

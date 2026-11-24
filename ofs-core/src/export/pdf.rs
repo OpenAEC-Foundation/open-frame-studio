@@ -178,6 +178,19 @@ fn workshop_contour(ops: &mut Vec<Op>, contour: &crate::curved_contour::Contour,
     }
 }
 
+fn workshop_infill(cell: &crate::geometry::CellRect, kozijn: &Kozijn) -> Option<&'static str> {
+    use crate::layout::Vakvulling;
+    match &cell.vulling {
+        Some(Vakvulling::Buiten) => None,
+        Some(Vakvulling::Glas { .. }) => Some("VG"),
+        Some(Vakvulling::Raam { .. }) => Some("Raam"),
+        Some(Vakvulling::Deur { .. }) => Some("Deur"),
+        Some(Vakvulling::Paneel { .. }) => Some("PN"),
+        Some(Vakvulling::Rooster) => Some("VR"),
+        None => kozijn.cells.get(cell.cell_index).map(|c| panel_label(c.panel_type)),
+    }
+}
+
 pub fn generate_workshop_pdf(
     kozijn: &Kozijn,
     project: &Project,
@@ -193,7 +206,6 @@ pub fn generate_workshop_pdf(
     let frame = &kozijn.frame;
     let ow = frame.outer_width as f32;
     let oh = frame.outer_height as f32;
-    let fw = frame.frame_width as f32;
 
     // Title block
     ops.extend(fill_rect_ops(margin, margin, daw, tb_h, DEEP_FORGE));
@@ -221,15 +233,11 @@ pub fn generate_workshop_pdf(
 
     // Scale
     let geometry = crate::geometry::compute_2d_geometry(kozijn);
-    let dim_m: f32 = if geometry.curved_frame.is_some() { 25.0 } else { 60.0 };
+    let dim_m: f32 = 25.0;
     let aw = daw - 2.0 * dim_m;
     let ah = dah - 2.0 * dim_m;
     let fitted_scale = (aw / ow).min(ah / oh) * 0.85;
-    let sc = if geometry.curved_frame.is_some() {
-        1.0 / (1.0 / fitted_scale).ceil().max(1.0)
-    } else {
-        fitted_scale
-    };
+    let sc = 1.0 / (1.0 / fitted_scale).ceil().max(1.0);
     let ox = margin + dim_m + (aw - ow * sc) / 2.0;
     let oy = margin + tb_h + dim_m + (ah - oh * sc) / 2.0;
 
@@ -274,68 +282,42 @@ pub fn generate_workshop_pdf(
                 let visible_glass = if fit.bead_height >= edges.rebate_height { &edges.bead_inner } else { &edges.day };
                 workshop_contour(&mut ops, visible_glass, origin, sc, WHITE_C);
             }
-            let label = match &cell.vulling {
-                Some(crate::layout::Vakvulling::Buiten) => continue,
-                Some(crate::layout::Vakvulling::Glas { .. }) => "VG",
-                Some(crate::layout::Vakvulling::Raam { .. }) => "Raam",
-                Some(crate::layout::Vakvulling::Deur { .. }) => "Deur",
-                Some(crate::layout::Vakvulling::Paneel { .. }) => "PN",
-                Some(crate::layout::Vakvulling::Rooster) => "VR",
-                None => kozijn.cells.get(cell.cell_index).map_or("", |c| panel_label(c.panel_type)),
-            };
+            let Some(label) = workshop_infill(cell, kozijn) else { continue };
             let x = (bounds.x + bounds.width / 2.) as f32;
             let y = (bounds.y + bounds.height / 2.) as f32;
             ops.extend(text_ops(label, 8., sx(x) - 2., sy(oh - y) - 1.5, font_bold(), DEEP_FORGE));
         }
     } else {
-        // Outer frame
-        ops.extend(line_ops(sx(0.0), sy(0.0), sx(ow), sy(0.0), DEEP_FORGE, 2.0));
-        ops.extend(line_ops(sx(ow), sy(0.0), sx(ow), sy(oh), DEEP_FORGE, 2.0));
-        ops.extend(line_ops(sx(ow), sy(oh), sx(0.0), sy(oh), DEEP_FORGE, 2.0));
-        ops.extend(line_ops(sx(0.0), sy(oh), sx(0.0), sy(0.0), DEEP_FORGE, 2.0));
-
-        // Frame members
-        for (fx, fy, fw2, fh) in [
-            (0.0, oh - fw, ow, fw), (0.0, 0.0, ow, fw),
-            (0.0, fw, fw, oh - 2.0 * fw), (ow - fw, fw, fw, oh - 2.0 * fw),
-        ] {
-            ops.extend(fill_rect_ops(sx(fx), sy(fy), fw2 * sc, fh * sc, LIGHT_GRAY));
+        // The editor uses y-down elevation coordinates, including unequal dividers and free subdivisions.
+        ops.push(Op::SetFillColor { col: col(LIGHT_GRAY) });
+        ops.push(Op::SetOutlineColor { col: col(DEEP_FORGE) });
+        ops.push(Op::SetOutlineThickness { pt: Pt(0.55) });
+        let mut draw_member = |ring: &[[f64; 2]]| {
+            let points = ring.iter().map(|&[x, y]| LinePoint {
+                p: Point { x: Mm(sx(x as f32)).into(), y: Mm(sy(oh - y as f32)).into() },
+                bezier: false,
+            }).collect();
+            ops.push(Op::DrawPolygon { polygon: Polygon {
+                rings: vec![PolygonRing { points }], mode: PaintMode::FillStroke,
+                winding_order: WindingOrder::NonZero,
+            }});
+        };
+        for ring in &geometry.frame_polygons { draw_member(ring); }
+        let frame_rects = geometry.frame_rects.iter().filter(|_| geometry.frame_polygons.is_empty());
+        for r in frame_rects.chain(&geometry.h_dividers).chain(&geometry.v_dividers) {
+            if r.width <= 0. || r.height <= 0. { continue; }
+            let right = r.x + r.width;
+            let bottom = r.y + r.height;
+            draw_member(&[[r.x, r.y], [right, r.y], [right, bottom], [r.x, bottom]]);
         }
-
-        // Cell labels
-        let columns = &kozijn.grid.columns;
-        let rows = &kozijn.grid.rows;
-        let nc = columns.len();
-        let mut col_pos = Vec::new();
-        let mut cx = fw;
-        for (i, c) in columns.iter().enumerate() {
-            col_pos.push(cx);
-            cx += c.size as f32;
-            if i < columns.len() - 1 { cx += fw; }
+        for cell in &geometry.cell_rects {
+            let Some(label) = workshop_infill(cell, kozijn) else { continue };
+            let r = &cell.rect;
+            let x = sx((r.x + r.width / 2.) as f32);
+            let y = sy(oh - (r.y + r.height / 2.) as f32);
+            let caption = format!("V{}  {}", cell.cell_index + 1, label);
+            ops.extend(text_ops(&caption, 8., x - 3.5, y - 1.5, font_bold(), DEEP_FORGE));
         }
-        let mut row_pos = Vec::new();
-        let mut ry = fw;
-        for (i, r) in rows.iter().enumerate() {
-            row_pos.push(ry);
-            ry += r.size as f32;
-            if i < rows.len() - 1 { ry += fw; }
-        }
-
-        for (ri, row) in rows.iter().enumerate() {
-            for (ci, col) in columns.iter().enumerate() {
-                let idx = ri * nc + ci;
-                if idx >= kozijn.cells.len() { continue; }
-                let cx = col_pos[ci];
-                let cy = row_pos[ri];
-                let cw = col.size as f32;
-                let ch = row.size as f32;
-                ops.extend(text_ops(
-                    panel_label(kozijn.cells[idx].panel_type),
-                    8.0, sx(cx + cw/2.0) - 2.0, sy(cy + ch/2.0) - 1.5, font_bold(), DEEP_FORGE,
-                ));
-            }
-        }
-
     }
     // Dimensions
     let dim_off: f32 = 15.0;
