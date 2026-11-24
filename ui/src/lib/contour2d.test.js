@@ -1,10 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { circleDiameter, contourPath, openingPath, sawAllowancePath } from "./contour2d.js";
+import { battenElevationPaths, circleDiameter, contourPath, openingPath, sawAllowancePath } from "./contour2d.js";
 
 const right = [70, 50], left = [30, 50], center = [50, 50];
 const half = { kind: "arc", center, radius: 20, from: right, to: left, sweepAngle: Math.PI };
 const circle = { segments: [half, { ...half, from: left, to: right }] };
+
+test("battens project their actual thickness on all four sides of the elevation", () => {
+  const rect = {x: 10, y: 20, width: 100, height: 80};
+  const edge = height => ({spouwlat: {width: 121, height}});
+  assert.deepEqual(battenElevationPaths(rect, [edge(33), edge(27), edge(29), edge(31)]), [
+    {side: "top", path: "M-23,-9 L137,-9"}, {side: "right", path: "M137,-9 L137,131"},
+    {side: "bottom", path: "M137,131 L-23,131"}, {side: "left", path: "M-23,131 L-23,-9"},
+  ]);
+  assert.deepEqual(battenElevationPaths(rect,[edge(33),null,null,null]), [
+    {side:"left",path:"M10,100 L-23,100 L-23,20 L10,20"},
+  ]);
+  assert.deepEqual(battenElevationPaths(rect), []);
+});
 
 test("the drawing extends a verified blank beyond the day line at the qualified end only", () => {
   const rail = {vertical:false, start:{segments:[{kind:"line",from:[73,600],to:[73,694]}],sawAllowanceMm:25}, end:{segments:[half]}};

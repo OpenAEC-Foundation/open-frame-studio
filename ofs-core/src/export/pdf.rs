@@ -6,6 +6,7 @@ use printpdf::*;
 
 use crate::kozijn::{Kozijn, Material, PanelType, Project, WoodType};
 use crate::production::ProductionData;
+mod workshop_dimensions;
 
 const DEEP_FORGE: (f32, f32, f32) = (0.212, 0.212, 0.243);
 const AMBER: (f32, f32, f32) = (0.851, 0.467, 0.024);
@@ -206,6 +207,9 @@ pub fn generate_workshop_pdf(
     let frame = &kozijn.frame;
     let ow = frame.outer_width as f32;
     let oh = frame.outer_height as f32;
+    let geometry = crate::geometry::compute_2d_geometry(kozijn);
+    let envelope = geometry.curved_frame.as_ref().map(|curve| curve.outer.bounds());
+    let physical = envelope.as_ref().unwrap_or(&geometry.outer_rect);
 
     // Title block
     ops.extend(fill_rect_ops(margin, margin, daw, tb_h, DEEP_FORGE));
@@ -227,12 +231,12 @@ pub fn generate_workshop_pdf(
     ops.extend(text_ops(&kozijn.mark, 16.0, kx, margin + tb_h - 20.0, font_bold(), AMBER));
     ops.extend(text_ops(&kozijn.name, 9.0, kx + 30.0, margin + tb_h - 18.0, font(), WHITE_C));
     ops.extend(text_ops(
-        &format!("{} x {} mm | {}", ow as i64, oh as i64, mat_label(&frame.material)),
+        &format!("{} x {} mm | {}", workshop_dimensions::mm(physical.width),
+            workshop_dimensions::mm(physical.height), mat_label(&frame.material)),
         8.0, kx, margin + tb_h - 28.0, font(), (0.8, 0.8, 0.8),
     ));
 
     // Scale
-    let geometry = crate::geometry::compute_2d_geometry(kozijn);
     let dim_m: f32 = 25.0;
     let aw = daw - 2.0 * dim_m;
     let ah = dah - 2.0 * dim_m;
@@ -282,10 +286,6 @@ pub fn generate_workshop_pdf(
                 let visible_glass = if fit.bead_height >= edges.rebate_height { &edges.bead_inner } else { &edges.day };
                 workshop_contour(&mut ops, visible_glass, origin, sc, WHITE_C);
             }
-            let Some(label) = workshop_infill(cell, kozijn) else { continue };
-            let x = (bounds.x + bounds.width / 2.) as f32;
-            let y = (bounds.y + bounds.height / 2.) as f32;
-            ops.extend(text_ops(label, 8., sx(x) - 2., sy(oh - y) - 1.5, font_bold(), DEEP_FORGE));
         }
     } else {
         // The editor uses y-down elevation coordinates, including unequal dividers and free subdivisions.
@@ -310,34 +310,14 @@ pub fn generate_workshop_pdf(
             let bottom = r.y + r.height;
             draw_member(&[[r.x, r.y], [right, r.y], [right, bottom], [r.x, bottom]]);
         }
-        for cell in &geometry.cell_rects {
-            let Some(label) = workshop_infill(cell, kozijn) else { continue };
-            let r = &cell.rect;
-            let x = sx((r.x + r.width / 2.) as f32);
-            let y = sy(oh - (r.y + r.height / 2.) as f32);
-            let caption = format!("V{}  {}", cell.cell_index + 1, label);
-            ops.extend(text_ops(&caption, 8., x - 3.5, y - 1.5, font_bold(), DEEP_FORGE));
-        }
     }
-    // Dimensions
-    let dim_off: f32 = 15.0;
-    let tick: f32 = 3.0;
-    let yd = sy(0.0) - dim_off;
-    ops.extend(line_ops(sx(0.0), yd, sx(ow), yd, DEEP_FORGE, 0.5));
-    ops.extend(line_ops(sx(0.0), yd-tick, sx(0.0), yd+tick, DEEP_FORGE, 0.5));
-    ops.extend(line_ops(sx(ow), yd-tick, sx(ow), yd+tick, DEEP_FORGE, 0.5));
-    ops.extend(text_ops(&format!("{}", ow as i32), 7.0, sx(ow/2.0)-5.0, yd-5.0, font(), DEEP_FORGE));
-
-    let xd = sx(ow) + dim_off;
-    ops.extend(line_ops(xd, sy(0.0), xd, sy(oh), DEEP_FORGE, 0.5));
-    ops.extend(line_ops(xd-tick, sy(0.0), xd+tick, sy(0.0), DEEP_FORGE, 0.5));
-    ops.extend(line_ops(xd-tick, sy(oh), xd+tick, sy(oh), DEEP_FORGE, 0.5));
-    ops.extend(text_ops(&format!("{}", oh as i32), 7.0, xd+3.0, sy(oh/2.0), font(), DEEP_FORGE));
+    let extra = workshop_dimensions::draw(&mut ops, kozijn, &geometry, [ox, sy(oh)], sc);
 
     let st = if sc < 1.0 { format!("1:{:.1}", 1.0/sc) } else { format!("{:.1}:1", sc) };
     ops.extend(text_ops(&st, 8.0, margin+5.0, margin+tb_h+5.0, font(), (0.5,0.5,0.5)));
 
     doc.pages.push(PdfPage::new(Mm(A3_W), Mm(A3_H), ops));
+    workshop_dimensions::append_overflow(&mut doc, &kozijn.mark, &extra);
     save_doc(&doc, output_path)
 }
 

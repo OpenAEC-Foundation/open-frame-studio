@@ -383,6 +383,44 @@ mod tests {
     }
 
     #[test]
+    fn workshop_pdf_dimensions_follow_the_openings_and_physical_divider_centres() {
+        let pdf_text = |frame: &Kozijn| {
+            let path = std::env::temp_dir().join(format!("ofs-maatproef-{}.pdf", uuid::Uuid::new_v4()));
+            pdf::generate_workshop_pdf(frame, &crate::kozijn::Project::new("Maatproef", ""), path.to_str().unwrap()).unwrap();
+            let doc = lopdf::Document::load(&path).unwrap();
+            fs::remove_file(path).unwrap();
+            doc.extract_text(&doc.get_pages().into_keys().collect::<Vec<_>>()).unwrap()
+        };
+        let mut grid = Kozijn::new("Ongelijke vakken", "T1", 1200., 1200.);
+        grid.add_column(400.);
+        grid.add_row(370.);
+        let fw = grid.frame.frame_width;
+        grid.grid.columns[0].size = 312.25;
+        grid.grid.columns[1].divider_width = Some(62.);
+        grid.grid.columns[1].size = 1200. - 2. * fw - 62. - 312.25;
+        grid.grid.rows[0].size = 517.5;
+        grid.grid.rows[1].divider_width = Some(82.);
+        grid.grid.rows[1].size = 1200. - 2. * fw - 82. - 517.5;
+        let shown = pdf_text(&grid);
+        assert!(shown.contains("312,25 x 517,5"));
+        let x = format!("{:.2}", fw + 312.25 + 31.).replace('.', ",");
+        let y = format!("{:.1}", 1200. - fw - 517.5 - 41.).replace('.', ",");
+        assert!(shown.contains(&x) && shown.contains(&y), "{shown}");
+
+        grid.frame.shape.shape_type = ShapeType::Arched;
+        grid.frame.shape.arch_height = Some(300.);
+        let shown = pdf_text(&grid);
+        assert!(shown.contains("Buitenboog  R 750 mm   |   pijl 300 mm"), "{shown}");
+        assert!(shown.contains("binnen de dagcontour"));
+
+        let mut round = Kozijn::new("Ronde uitsparing", "R1", 1400., 1100.);
+        round.frame.shape.shape_type = ShapeType::Round;
+        let shown = pdf_text(&round);
+        assert!(shown.contains("Buitendiameter 1100 mm") && shown.contains("1100 x 1100 mm"));
+        assert!(!shown.contains("1400 x 1100 mm"));
+    }
+
+    #[test]
     fn workshop_pdf_draws_the_head_intersections_at_print_scale() {
         let sj = crate::template::get_sjabloon("kunststof-82-veka");
         let mut k = Kozijn::new_with_sjabloon("Rond", "R", 1200., 1200., &sj);

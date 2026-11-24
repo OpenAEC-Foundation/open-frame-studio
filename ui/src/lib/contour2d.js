@@ -31,6 +31,28 @@ export function openingPath(contour, rect) {
   return `M${rect.x},${rect.y}h${rect.width}v${rect.height}h${-rect.width}Z`;
 }
 
+/** The spouwlat width runs into the wall. Its thickness is the offset seen in elevation. */
+export function battenElevationPaths(rect, edges = []) {
+  const thickness = (index) => Math.max(0, edges[index]?.spouwlat?.height || 0);
+  const top = thickness(2), right = thickness(1), bottom = thickness(3), left = thickness(0);
+  const {x, y, width, height} = rect;
+  const x2 = x + width, y2 = y + height;
+  const corners = [[x,y], [x2,y], [x2,y2], [x,y2]];
+  const outside = [[x-left,y-top], [x2+right,y-top], [x2+right,y2+bottom], [x-left,y2+bottom]];
+  const offsets = [top, right, bottom, left];
+  const result = [];
+  for (const [i, side] of ["top", "right", "bottom", "left"].entries()) {
+    if (!offsets[i]) continue;
+    const next = (i + 1) % 4;
+    const points = [outside[i], outside[next]];
+    // A free end returns to the frame. Adjacent battens share their outer corner.
+    if (!offsets[(i + 3) % 4]) points.unshift(corners[i]);
+    if (!offsets[next]) points.push(corners[next]);
+    result.push({ side, path: "M" + points.join(" L") });
+  }
+  return result;
+}
+
 export function circleDiameter(contour) {
   const edges = contour?.segments;
   if (!edges?.length) return null;

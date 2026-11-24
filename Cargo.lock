@@ -2620,7 +2620,7 @@ dependencies = [
 
 [[package]]
 name = "ofs-cloud"
-version = "2026.48.3"
+version = "2026.48.4"
 dependencies = [
  "axum",
  "chrono",
@@ -2633,7 +2633,7 @@ dependencies = [
 
 [[package]]
 name = "ofs-core"
-version = "2026.48.3"
+version = "2026.48.4"
 dependencies = [
  "calamine",
  "chrono",
@@ -2648,7 +2648,7 @@ dependencies = [
 
 [[package]]
 name = "ofs-wasm"
-version = "2026.48.3"
+version = "2026.48.4"
 dependencies = [
  "getrandom 0.2.17",
  "ofs-core",
@@ -2678,7 +2678,7 @@ dependencies = [
 
 [[package]]
 name = "open-frame-studio"
-version = "2026.48.3"
+version = "2026.48.4"
 dependencies = [
  "anyhow",
  "chrono",

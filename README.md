@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.3
+# Open Frame Studio v2026.48.4
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,12 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.4 (2026-11-24)
+
+- In het vooraanzicht volgt de gestippelde buitenlijn van de spouwlat de dikte aan elke ingeschakelde kozijnzijde. Bij een profiel van 121 × 33 mm is de uitsteek dus 33 mm. Aangrenzende latten sluiten aan op de buitenhoek.
+- De A3-werkplaatstekening toont de vrije vakmaten en de hartpositie van tussenstijlen vanaf links en tussenregels vanaf onder. Bij ronde en getoogde kozijnen volgen de vakmaten de dagcontour.
+- De release bevat de bijgewerkte 4K-demofilm *Open Frame Studio* met Nederlandse vrouwenstem. [Download de demofilm](https://github.com/OpenAEC-Foundation/open-frame-studio/releases/download/v2026.48.4/Open.Frame.Studio_Demofilm_4K_NL.mp4)
 
 ## Changelog v2026.48.3 (2026-11-24)
 

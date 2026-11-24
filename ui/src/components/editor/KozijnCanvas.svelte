@@ -4,7 +4,7 @@
   import { layoutToRects, gridRowHeights, vullingLabel, findNode, setSplitChildSizes, splitLeaf, mergeAt, swapVullingen, ensureIds } from "../../lib/layout.js";
   import { ralToHex } from "../../lib/ral-colors.js";
   import { cellFits, insetOpening, moveFit } from "../../lib/glazingFit.js";
-  import { circleDiameter, contourPath, openingPath, sawAllowancePath } from "../../lib/contour2d.js";
+  import { battenElevationPaths, circleDiameter, contourPath, openingPath, sawAllowancePath } from "../../lib/contour2d.js";
   import { timberMemberType, memberLabel, dividerPieceLabel } from "../../lib/labels.js";
   import { jointPaths } from "../../lib/dividerJoinery.js";
   import { fittingDrawing } from "../../lib/hardwareDrawing.js";
@@ -1370,22 +1370,10 @@
   <!-- Four straight strips follow the rectangular outside faces. A shaped
        frame's bounding box is not its wall connection contour. -->
   {#if (kozijn.frame.shape?.shapeType ?? "rectangular") === "rectangular" && kozijn.frame.edges?.length}
-    {@const outer = geometry.outerRect}
     <g class="spouwlatten" fill="none" stroke="#8b5cf6" stroke-width={1 / zoom}
       stroke-dasharray="{3 / zoom} {2 / zoom}" opacity="0.5" pointer-events="none">
-      {#each kozijn.frame.edges as edge, i}
-        {#if edge?.spouwlat}
-          {@const batten = edge.spouwlat}
-          {#if i === 0}
-            <rect data-side="left" x={outer.x - batten.width} y={outer.y} width={batten.width} height={outer.height} />
-          {:else if i === 1}
-            <rect data-side="right" x={outer.x + outer.width} y={outer.y} width={batten.width} height={outer.height} />
-          {:else if i === 2}
-            <rect data-side="top" x={outer.x} y={outer.y - batten.height} width={outer.width} height={batten.height} />
-          {:else if i === 3}
-            <rect data-side="bottom" x={outer.x} y={outer.y + outer.height} width={outer.width} height={batten.height} />
-          {/if}
-        {/if}
+      {#each battenElevationPaths(geometry.outerRect, kozijn.frame.edges) as batten (batten.side)}
+        <path data-side={batten.side} d={batten.path} />
       {/each}
     </g>
   {/if}
