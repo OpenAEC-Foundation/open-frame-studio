@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.5
+# Open Frame Studio v2026.48.6
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,10 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.6 (2026-11-27)
+
+- **Feedbackdialoog gelijkgetrokken met Open BIM Suite.** Optionele naam, "Hoe bevalt het?" (gefrustreerd, neutraal of blij) en de toelichting dat alleen je invoer en de appversie worden verstuurd, niets van je model. E-mail blijft optioneel omdat de melding een openbaar GitHub-issue wordt.
 
 ## Changelog v2026.48.5 (2026-11-27)
 
