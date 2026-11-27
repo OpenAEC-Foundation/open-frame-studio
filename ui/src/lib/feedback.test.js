@@ -34,6 +34,16 @@ test("payload carries only what the user wrote plus version/platform, email only
   assert.ok(!withMail.message.includes("jan@bedrijf.nl"), "email must not end up in the public message");
 });
 
+test("optional name and mood travel along under the service's field names", () => {
+  const ctx = { version: "2026.48.5", platform: "Windows", language: "nl" };
+  const p = buildFeedbackPayload({ ...ok, name: "  Jan Jansen ", sentiment: "Frustrated" }, ctx);
+  assert.equal(p.fullname, "Jan Jansen");
+  assert.equal(p.sentiment, "Frustrated");
+  const bare = buildFeedbackPayload({ ...ok, name: "   ", sentiment: "Furious" }, ctx);
+  assert.ok(!("fullname" in bare), "blank name is not sent");
+  assert.ok(!("sentiment" in bare), "unknown mood is dropped, never sent");
+});
+
 function fakeFetch(status, body, calls = []) {
   return async (url, init) => {
     calls.push({ url, init });

@@ -5,7 +5,7 @@
   import { APP_VERSION } from "../../lib/version.js";
   import { openGithubUrl } from "../../lib/shell-actions.js";
   import {
-    FEEDBACK_CATEGORIES, FEEDBACK_MAX, FEEDBACK_MIN, FEEDBACK_REPO,
+    FEEDBACK_CATEGORIES, FEEDBACK_MAX, FEEDBACK_MIN, FEEDBACK_REPO, FEEDBACK_SENTIMENTS,
     buildFeedbackPayload, describeFeedbackContext, detectPlatform, sendFeedback, validateFeedback,
   } from "../../lib/feedback.js";
 
@@ -17,6 +17,8 @@
   let category = $state("bug");
   let message = $state("");
   let email = $state("");
+  let name = $state("");
+  let sentiment = $state(null);
   let state = $state("writing"); // writing | sending | sent
   let issueUrl = $state(null);
   let error = $state("");
@@ -41,6 +43,8 @@
     category = "bug";
     message = "";
     email = "";
+    name = "";
+    sentiment = null;
     state = "writing";
     issueUrl = null;
     error = "";
@@ -51,7 +55,7 @@
     if (problem || state === "sending") return;
     state = "sending";
     error = "";
-    const result = await sendFeedback(buildFeedbackPayload({ category, message, email }, context));
+    const result = await sendFeedback(buildFeedbackPayload({ category, message, email, name, sentiment }, context));
     if (result.ok) {
       issueUrl = result.issueUrl;
       state = "sent";
@@ -103,15 +107,31 @@
             <small class="count">{message.trim().length}/{FEEDBACK_MAX}</small>
           </label>
 
-          <label>
-            <span>{$_('feedback.email')} <em>{$_('feedback.emailOptional')}</em></span>
-            <input type="email" bind:value={email} autocomplete="email" placeholder="naam@bedrijf.nl" />
-          </label>
+          <fieldset class="moods">
+            <legend>{$_('feedback.mood')}</legend>
+            {#each FEEDBACK_SENTIMENTS as mood}
+              <button type="button" class="mood" aria-pressed={sentiment === mood} onclick={() => sentiment = sentiment === mood ? null : mood}>
+                {$_('feedback.mood.' + mood)}
+              </button>
+            {/each}
+          </fieldset>
+
+          <div class="who">
+            <label>
+              <span>{$_('feedback.email')} <em>{$_('feedback.emailOptional')}</em></span>
+              <input type="email" bind:value={email} autocomplete="email" placeholder="naam@bedrijf.nl" />
+            </label>
+            <label>
+              <span>{$_('feedback.name')} <em>{$_('feedback.nameOptional')}</em></span>
+              <input type="text" bind:value={name} autocomplete="name" maxlength="100" />
+            </label>
+          </div>
 
           <p class="note">
             {$_('feedback.publicNote', { values: { repo: FEEDBACK_REPO } })}
             <strong>{$_('feedback.noAccount')}</strong>
           </p>
+          <p class="meta">{$_('feedback.noModel')}</p>
           <p class="meta">{$_('feedback.included')}: {describeFeedbackContext(context)}</p>
           <p class="hint" aria-live="polite">{shownProblem ? $_('feedback.problem.' + shownProblem, { values: { min: FEEDBACK_MIN } }) : error}</p>
         </div>
@@ -152,6 +172,12 @@
   .type { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-app); font-size: 12px; font-weight: 600; }
   .type:hover { background: var(--oa-hover); }
   .type[aria-pressed="true"] { border-color: var(--text-accent); background: var(--oa-selected); color: var(--text-accent); }
+  .moods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mood { padding: 6px 4px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-app); font-size: 12px; }
+  .mood:hover { background: var(--oa-hover); }
+  .mood[aria-pressed="true"] { border-color: var(--text-accent); background: var(--oa-selected); color: var(--text-accent); font-weight: 600; }
+  .who { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 460px) { .who { grid-template-columns: minmax(0, 1fr); } }
   label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; }
   label em { font-style: normal; opacity: .8; }
   textarea, input { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); background: var(--bg-app); font: inherit; font-size: 13px; }

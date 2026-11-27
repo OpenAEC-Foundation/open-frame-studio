@@ -16,6 +16,8 @@ export const FEEDBACK_REPO = "OpenAEC-Foundation/open-frame-studio";
 export const FEEDBACK_MIN = 10;
 export const FEEDBACK_MAX = 5000;
 export const FEEDBACK_CATEGORIES = ["bug", "feature", "general"];
+/** How the writer feels, as the feedback service names it (optional). */
+export const FEEDBACK_SENTIMENTS = ["Frustrated", "Neutral", "Happy"];
 
 const EMAIL = /^[^\s@]+@[^\s@.][^\s@]*\.[^\s@.]+$/;
 
@@ -34,7 +36,7 @@ export function validateFeedback({ category, message, email }) {
  * What is sent: only what the user wrote, the app version and a one-line
  * environment note (shown to the user in the dialog before sending).
  */
-export function buildFeedbackPayload({ category, message, email }, { version, platform, language }) {
+export function buildFeedbackPayload({ category, message, email, name, sentiment }, { version, platform, language }) {
   const note = `_Via Open Frame Studio v${version} · ${platform || "onbekend platform"} · ${language || "?"}_`;
   const body = (message || "").trim();
   const payload = {
@@ -45,6 +47,10 @@ export function buildFeedbackPayload({ category, message, email }, { version, pl
   };
   const mail = (email || "").trim();
   if (mail) payload.email = mail;
+  const fullname = (name || "").trim();
+  if (fullname) payload.fullname = fullname.slice(0, 100);
+  // Same vocabulary as Open BIM Suite and the service: Frustrated | Neutral | Happy.
+  if (FEEDBACK_SENTIMENTS.includes(sentiment)) payload.sentiment = sentiment;
   return payload;
 }
 
