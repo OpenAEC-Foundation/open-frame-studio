@@ -2,11 +2,11 @@
   import { onMount } from "svelte";
   import { _ } from "svelte-i18n";
   import BlueprintIcon from "./BlueprintIcon.svelte";
-  import { showSettings } from "../../stores/ui.js";
+  import { showSettings, showFeedback } from "../../stores/ui.js";
   import { undo, redo, canUndo, canRedo } from "../../stores/history.js";
   import { isDirty, project, projectPath } from "../../stores/project.js";
   import { fileSave } from "../../lib/project-actions.js";
-  import { closeApplication, openProjectLink } from "../../lib/shell-actions.js";
+  import { closeApplication } from "../../lib/shell-actions.js";
   import { isTauri, isPlatformBuild } from "../../lib/tauri.js";
 
   let appWindow;
@@ -58,7 +58,7 @@
 
   <div class="utilities">
     {#if !isPlatformBuild}
-      <button class="action feedback" title={$_('backstage.reportIssue')} onclick={() => openProjectLink("/issues/new")}>
+      <button class="action feedback" title={$_('feedback.title')} onclick={() => showFeedback.set(true)}>
         <BlueprintIcon name="feedback.github-issue" /><span>{$_('shell.feedback')}</span>
       </button>
     {/if}

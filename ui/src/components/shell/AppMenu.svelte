@@ -1,7 +1,7 @@
 <script>
   import { _ } from "svelte-i18n";
   import BlueprintIcon from "./BlueprintIcon.svelte";
-  import { showAppMenu, showSettings } from "../../stores/ui.js";
+  import { showAppMenu, showSettings, showFeedback } from "../../stores/ui.js";
   import { project, projectPath, isDirty, kozijnen } from "../../stores/project.js";
   import { isTauri, isPlatformBuild } from "../../lib/tauri.js";
   import { fileNew, fileOpen, fileSave, fileSaveAs } from "../../lib/project-actions.js";
@@ -83,7 +83,7 @@
         <div class="group">
           <h2>{$_('backstage.help')}</h2>
           <button class="nav-item" onclick={() => openProjectLink('/wiki')}><BlueprintIcon name="ui.help" />{$_('backstage.documentation')}</button>
-          <button class="nav-item" onclick={() => openProjectLink('/issues')}><BlueprintIcon name="feedback.github-issue" />{$_('backstage.reportIssue')}</button>
+          <button class="nav-item" onclick={() => { showAppMenu.set(false); showFeedback.set(true); }}><BlueprintIcon name="feedback.github-issue" />{$_('backstage.reportIssue')}</button>
           <button class="nav-item" onclick={() => openProjectLink()}><BlueprintIcon name="ui.about" />GitHub</button>
         </div>
       {/if}

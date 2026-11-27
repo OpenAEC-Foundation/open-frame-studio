@@ -3,9 +3,15 @@ import { confirmUnsavedChanges } from "./project-actions.js";
 
 export const repositoryUrl = "https://github.com/OpenAEC-Foundation/Open-Frame-Studio";
 
-export async function openProjectLink(path = "") {
+/** Open a GitHub link (e.g. the issue the feedback service just created) in the system browser. */
+export async function openGithubUrl(url) {
+  if (isPlatformBuild || typeof url !== "string" || !url.startsWith("https://github.com/")) return;
+  await openProjectLink(url, true);
+}
+
+export async function openProjectLink(path = "", absolute = false) {
   if (isPlatformBuild) return;
-  const url = repositoryUrl + path;
+  const url = absolute ? path : repositoryUrl + path;
   if (isTauri) {
     try {
       const { open } = await import("@tauri-apps/plugin-shell");

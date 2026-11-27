@@ -7,6 +7,7 @@
   import StatusBar from "./components/shell/StatusBar.svelte";
   import AppMenu from "./components/shell/AppMenu.svelte";
   import Settings from "./components/shell/Settings.svelte";
+  import FeedbackDialog from "./components/shell/FeedbackDialog.svelte";
   import DocsDialog from "./components/shell/DocsDialog.svelte";
   import { docsDialog } from "./lib/docsDialog.js";
   import Toast from "./components/shell/Toast.svelte";
@@ -196,6 +197,7 @@
 {/if}
 <AppMenu />
 <Settings />
+<FeedbackDialog />
 
 <WorkspaceTabs {views} />
 
