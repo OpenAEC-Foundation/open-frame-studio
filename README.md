@@ -1,4 +1,4 @@
-# Open Frame Studio v2026.48.4
+# Open Frame Studio v2026.48.5
 
 **Open-source kozijnontwerp voor de Nederlandse bouwketen.** De desktopapp combineert tekenen, projectgegevens en een beperkte IFC4-uitwisseling. Deze bètaversie is een ontwikkelstand, geen gevalideerd pakket voor producentencalculatie, normverklaringen of machineaansturing.
 
@@ -48,6 +48,11 @@ Open Frame Studio is een desktopapp voor het tekenen, documenteren en uitwissele
 | **Hout-Aluminium** | Combinatieprofielen |
 
 ---
+
+## Changelog v2026.48.5 (2026-11-27)
+
+- **Feedback zonder GitHub-account.** De feedbackknop (titelbalk en Bestand-menu) opent een eigen dialoog en verstuurt de melding via Open Feedback Studio, net als de andere OpenAEC-apps. De service maakt zelf het issue in `open-frame-studio` en geeft de link terug. Je kiest het soort melding (fout, idee, vraag), schrijft je tekst en vult optioneel een e-mailadres in voor een reactie. Het dialoog meldt vooraf dat het issue openbaar wordt en welke context meegaat (versie, platform, taal); je e-mailadres komt niet in het issue. Vertaald in Nederlands, Engels, Duits en Turks.
+- De CSP van de desktopapp staat het feedbackdomein toe.
 
 ## Changelog v2026.48.4 (2026-11-24)
 
